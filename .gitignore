@@ -10,3 +10,18 @@
 .env
 .env.*
 *.local
+
+# Syrax private runtime state
+.syrax/
+.state/
+runtime-state/
+memory/
+chats/
+logs/
+*.session
+*.session.*
+*.sqlite
+*.sqlite3
+*.db
+config/*.local.*
+config/*.secret.*

@@ -1,0 +1,23 @@
+# Public example only. This file is a configuration contract, not a live deployment file.
+# Keep secrets in the runtime environment or a private secret store.
+
+[runtime]
+adapter = "not-selected"
+entrypoint = "not-configured"
+
+[model]
+provider = "choose-a-provider"
+name = "choose-a-model"
+
+[paths]
+# Keep these roots outside the Syrax repository.
+private_state = "/absolute/path/outside/this/repository/syrax-state"
+chat_archive = "/absolute/path/outside/this/repository/chat-archive"
+
+[security]
+secrets_from = "environment-or-private-secret-store"
+tool_policy = "explicit-allowlist"
+
+[observability]
+# Logs must not contain secrets, private chats, or provider responses by default.
+log_policy = "sanitised-and-local"
