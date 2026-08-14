@@ -11,6 +11,7 @@ Start here: `README.md`, then `AGENTS.md`.
 | Code standards | How code is written and reviewed | `CODING_STANDARDS.md` |
 | Domain language | The glossary — this repository's ubiquitous language | `CONTEXT.md` |
 | Decisions | Architecture decision records | `docs/adr/` |
+| Research | Findings from research tickets, one cited file per question | `docs/research/` |
 | System | Architecture, data flow, and public/private boundary | `docs/system-overview.md` |
 | Setup | Safe installation and runtime-injection sequence | `docs/setup.md` |
 | Configuration | Public contract and placeholder values | `config/syrax.example.toml` |
