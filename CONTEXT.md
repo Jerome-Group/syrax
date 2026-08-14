@@ -1,6 +1,7 @@
-# <repository> — context
+# Syrax — context
 
-*(One line: the domain this repository operates in.)*
+The domain is a personal chatbot system: a user-facing interface, an agent runtime, tools, model
+providers, context, memory, and the private state that connects them.
 
 ## Language
 
@@ -11,9 +12,25 @@ could reasonably mean different things by the same word.
 Each entry is the term, what it means **here**, and the near-synonyms to avoid so the wrong one
 does not creep back in.
 
-**\<Term\>**:
-What it means in this repository.
-_Avoid_: the words that mean something adjacent and would blur it
+**Syrax**:
+The public system described and implemented by this repository, including its setup contract and
+future runtime adapters.
+_Avoid_: chatbot app, prompt collection
+
+**Runtime adapter**:
+The boundary that connects Syrax's orchestration contract to one concrete agent runtime. It owns
+runtime-specific install and launch details; the choice is not settled yet.
+_Avoid_: provider, model
+
+**Public configuration**:
+A tracked example or interface contract containing placeholders and no live secrets or private
+state.
+_Avoid_: local config, deployment secret
+
+**Private runtime state**:
+Credentials, sessions, chats, memory, provider responses, caches, logs, and machine-specific
+paths produced or consumed while Syrax runs. It stays outside the repository.
+_Avoid_: source, fixture
 
 Two terms are Organisation-wide and mean the same thing in every repository:
 

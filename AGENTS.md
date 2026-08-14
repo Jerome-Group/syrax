@@ -1,26 +1,34 @@
-# AGENTS.md — <repository>
+# AGENTS.md — Syrax
 
 > Canonical instruction file for AI agents (Claude Code and others) working in this repo.
 > `CLAUDE.md` is a symlink to this file, so the two can never drift.
 
 ## What this repo is
 
-*(One paragraph: what this repository is for, and what it is not for. Replace this and the
-heading above before the first pull request.)*
+Syrax is the public, MIT-licensed reference repository for the Owner's personal chatbot system:
+its architecture, setup contract, safe examples, and future runtime adapters. It does not contain
+private conversations, credentials, authenticated sessions, private memory, or machine-local
+runtime state.
 
-- **Visibility:** *(private | public)*
+- **Visibility:** public
 - **Organisation:** [Jerome-Group](https://github.com/Jerome-Group)
 
 ## Getting it running
 
-*(The commands an agent could not have guessed — install, run, test, lint — and any constraint
-on where they may be run. Fill this in with the first real code; until then it is honestly
-empty.)*
+The current baseline is documentation-first. No agent runtime has been selected and there is no
+launch command yet. Read [`README.md`](README.md), then [`docs/system-overview.md`](docs/system-overview.md),
+[`docs/setup.md`](docs/setup.md), and [`docs/configuration.md`](docs/configuration.md) before adding
+an adapter. Use [`config/syrax.example.toml`](config/syrax.example.toml) only as a public contract;
+put live values and runtime state outside the repository.
 
 ## Conventions
 
 - Default branch: `main`.
 - Domain glossary lives in `CONTEXT.md`; decisions are recorded as ADRs in `docs/adr/`.
+- Public examples use placeholders. Secrets enter through the deployment environment or another
+  private secret store, never through tracked configuration.
+- Keep the private runtime root outside this checkout. Do not place chats, memory, sessions, logs,
+  or provider responses under a path that can be committed.
 - Keep secrets out of the repo. **Never commit a token.** The conformance check scans every pull
   request for one, and it fires after the push — so a caught credential is burned: rotate it
   first, then clean up. The full response is in `CONTRIBUTING.md`.
@@ -93,4 +101,5 @@ skeleton CI has not earned that.
 
 ## Repository notes
 
-*(Anything with no natural home above. May be empty.)*
+The runtime adapter is intentionally undecided. Record that implementation decision in a new
+`docs/adr/` record when it becomes concrete.
