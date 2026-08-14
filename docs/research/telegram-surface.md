@@ -1,0 +1,234 @@
+# Telegram as the chat surface — topics, streaming, lockdown
+
+Research for [#6](https://github.com/Jerome-Group/syrax/issues/6). Facts verified 2026-08-15
+against Bot API **10.2** (released 2026-07-14, per the
+[Bot API changelog](https://core.telegram.org/bots/api-changelog)). Everything below is from
+Telegram's own documentation unless marked otherwise.
+
+## The question
+
+The Owner wants one home with per-domain chats ("the media server has its own chat") — the
+working assumption was a forum supergroup with topics. Establish the surface options, per-topic
+routing, streaming mechanics under the rate limits, confirmation flows, single-user lockdown,
+webhook vs long-polling from a home Mac mini with no inbound ports, and the length/formatting
+limits that bear on concise output.
+
+## Surface options
+
+### Topics in the bot's private chat — new, and a direct fit
+
+Since Bot API 9.3 (2025-12-31), a bot's **1:1 private chat can itself be a forum**: "Bots can
+also behave like forums if **Threaded mode** is enabled via @BotFather"
+([Forum topics](https://core.telegram.org/api/forum)). The
+[changelog](https://core.telegram.org/bots/api-changelog) entries:
+
+- **9.3** — `message_thread_id`/`is_topic_message` on `Message` in private chats with topic mode;
+  `message_thread_id` accepted by `sendMessage` and every other send/copy/forward method, and by
+  `sendChatAction`; plus `sendMessageDraft` (see Streaming below).
+- **9.4** (2026-02-09) — bots can create private-chat topics via `createForumTopic`; a
+  @BotFather setting controls whether the *user* may create/delete topics
+  (`allows_users_to_create_topics` on `getMe`); `has_topics_enabled` on `getMe` reports the mode.
+
+`createForumTopic`, `editForumTopic`, `deleteForumTopic` and `unpinAllForumTopicMessages` all
+operate on "a forum supergroup chat **or a private chat with a user**"; the admin-rights clauses
+apply only "in the case of a supergroup chat"
+([Bot API](https://core.telegram.org/bots/api#createforumtopic)). So in the private chat there
+are no admin rights, no group membership, no other members possible — per-domain topics inside a
+chat only the Owner and the bot can see.
+
+Maturity caveat: this shipped December 2025, and the 10.0 rollout (May 2026) briefly broke
+sending to existing private-chat topic threads
+([tdlib/telegram-bot-api#847](https://github.com/tdlib/telegram-bot-api/issues/847)). New
+surface area still settling; keep the forum-supergroup fallback in mind.
+
+### Forum supergroup with topics — the assumed option, fully workable
+
+Any supergroup can become a forum; enabling it "can only be invoked by admins with owner rights"
+([Forum topics](https://core.telegram.org/api/forum)) — in the apps it is a toggle in the group
+settings. For the bot to manage topics it "must be an administrator in the chat ... and must
+have the `can_manage_topics` administrator right"
+([createForumTopic](https://core.telegram.org/bots/api#createforumtopic)); deleting a topic
+needs `can_delete_messages`. Every forum has a non-deletable **General** topic with `id=1`
+([Forum topics](https://core.telegram.org/api/forum)).
+
+Costs relative to the private-chat option: group mechanics (invite links, membership) become an
+attack surface to lock down, the bot needs privacy-mode handling (below), and the **group rate
+limit — 20 messages/minute — throttles streaming edits hard** (below).
+
+### Multiple bots — one per domain
+
+Works, but each domain is a separate token, a separate chat in the chat list, separate BotFather
+settings, and another runtime to wire. It buys per-domain isolation Syrax does not need (one
+Owner, one runtime) and loses the "one home" the ticket asks for. No further mechanics worth
+recording.
+
+### Channels — not a chat
+
+Channels are one-way broadcast surfaces; two-way conversation happens only in a linked
+discussion group or in the channel's "direct messages" chat (a special supergroup, Bot API 9.2)
+([changelog](https://core.telegram.org/bots/api-changelog)). Wrong shape for a conversational
+surface. Likewise **Communities** (Bot API 10.2) merely link "several supergroups, channels, and
+bots ... around a shared topic" — a grouping of chats, not a chat with topics.
+
+## Routing per topic
+
+Incoming: a message in a topic carries `message_thread_id` ("unique identifier of a message
+thread or forum topic to which the message belongs; for supergroups and private chats with forum
+topics only") and `is_topic_message`
+([Message](https://core.telegram.org/bots/api#message)). Messages in the General topic of a
+forum supergroup carry no thread id — treat "absent" as General.
+
+Outgoing: pass `message_thread_id` on `sendMessage` (and every other send method, plus
+`sendChatAction`) to land the reply in the right topic. Topic ids are stable: the id is the
+service message that created the topic ([Forum topics](https://core.telegram.org/api/forum)).
+The adapter therefore keeps one small map: domain → topic id, created via `createForumTopic`
+(topic names are 1-128 characters).
+
+## Streaming a fast reply
+
+### Native draft streaming — private chats only
+
+Bot API 9.3 added [`sendMessageDraft`](https://core.telegram.org/bots/api#sendmessagedraft):
+"Use this method to stream a partial message to a user while the message is being generated.
+Note that the streamed draft is ephemeral and acts as a temporary 30-second preview — once the
+output is finalized, you **must** call `sendMessage` with the complete message to persist it."
+Details: `chat_id` is "the target private chat"; takes `message_thread_id` (so it works
+per-topic in a threaded private chat); `draft_id` non-zero, "changes to drafts with the same
+identifier are animated"; text 0-4096, and "pass an empty text to show a 'Thinking…'
+placeholder" (empty text allowed since 10.0). This is purpose-built token streaming — no edit
+throttling at all — and it **does not exist for groups**.
+
+### Edit-throttled streaming — the fallback, and the only option in a supergroup
+
+The classic pattern: send a stub, then `editMessageText` as tokens arrive, final edit on
+completion. The documented flood limits
+([Bot FAQ](https://core.telegram.org/bots/faq#my-bot-is-hitting-limits-how-do-i-avoid-this)):
+
+| Scope | Limit |
+|---|---|
+| One chat | "avoid sending more than one message per second"; short bursts tolerated |
+| One group | "not able to send more than 20 messages per minute" |
+| Global broadcast | ~30 messages/second (paid broadcasts up to 1000/s exist but require 100k Stars and 100k MAU — irrelevant here) |
+
+Exceeding a limit returns HTTP 429 with `retry_after` ("the number of seconds left to wait
+before the request can be repeated",
+[ResponseParameters](https://core.telegram.org/bots/api#responseparameters)) — always honour it.
+Edit-specific ceilings are not officially documented; grammY's flood-limit page reports the
+observed group ceiling as ~20 edits/minute per group
+([grammY: flood limits](https://grammy.dev/advanced/flood)). Practical throttles: **private
+chat ~1 edit/second; forum-supergroup topic one edit every 3-5 seconds** to stay under 20/min
+with headroom for the final message. `sendChatAction` (`typing`, cleared after ≤5 s or on the
+next message) covers the first-token gap either way.
+
+The rate-limit asymmetry is itself an argument for the private chat: 1/s versus 20/min is the
+difference between streaming that feels live and streaming that visibly lurches.
+
+## Confirmation flows ("which file did you mean?")
+
+**Inline keyboards** are the right tool: buttons attached to the bot's message, each with
+`callback_data` of "1-64 bytes"
+([InlineKeyboardButton](https://core.telegram.org/bots/api#inlinekeyboardbutton)) — enough for
+an index into a runtime-held candidate list, not for a file path; keep the mapping in private
+runtime state. On a press the bot receives a `callback_query`, and "Telegram clients will
+display a progress bar until you call `answerCallbackQuery`. It is, therefore, necessary to
+react ... even if no notification to the user is needed"
+([CallbackQuery](https://core.telegram.org/bots/api#callbackquery)). After answering, edit the
+message to reflect the choice and drop the keyboard. `answerCallbackQuery` can show a passive
+toast (0-200 chars) or an alert (`show_alert`).
+
+**ForceReply** exists for free-text follow-ups — it opens the reply interface so the next
+message threads back to the bot's question, designed so a privacy-mode group bot still sees the
+answer ([ForceReply](https://core.telegram.org/bots/api#forcereply)). In a single-user private
+chat it adds nothing over just reading the next message in the topic; reserve it for prompts
+that need free text rather than a pick-one.
+
+## Locking the bot to a single user
+
+There is no private-bot switch: any Telegram user can open a chat with any bot. Lockdown is
+layered, all layers cheap:
+
+1. **Owner allowlist in the adapter** — the load-bearing layer. Accept an update only when
+   `message.from.id` (and for callbacks, `callback_query.from.id`) equals the Owner's numeric
+   user id **and** the chat id is the expected home chat; drop everything else unanswered.
+   Numeric ids, never `@username` (usernames are mutable and reassignable). The Owner's id and
+   the home chat id are private runtime state, not tracked configuration.
+2. **BotFather hardening** — `/setjoingroups` off, so the bot cannot be added to any group
+   ([Bot features](https://core.telegram.org/bots/features)). With the private-chat-topics
+   option this closes the group surface entirely. The forum-supergroup option instead needs
+   joining enabled once, the bot added as admin, then joining disabled again.
+3. **Privacy mode** (forum-supergroup option only): privacy mode is on by default and limits
+   what a group bot sees, but "bot admins always receive all messages"
+   ([Bot features](https://core.telegram.org/bots/features#privacy-mode)) — the bot must be
+   admin anyway for `can_manage_topics`, so no `/setprivacy` change is needed.
+4. **Transport authenticity** — with long polling there is no inbound surface at all; with a
+   webhook, set `secret_token` so every delivery carries the
+   `X-Telegram-Bot-Api-Secret-Token` header
+   ([setWebhook](https://core.telegram.org/bots/api#setwebhook)), and optionally restrict to
+   Telegram's published source subnets `149.154.160.0/20` and `91.108.4.0/22`
+   ([webhook guide](https://core.telegram.org/bots/webhooks)).
+5. **Token hygiene** — the bot token is the whole identity; it enters through the deployment
+   environment per this repository's rules, never through tracked configuration.
+
+## Webhook vs long polling from a home Mac mini
+
+[`getUpdates`](https://core.telegram.org/bots/api#getupdates) long polling is outbound-only
+HTTPS: the runtime holds an open request (`timeout` in seconds; "short polling should be used
+for testing purposes only"), needs no public endpoint, no TLS certificate, no port forwarding,
+and works behind NAT/CGNAT. It "will not work if an outgoing webhook is set up" — the two are
+mutually exclusive, and only one poller may run at a time. `drop_pending_updates` (via
+`deleteWebhook`) discards a backlog after downtime if staleness matters more than completeness.
+
+A [webhook](https://core.telegram.org/bots/webhooks) requires a public HTTPS endpoint on port
+"443, 80, 88, or 8443" with a verifiable certificate (self-signed possible by uploading the PEM)
+— i.e. an inbound port or a tunnel (Cloudflare Tunnel, Tailscale Funnel), which adds a
+third-party dependency to be always-on. Webhooks win on latency-per-CPU at scale; at
+one-user scale the difference is noise.
+
+For a Mac mini at home with "ideally no inbound ports": **long polling, clearly.** The webhook
+path (with `secret_token`) is documented above should the runtime ever move to a host with a
+public endpoint.
+
+## Length and formatting limits
+
+- Message text: "1-4096 characters after entities parsing" (`sendMessage`, `editMessageText`,
+  `sendMessageDraft`); media captions 0-1024
+  ([Bot API](https://core.telegram.org/bots/api#sendmessage)). Longer output must be split;
+  splitting mid-code-block breaks rendering, so chunk on block boundaries. Concise output —
+  already the house style — mostly avoids the problem.
+- `parse_mode`: `MarkdownV2`, `HTML`, or legacy `Markdown`
+  ([formatting options](https://core.telegram.org/bots/api#formatting-options)). Bold, italic,
+  underline, strikethrough, spoiler, blockquote, inline links, `code`/`pre` with
+  syntax-highlight hints. Judgement, not doctrine: prefer **HTML** — MarkdownV2 requires
+  escaping many characters in ordinary prose and model output, and unescaped input is a
+  runtime 400.
+- `callback_data` 1-64 bytes; topic names 1-128 characters; `answerCallbackQuery` text 0-200.
+
+## Recommendation
+
+**One bot, locked to the Owner's user id, with Threaded mode enabled — per-domain topics inside
+the bot's own private chat.** This is the ticket's "one home with per-domain chats" with less
+machinery than the assumed forum supergroup: no group to secure, no admin rights, no invite
+surface, lockdown by construction plus the from-id allowlist — and it unlocks the two best
+mechanics on the platform for this use case: native token streaming via `sendMessageDraft`
+(private chats only) and the 1 msg/s per-chat limit instead of the group's 20 msgs/min.
+
+Concretely, for the decision ticket:
+
+1. Bot via BotFather: Threaded mode **on**, `/setjoingroups` **off**; token into the
+   deployment environment.
+2. Adapter: allowlist `from.id` + chat id (numeric, private runtime state); route by
+   `message_thread_id` with a domain → topic map built through `createForumTopic`; absent
+   thread id = General.
+3. Streaming: `sendMessageDraft` per token batch (same `draft_id`), finalize with `sendMessage`;
+   fall back to edit-throttled `editMessageText` (~1/s, honour `retry_after`) if drafts
+   misbehave — the feature is under a year old.
+4. Confirmations: inline keyboards with index-valued `callback_data`, always
+   `answerCallbackQuery`, edit the message after the choice.
+5. Transport: `getUpdates` long polling from the mini (timeout ~30-50 s); no inbound ports.
+6. Output: chunk at 4096 on block boundaries; HTML parse mode.
+
+**Fallback, pre-researched:** if private-chat topics prove immature in practice, a private forum
+supergroup with the bot as admin (`can_manage_topics`) reproduces everything above except draft
+streaming — there, throttle edits to one per 3-5 s under the 20/min group ceiling. Nothing else
+in the adapter design changes; the routing key (`message_thread_id`) is identical, which keeps
+the switch cheap in both directions.
