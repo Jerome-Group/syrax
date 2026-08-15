@@ -26,7 +26,9 @@ _Avoid_: provider, model
 One of Syrax's per-domain surfaces, and a *capability boundary* rather than a filing convenience:
 which chat a message arrives in determines the tool layer that is reachable, the retrieval scope,
 and the session state. A question a chat does not own is redirected to the chat that does, never
-answered by reaching across — so the boundary is what keeps each turn's context small.
+answered by reaching across — so the boundary is what keeps each turn's context small. The
+boundary is drawn around the **tool layer**, not around the documents: two chats may reach the
+same file while only one of them may call the capability that owns it.
 _Avoid_: topic, thread — both name the Telegram mechanism that currently carries a chat rather
 than the boundary it draws, and that mechanism has a documented fallback that would strand the
 word
@@ -50,7 +52,10 @@ says nothing about what does the bounding
 
 **Broad search**:
 Retrieval across everything indexed, bounded by no capability. What a question that names no
-domain gets. The General chat owns it, and no capability chat performs it.
+domain gets. The General chat owns it, and no capability chat performs it. What is indexed is an
+allowlist of roots — everything reachable is named in advance, so a tree nobody listed is not
+searchable. Its reach is over documents alone: reaching a capability's documents is not reaching
+that capability's tools, and a chat performing broad search over them still may not call it.
 _Avoid_: global search, full-text search — the first claims the whole machine, which is more than
 is ever indexed, and the second names a technique where this names a reach
 
