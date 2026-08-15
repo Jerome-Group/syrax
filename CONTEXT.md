@@ -32,6 +32,26 @@ Credentials, sessions, chats, memory, provider responses, caches, logs, and mach
 paths produced or consumed while Syrax runs. It stays outside the repository.
 _Avoid_: source, fixture
 
+**Scoped search**:
+Retrieval bounded to one capability's corpus, such as the academic chat reaching only what sits
+under the modules root. It is not a second search: it is the *same* retrieval with a restriction,
+and the restriction is what makes it fast enough to answer in a chat.
+_Avoid_: local search, filtered search — the first suggests an index of its own, and the second
+says nothing about what does the bounding
+
+**Broad search**:
+Retrieval across everything indexed, bounded by no capability. What a question that names no
+domain gets.
+_Avoid_: global search, full-text search — the first claims the whole machine, which is more than
+is ever indexed, and the second names a technique where this names a reach
+
+**Daily brief**:
+The one message Syrax posts each morning without being asked: the day ahead, what arrived
+overnight, and how the overnight jobs went. It is posted whether or not anything happened, and it
+mentions everything new without detailing any of it.
+_Avoid_: digest, notification, alert — a digest may be skipped on an empty day, which is the thing
+this is defined not to do, and the other two are per-event where this is per-day
+
 Two terms are Organisation-wide and mean the same thing in every repository:
 
 **Organisation**:
