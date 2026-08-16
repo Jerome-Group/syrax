@@ -20,6 +20,9 @@ benchmark = "/absolute/path/outside/this/repository/benchmark"
 # Gateway logs carry chat content, so they are private runtime state like the rest of these roots.
 # Rotate them: a supervisor's append-only redirection grows without bound.
 logs = "/absolute/path/outside/this/repository/logs"
+# The usage report is written here as well as posted in chat, so that an agent working in the
+# checkout can read it. It holds provider telemetry, which is private runtime state.
+usage_report = "/absolute/path/outside/this/repository/usage-report"
 
 [security]
 secrets_from = "environment-or-private-secret-store"

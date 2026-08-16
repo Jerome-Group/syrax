@@ -9,7 +9,7 @@ keep the boundary intact.
 |---------|---------|--------------|
 | runtime | The selected adapter and executable entrypoint | Placeholder until a runtime is chosen |
 | model | Provider and model selection | Names only; credentials stay outside the file |
-| paths | Roots for private state, chat archives, the search index, its benchmark and the logs | Absolute paths outside this repository |
+| paths | Roots for private state, chat archives, the search index, its benchmark, the logs and the usage report | Absolute paths outside this repository |
 | security | Secret source and tool policy | Environment/private store plus explicit allowlist |
 | observability | Log and trace handling | Sanitised local output by default |
 
@@ -33,21 +33,42 @@ state directory rather than inside it, so that re-pinning or resetting the runti
 an index that costs hours of embedding to rebuild. [ADR-0004](adr/0004-syrax-owns-the-file-search-index.md)
 carries the reasoning.
 
-## The two units
+## The units
 
-Syrax is supervised as two launchd LaunchAgents rather than one process or a container.
+Syrax is supervised as launchd LaunchAgents rather than one process or a container.
 [ADR-0005](adr/0005-launchd-supervises-syrax-as-two-launchagents.md) carries the reasoning; what
-matters for configuring a deployment is that they are separate on purpose.
+matters for configuring a deployment is that they are separate on purpose, and the rule behind the
+split is **one unit per resident thing that must exist exactly once**.
 
 | Unit | What it runs | Why it is its own unit |
 |------|--------------|------------------------|
 | `com.jerome-group.syrax.gateway` | The agent runtime | It holds the sessions and carries every chat |
 | `com.jerome-group.syrax.search` | The resident search service | One embedder in memory regardless of how many agents connect |
+| `com.jerome-group.syrax.hatch` | The escape-hatch tool and the usage report | Its counters must be single-instance and must survive a restart of anything else |
 
 The second is the one that is easy to get wrong. The usual MCP transport has each client spawn the
 server as a child process, which would put one resident embedding model behind **every** agent. The
 search service is therefore standalone and bound to loopback, and the agents connect to it — so the
 model is loaded once and survives a gateway restart.
+
+The third is separate for the same rule and the opposite reason: it is almost weightless, but its
+counters track a rationed daily allowance, and folding it into the search service would mean an
+embedder restart silently handing back an allowance that has already been spent.
+[ADR-0006](adr/0006-the-runtime-routes-and-syrax-owns-the-escape-hatch.md) carries that reasoning,
+and the decision it rests on — that there is **no provider-router process**, because the runtime's
+own fallback chains do the routing.
+
+## The usage report
+
+The hatch unit writes the usage report to the `usage_report` path, and a launchd calendar job pokes
+it to refresh. It is written to a file as well as posted in chat because an agent working in the
+checkout cannot read the chat surface, and the counters it draws on are private runtime state that
+is never committed.
+
+It carries per-lane headroom with each provider's own telemetry beneath it, and **it states when it
+last successfully read each source**. That timestamp is not decoration: most of the telemetry is
+read out of the runtime's own internal state, so a change there would otherwise break the report
+silently — and a stale report is indistinguishable from a quiet day.
 
 Both units are launched through a wrapper script rather than the binary. The wrapper is what sources
 the secrets file and sets the `PATH` a supervisor does not provide; putting credentials in the unit
