@@ -55,7 +55,7 @@ two places.
 | `~/Documents/Zotero` | 748 files but **3 PDFs**; the rest is `translators/`, `locate/` and `zotero.sqlite` |
 | `~/Downloads` | empty (counted 17 a day earlier) |
 | `~/org` | no longer exists (counted 17 a day earlier) |
-| PDF extraction | **0.06 s/file** — about 3 minutes for all 3,694 in scope |
+| PDF extraction | **0.06 s/file** — about 3 minutes for all 3,694 in scope. #34 measured **0.284 s/PDF** on a textbook-heavy folder, so this rate is a property of the documents rather than of the machine, and the estimate holds only where the corpus is short PDFs |
 | PDFs with no usable text layer | ~5%, roughly 185 corpus-wide |
 | Extracted text | ~117 M characters ≈ 29 M tokens ≈ ~67,000 chunks |
 | Resulting index | ~103 MB of vectors, ~300 MB SQLite file |
@@ -75,6 +75,15 @@ independently.
 Rank fusion is then a join rather than a reconciliation across stores, and scoped search is a
 `WHERE` clause on the path — which is what #10 meant by "the same retrieval with a restriction,
 not a second system".
+
+**The keyword arm indexes the document's name as well as its text**, which "the same extracted
+text" above silently excluded. [#34](https://github.com/Jerome-Group/syrax/issues/34) found the
+omission the way it would have been found in use: *Dummit and Foote* returned a poster's
+bibliography, because the book's own filename —
+`Abstract Algebra 3e Dummit, Foote.pdf` — was in no index at all. Adding a name match moved
+recall@1 from 4/14 to 5/14 and the reciprocal rank from 0.378 to 0.486. This is not the same as
+the filename-only indexing the extraction scope describes below: that is what a document gets
+*instead* of its contents, and this is what every document gets *as well as* them.
 
 **Fixed overlapping windows, ~512 tokens at ~15% overlap**, scored per chunk and collapsed to the
 best chunk per document. One vector per document fails the stated bar outright: the query this
@@ -105,8 +114,33 @@ margin, **and** for both arms to rank it first independently. That third conditi
 the bar real — a phrase only the vector arm likes is precisely where semantic search invents a
 plausible wrong file, and that is the failure that costs trust, because it sends the wrong document
 without asking. Anything short of all three is `ambiguous` and renders as three candidates;
-nothing above the floor is `empty`, stated plainly. The floor and the margin are tuned in the
-prototype, not fixed here.
+nothing above the floor is `empty`, stated plainly.
+
+**The three conditions did not survive the trial, and two of them are withdrawn.**
+[#34](https://github.com/Jerome-Group/syrax/issues/34) tuned them against real queries and found
+each one measuring something other than what it was asked to:
+
+- **The absolute floor cannot separate a right answer from a wrong one.** The two distributions
+  overlap almost entirely — for the pinned model, correct answers score −0.172 to 0.157 and wrong
+  ones 0.002 to 0.118 — so any floor high enough to reject a wrong answer rejects correct ones
+  first. `Dummit and Foote` is *right* at a cosine of −0.17, because it wins on the keyword arm
+  entirely. A floor on cosine would return `empty` for every query that names its target.
+- **The margin separates nothing.** Correct answers were found at a gap of 0.00000 and wrong ones
+  at 0.00239.
+- **Both arms agreeing** was a perfect precision filter for the two rejected models and **fires
+  falsely for the pinned one**, which is the only place it matters.
+
+So the floor keeps only its *other* job — triggering `empty` — where it works cleanly: **−0.23**,
+in a window from −0.292 to −0.172 that separates an unanswerable query from every correct answer.
+`confident` becomes a single condition, a floor of **0.12** on the fused top result, which marks 4
+of 14 queries confident with none wrong.
+
+That 0.12 is **provisional and fitted**, and is recorded as such rather than presented as tuned: it
+sits 0.003 above a wrong answer on a fifteen-query benchmark, which is a number chosen by the
+benchmark's smallest gap rather than by evidence. It is safe in the direction that matters — being
+too cautious costs a shortlist, where being too eager sends the wrong file — and it is the first
+thing [#35](https://github.com/Jerome-Group/syrax/issues/35) should revisit once the benchmark has
+grown.
 
 **Scope is bound per chat in configuration, never passed by the model.** The academic chat's agent
 gets the tool pre-bound to the modules root; General's reaches the whole allowlist. Were scope a
@@ -169,13 +203,49 @@ price of the choice, and it is worth naming next to the choice rather than in a 
 - **A failure ledger** records every extraction failure; the 3-day pass retries it and the System
   chat can report it.
 
+## The embedder, pinned by measurement
+
+Left open above and settled by the trial on [#34](https://github.com/Jerome-Group/syrax/issues/34),
+against the Owner's own queries over one folder of the corpus — 204 documents, 14,577 chunks, the
+same chunks for every model so what varied was the model and nothing else.
+
+| | potion-multilingual-128M | bge-small-en-v1.5 | EmbeddingGemma-300M `q4` |
+| --- | --- | --- | --- |
+| Recall@1 | 5/14 | 6/14 | **10/14** |
+| Reaches Artin–Wedderburn from a description | rank 1 | **rank 4 — fails** | **rank 1** |
+| Resident | 1,153 MB | 269 MB | **698 MB** |
+| Cold build, full corpus | ~15 s | ~77 min | ~3 h |
+| Query | 15 ms | 59 ms | 38 ms |
+
+**`EmbeddingGemma-300M` is the embedder**, in the `model_q4` ONNX export.
+
+The trial's own ranking — speed slightly ahead of compute, accuracy close behind — would have
+chosen `potion`, and it is the one candidate that fails on both of its own axes: it is 4.3× the
+resident size of `bge` *and* less accurate, because a static model buys its 4,714 chunks/s by
+holding a multilingual vocabulary in memory instead of doing inference. Speed turned out not to
+discriminate: the build is paid once in the background, and every candidate answers a query inside
+60 ms.
+
+`bge-small-en-v1.5` is the light one and is rejected on the bar rather than the budget. It puts
+`Odyssey_Project.pdf` — the compiled book that *contains* the Wedderburn chapter — above the chapter
+itself, and widening the candidate pool from 40 to 600 does not move it, so this is the model's
+judgement rather than the ranking's. That bar is [#10](https://github.com/Jerome-Group/syrax/issues/10)'s
+and it is the reason a vector arm exists at all.
+
+**The quantisation is load-bearing, and the obvious choice is the wrong one.** The int8
+`model_quantized` export is the heaviest and the slowest of the five the repository ships — 1,376 MB
+resident at 4.0 chunks/s — because int8 weights are dequantised to fp32 to compute. `model_q4` holds
+698 MB at 6.2 chunks/s for **identical recall@1**, halving both the memory and the build. Disabling
+onnxruntime's arena makes it worse, not better (1,904 MB), so the resident size is the model's
+rather than a tuning default.
+
 ## What is not decided here
 
-The **embedder**. Whether a small local model reaches a named theorem from a description of it is
-an empirical question that no reading settles, so it is pinned by a prototype trialling
-`bge-small-en-v1.5`, `EmbeddingGemma` and `potion-multilingual-128M` against the Owner's own
-queries. That prototype also produces the eval benchmark and the two threshold numbers left open
-above.
+**Whether the embedder stays resident 24/7.** This ADR requires it resident to avoid ~4 s of model
+load per query, which was reasoned against a per-query script and not against the third option:
+evicting after an idle window. Search is bursty, so an idle eviction would hold 698 MB for minutes
+a day rather than continuously, at the cost of one slow first query after a gap. That is a
+[#18](https://github.com/Jerome-Group/syrax/issues/18) supervision question, not an index one.
 
 ## Consequences
 
@@ -190,8 +260,14 @@ above.
 
 ## Revisit when
 
-- The prototype reports that no trialled embedder clears the retrieval bar, which reopens chunking
-  before it reopens the embedder.
+- The pinned model's recall stops being good enough in use. The trial measured 10 of 14 on a
+  fifteen-query benchmark, which is enough to choose between three candidates and not enough to
+  call the retrieval solved — the four it missed were all descriptions of a concept, answered with
+  a textbook that covers it rather than the chapter about it. Growing the benchmark is
+  [#35](https://github.com/Jerome-Group/syrax/issues/35), and it is what would make this
+  measurable rather than felt.
+- The `confident` floor of 0.12 is revisited on a benchmark larger than fifteen queries, because it
+  was fitted to that one.
 - The corpus grows by an order of magnitude, at which point brute-force cosine over one SQLite file
   stops being the obvious answer.
 - Image, audio or video search becomes a requirement — the research names Omni as the fallback, at
