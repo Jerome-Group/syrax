@@ -19,8 +19,13 @@ _Avoid_: chatbot app, prompt collection
 
 **Runtime adapter**:
 The boundary that connects Syrax's orchestration contract to one concrete agent runtime. It owns
-runtime-specific install and launch details; the choice is not settled yet.
-_Avoid_: provider, model
+runtime-specific install, launch and state-placement details, and it is a contract expressed in
+configuration rather than a layer of code standing in front of the runtime. Which runtime it wraps
+is a settled decision recorded in `docs/adr/`, not an open question. There is no second adapter for
+the messaging surface: the runtime brings its own channels, so reaching a new one is a capability
+of the runtime rather than a boundary Syrax owns.
+_Avoid_: provider, model — and *platform adapter*, which sounds like a sibling of this term but
+names a component this system does not build
 
 **Chat**:
 One of Syrax's per-domain surfaces, and a *capability boundary* rather than a filing convenience:
