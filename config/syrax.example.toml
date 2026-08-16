@@ -17,6 +17,9 @@ chat_archive = "/absolute/path/outside/this/repository/chat-archive"
 # state, and placement outside the checkout is what keeps it out — not an ignore rule.
 search_index = "/absolute/path/outside/this/repository/search-index"
 benchmark = "/absolute/path/outside/this/repository/benchmark"
+# Gateway logs carry chat content, so they are private runtime state like the rest of these roots.
+# Rotate them: a supervisor's append-only redirection grows without bound.
+logs = "/absolute/path/outside/this/repository/logs"
 
 [security]
 secrets_from = "environment-or-private-secret-store"
