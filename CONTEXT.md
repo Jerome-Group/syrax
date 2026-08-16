@@ -116,6 +116,42 @@ _Avoid_: draft — that names the ephemeral platform mechanism for streaming a *
 this is defined not to be; status update, notification — both are per-event, where this is one
 message per turn
 
+**Headroom**:
+How much of a lane's capacity remains right now, as last stated by the provider itself rather than
+as counted here. It is per lane rather than per model because a lane is a role: the question behind
+it is whether the system can still talk and still think. Where a provider reports nothing, headroom
+is *unknown* rather than full — so what is given is the last thing that provider said, and when it
+said it.
+_Avoid_: quota — that is the provider's allowance, where this is what is left of it; budget — a
+self-imposed allowance, which this system deliberately does not have
+
+**Stand down**:
+Removing a provider from a lane until a stated reset, as against retrying it in a moment. The
+distinction is the whole of quota awareness and the transport hides it: a per-minute limit and an
+exhausted day are both HTTP 429, and only the response body or a locally-kept count says which. A
+stood-down provider is neither broken nor reconfigured — it returns on its own.
+_Avoid_: cooldown — it names seconds, where this may last until tomorrow; disable, which sounds
+like a setting a human changed
+
+**Pre-emptive switch**:
+Leaving a provider *before* it refuses, on what its telemetry already says rather than on a failure
+that has happened. It is reserved for where being refused is expensive — a rationed lane, where a
+single probe spends a measurable share of the day's allowance. Where the allowance is large enough
+that a refusal costs one call, the system waits to be refused instead, and that is a choice rather
+than an omission.
+_Avoid_: fallback, failover — both name the move made *after* something failed, which is a
+different move and the more common one here; using them interchangeably hides which of the two a
+lane actually does
+
+**Usage report**:
+What the System chat says about how much of each lane is left. It is posted **only when something
+moved** — a provider stood down, a lane switched, a rationed call spent — and is otherwise silent,
+which is exactly what separates it from a *daily brief*: a brief is posted on an empty day because
+its absence is the signal, and nothing depends on this one arriving. It can be asked for at any
+time instead, which is why the chat that carries it is conversational rather than a feed.
+_Avoid_: daily brief — the shape it is most likely to be mistaken for and deliberately is not;
+dashboard, which suggests a surface that is always on display
+
 **Context ceiling**:
 The limit on how much a single turn may carry, with the oldest trimmed away until the turn fits.
 It is counted in tokens rather than in turns because one turn can be arbitrarily large, and it
