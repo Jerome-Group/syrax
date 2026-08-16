@@ -95,6 +95,35 @@ the request is live and never written down, so nothing has to decide when deleti
 _Avoid_: cache, temp file — a cache is kept because keeping it is the point, and a temp file is a
 thing on disk, which this is defined not to be
 
+**Lane**:
+A named set of models a caller may reach, defined by the **role** it plays rather than by how
+strong it is. There are three: the *front* lane, which answers the Owner and owns the message; the
+*worker* lane, reached only as a sub-agent and never answering directly; and the *escape hatch*,
+rationed and reached only when the Owner asks for it in so many words. A lane is not a fallback
+position — front and worker hold their roles at the same time, which is what lets one of them talk
+while the other works. Which models sit in a lane, and in what order, is configuration.
+_Avoid_: tier — it ranks by strength and implies the members are alternatives, and both readings
+are wrong here; model group, which names a mechanism a router happens to offer rather than the
+division of labour it is being used for
+
+**Progress message**:
+The single message a slow turn keeps up to date: posted at once saying what is about to happen,
+edited as the work proceeds, and finally reduced to a line recording that it finished — with the
+answer itself arriving beneath it rather than replacing it. It exists because the lane that thinks
+is not the lane that talks, so a turn can be slow without being silent, and the thread keeps a
+record of what happened rather than overwriting it.
+_Avoid_: draft — that names the ephemeral platform mechanism for streaming a *fast* reply, which
+this is defined not to be; status update, notification — both are per-event, where this is one
+message per turn
+
+**Context ceiling**:
+The limit on how much a single turn may carry, with the oldest trimmed away until the turn fits.
+It is counted in tokens rather than in turns because one turn can be arbitrarily large, and it
+binds per turn rather than per day because a turn re-sends everything it carries on every call it
+makes — so what it holds is multiplied, not merely stored.
+_Avoid_: context window — that is the model's own maximum, which this sits far below on purpose;
+history window, which counts turns where this counts tokens
+
 **Daily brief**:
 The message a chat posts each morning without being asked: the day ahead, what arrived overnight,
 and how the overnight jobs went. It is posted whether or not anything happened, and it mentions
