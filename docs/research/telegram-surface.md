@@ -39,7 +39,8 @@ chat only the Owner and the bot can see.
 Maturity caveat: this shipped December 2025, and the 10.0 rollout (May 2026) briefly broke
 sending to existing private-chat topic threads
 ([tdlib/telegram-bot-api#847](https://github.com/tdlib/telegram-bot-api/issues/847)). New
-surface area still settling; keep the forum-supergroup fallback in mind.
+surface area still settling; keep the forum-supergroup fallback in mind. *(Discharged for the
+three calls this system depends on — see [Verified in practice](#verified-in-practice).)*
 
 ### Forum supergroup with topics — the assumed option, fully workable
 
@@ -76,7 +77,9 @@ Incoming: a message in a topic carries `message_thread_id` ("unique identifier o
 thread or forum topic to which the message belongs; for supergroups and private chats with forum
 topics only") and `is_topic_message`
 ([Message](https://core.telegram.org/bots/api#message)). Messages in the General topic of a
-forum supergroup carry no thread id — treat "absent" as General.
+forum supergroup carry no thread id — treat "absent" as General. *(Supergroups only: a private
+threaded chat has no General topic, and its thread-less root creates a new topic on the user's
+next message. See [Verified in practice](#verified-in-practice).)*
 
 Outgoing: pass `message_thread_id` on `sendMessage` (and every other send method, plus
 `sendChatAction`) to land the reply in the right topic. Topic ids are stable: the id is the
@@ -202,6 +205,45 @@ public endpoint.
   escaping many characters in ordinary prose and model output, and unescaped input is a
   runtime 400.
 - `callback_data` 1-64 bytes; topic names 1-128 characters; `answerCallbackQuery` text 0-200.
+
+## Verified in practice
+
+Everything above was read from documentation. Everything here was **observed** on 2026-08-16 for
+[#28](https://github.com/Jerome-Group/syrax/issues/28) — the first four against Telegram's own Bot
+API server with a live bot in Threaded mode, the last in the Telegram client itself.
+
+- **`createForumTopic` works in a bot's private chat.** Three topics created in one run, each with
+  a distinct `icon_color`, each returning a stable `message_thread_id`. The recommendation's
+  central premise holds and the forum-supergroup fallback is not needed.
+- **`sendMessageDraft` animates inside a topic.** A run in General and a run in a created topic
+  both streamed a sentence a word at a time at roughly two drafts per second, with **no draft
+  rejected** and no `retry_after`. The streaming section above *inferred* per-topic drafts from the
+  parameter list; it is now measured. This is the combination the surface choice rests on, and the
+  one a supergroup would cost.
+- **A private threaded chat has no General topic at all.** `editForumTopic` on
+  `message_thread_id: 1` and `editGeneralForumTopic` both return `Bad Request: TOPIC_ID_INVALID`,
+  and `sendMessage` to thread 1 returns `Bad Request: message thread not found`. Thread 1 does not
+  exist: the non-deletable General topic with `id=1` that [Forum
+  topics](https://core.telegram.org/api/forum) describes is a property of forum **supergroups**
+  and does not carry over, which the routing section above assumed it did. Messages sent with no
+  `message_thread_id` do display, but the client offers that root as *"type any message to create
+  a new thread"* — it is a thread factory, not a chat anyone can hold a conversation in. So a
+  catch-all chat is **created like any other topic**, and its name and icon colour are ours to
+  choose rather than Telegram's to give. This corrects
+  [#11](https://github.com/Jerome-Group/syrax/issues/11), which adopted General as `id=1` and
+  concluded its icon was not ours to set.
+- **`allows_users_to_create_topics` defaults to _on_.** A fresh bot with Threaded mode enabled
+  reports `true` from `getMe`, so the user may create and delete topics until it is turned off in
+  @BotFather. This corrects the premise [#11](https://github.com/Jerome-Group/syrax/issues/11)
+  reasoned from when it judged a deleted topic unrealistic: its startup reconciliation rule —
+  verify each stored id, recreate only what is gone, never match by name — is load-bearing rather
+  than belt-and-braces.
+- **The client draws the topic list.** Four threads were posted to and the Owner confirmed they
+  appear as a topic list rather than as one flat conversation. This is a different question from
+  whether the API routes correctly, and it is the one that would have flipped the surface whatever
+  the four results above said: a forum supergroup's topic UI has been mature since 2022, so a
+  private chat that routed perfectly and *drew* as a single stream would have been the weaker
+  option despite winning every API measure. It does not, so it is not.
 
 ## Recommendation
 
