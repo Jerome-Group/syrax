@@ -12,6 +12,17 @@ issue #4's deliverable (`docs/research/free-token-providers.md`). This document 
 survive them, who already implements those patterns, and the reuse recommendation that the
 provider-router decision (#15) can act on.
 
+> **Reversed 2026-08-16.** This document's central recommendation — route outside the runtime, in a
+> self-hosted OpenAI-compatible gateway process — was **not adopted**. #15 decided there is no
+> router process at all: the runtime's own fallback chains route, and Syrax adds only an
+> escape-hatch tool and a usage report, neither on the request path. The structural argument in
+> §3.3 is **sound and was overruled on measured cost, not refuted** — rediscovering an exhausted
+> provider costs one rejection, which is 1 of 2,400 a day against Cerebras and 5% of the day
+> against a 20-a-day model, so the expensive case turned out to be the cold, human-invoked one.
+> See [ADR-0006](../adr/0006-the-runtime-routes-and-syrax-owns-the-escape-hatch.md). The limits and
+> patterns in §1–§2 stand; §3.1's candidate survey and the recommendation below describe a road not
+> taken.
+
 ---
 
 ## 1. What free-tier rate limits actually look like
@@ -256,6 +267,13 @@ placeholders in `config/`, real keys outside the repo.
 multi-account key farming, and any hosted gateway on the critical path.
 
 ## Recommendation
+
+> **Not adopted — see the note at the top of this file.** Item 1 was reversed by #15 and item 2's
+> LiteLLM footprint benchmark was never run, because no gateway process was provisioned. Items 3
+> and 4 survive in changed form: the tiers became **lanes** defined by role rather than by strength
+> ([#13](https://github.com/Jerome-Group/syrax/issues/13)), and the quota policy became behaviour
+> the runtime and one Syrax tool share rather than a gateway's configuration
+> ([ADR-0006](../adr/0006-the-runtime-routes-and-syrax-owns-the-escape-hatch.md)).
 
 1. **Route outside the runtime, in a self-hosted OpenAI-compatible gateway process on the mini.**
    In-runtime fallback alone forgets quota state between processes and couples policy to an

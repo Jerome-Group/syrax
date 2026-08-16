@@ -36,6 +36,15 @@ _Avoid_: router — that is the provider side, and keeping the two apart is the 
 entry exists; proxy — which names something standing *between* two parties, where this is one of
 the parties
 
+**Router**:
+How a lane's chain is walked and when a provider is stood down. It is a **behaviour, not a
+component**: no process in this system is the router. The runtime walks the chains it is configured
+with, and the little Syrax adds sits beside that rather than in front of it. The word survives
+because the behaviour still needs a name and because *gateway* had been carrying it.
+_Avoid_: gateway — the runtime's own process, and the collision that made both of these entries
+necessary; proxy, provider router — both name a thing on the request path, and the point of this
+entry is that there is no such thing here
+
 **Chat**:
 One of Syrax's per-domain surfaces, and a *capability boundary* rather than a filing convenience:
 which chat a message arrives in determines the tool layer that is reachable, the retrieval scope,
