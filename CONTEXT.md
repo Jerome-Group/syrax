@@ -27,6 +27,15 @@ of the runtime rather than a boundary Syrax owns.
 _Avoid_: provider, model — and *platform adapter*, which sounds like a sibling of this term but
 names a component this system does not build
 
+**Gateway**:
+The agent runtime's own long-lived process: the one that holds the sessions and carries every chat.
+The word is upstream's and is reserved for it, because the provider side of this system is *the
+router* and the two were briefly sharing a name. Two long-lived processes under one word is how a
+sentence about restarting "the gateway" comes to mean two different things to two readers.
+_Avoid_: router — that is the provider side, and keeping the two apart is the whole reason this
+entry exists; proxy — which names something standing *between* two parties, where this is one of
+the parties
+
 **Chat**:
 One of Syrax's per-domain surfaces, and a *capability boundary* rather than a filing convenience:
 which chat a message arrives in determines the tool layer that is reachable, the retrieval scope,
