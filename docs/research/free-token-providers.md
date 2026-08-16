@@ -67,6 +67,11 @@ is a China-based vendor; route only content the Owner is comfortable leaving the
 
 ### Google Gemini — high volume, but free means training data
 
+> **Corrected 2026-08-16.** The community figure below is wrong on the number that matters. Read
+> from the Owner's own account, the free tier is **5 RPM / 250K TPM / 20 requests per day**, the
+> same for 3.6 and 3.7 — not ~1,500 req/day. See
+> [`free-tier-limits.md`](free-tier-limits.md). "High volume" does not describe this tier.
+
 The Owner's "3.6/3.7 flash" is also real: **Gemini 3.7 Flash** and **3.6 Flash** both carry a
 free tier, alongside 3.5 Flash/Flash-Lite, 3.1 Flash-Lite and the 2.5 family
 ([pricing](https://ai.google.dev/gemini-api/docs/pricing)). Google stopped publishing free-tier
