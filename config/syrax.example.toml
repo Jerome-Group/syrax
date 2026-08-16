@@ -13,6 +13,10 @@ name = "choose-a-model"
 # Keep these roots outside the Syrax repository.
 private_state = "/absolute/path/outside/this/repository/syrax-state"
 chat_archive = "/absolute/path/outside/this/repository/chat-archive"
+# The search index is derived verbatim from private document contents. It is private runtime
+# state, and placement outside the checkout is what keeps it out — not an ignore rule.
+search_index = "/absolute/path/outside/this/repository/search-index"
+benchmark = "/absolute/path/outside/this/repository/benchmark"
 
 [security]
 secrets_from = "environment-or-private-secret-store"

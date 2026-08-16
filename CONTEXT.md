@@ -57,12 +57,43 @@ says nothing about what does the bounding
 
 **Broad search**:
 Retrieval across everything indexed, bounded by no capability. What a question that names no
-domain gets. The General chat owns it, and no capability chat performs it. What is indexed is an
-allowlist of roots — everything reachable is named in advance, so a tree nobody listed is not
-searchable. Its reach is over documents alone: reaching a capability's documents is not reaching
-that capability's tools, and a chat performing broad search over them still may not call it.
+domain gets. The General chat owns it, and no capability chat performs it. What is indexed is the
+index allowlist, so a tree nobody listed is not searchable — but that list is a budget rather than
+a fence, and what may never be reached at all is the blocklist. Its reach is over documents alone:
+reaching a capability's documents is not reaching that capability's tools, and a chat performing
+broad search over them still may not call it.
 _Avoid_: global search, full-text search — the first claims the whole machine, which is more than
 is ever indexed, and the second names a technique where this names a reach
+
+**Index allowlist**:
+The roots that are crawled and indexed, named in advance. It is a **compute scope, not a security
+boundary**: it is sized by what is worth indexing on this machine, and a faster machine would
+index more. What must never be reached is the blocklist's job, not this list's.
+_Avoid_: the allowlist — unqualified, it has meant this, the extraction scope and the blocklist by
+turns, which is why all three are named separately here
+
+**Extraction scope**:
+The subset of the index allowlist whose documents are opened and read rather than indexed by name
+alone. It is **additive**: a path joins it on request, and because nothing in the pipeline is tied
+to a particular root, joining is a matter of configuration. A document inside the allowlist but
+outside this scope is still findable by name — what is lost is reaching inside it, and a search
+says so rather than returning nothing.
+_Avoid_: index scope, parse list — the first collides with the allowlist, and the second names a
+step where this names a set
+
+**Blocklist**:
+What is never indexed, never read, and never extracted, anywhere on the machine — regardless of
+which list would otherwise reach it. It is the boundary the index allowlist is not, and it is the
+only one that applies outside that allowlist. It fails open where an allowlist fails closed, so it
+is revisited when the machine changes rather than settled once.
+_Avoid_: denylist, exclusions — the second sounds like a tidying-up of results, where this is the
+one list that decides what may be touched at all
+
+**Ephemeral extraction**:
+Reading a document that the index does not hold, for one request. It is held only for as long as
+the request is live and never written down, so nothing has to decide when deleting it is safe.
+_Avoid_: cache, temp file — a cache is kept because keeping it is the point, and a temp file is a
+thing on disk, which this is defined not to be
 
 **Daily brief**:
 The message a chat posts each morning without being asked: the day ahead, what arrived overnight,
