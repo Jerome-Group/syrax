@@ -19,7 +19,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CORPUS = os.path.join(HERE, "corpus.sqlite")
 ROOT = "/Volumes/RAID0/My Drive/Modules/Research/Odyssey Y1/"
 BENCH = "/Volumes/RAID0/104 Syrax/benchmark/retrieval-eval.jsonl"
-K = 40          # chunks pulled from each arm before fusion
+K = int(os.environ.get("TRIAL_K", "40"))
 RRF_K = 60      # standard reciprocal-rank-fusion constant
 
 

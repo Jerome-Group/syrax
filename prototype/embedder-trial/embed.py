@@ -24,14 +24,17 @@ GEMMA_QUERY = "task: search result | query: {}"
 BGE_QUERY = "Represent this sentence for searching relevant passages: {}"
 
 
-def load_gemma():
+def load_gemma(variant="model_quantized"):
     import onnxruntime as ort
     from huggingface_hub import hf_hub_download
     from tokenizers import Tokenizer
 
     repo = "onnx-community/embeddinggemma-300m-ONNX"
-    path = hf_hub_download(repo, "onnx/model_quantized.onnx")
-    hf_hub_download(repo, "onnx/model_quantized.onnx_data")
+    path = hf_hub_download(repo, f"onnx/{variant}.onnx")
+    try:
+        hf_hub_download(repo, f"onnx/{variant}.onnx_data")
+    except Exception:
+        pass
     opts = ort.SessionOptions()
     opts.intra_op_num_threads = 8
     sess = ort.InferenceSession(path, opts, providers=["CPUExecutionProvider"])
@@ -77,7 +80,15 @@ def load_potion():
     return encode, 256
 
 
-LOADERS = {"bge": load_bge, "gemma": load_gemma, "potion": load_potion}
+LOADERS = {
+    "bge": load_bge,
+    "gemma": load_gemma,
+    # the int8 "quantized" export is the heaviest AND slowest of the five; q4 halves
+    # the resident size and nearly doubles throughput. Whether it keeps the recall is
+    # the only question that matters, so it gets its own index and its own eval.
+    "gemma_q4": lambda: load_gemma("model_q4"),
+    "potion": load_potion,
+}
 
 
 def norm(v):
