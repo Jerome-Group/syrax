@@ -95,9 +95,10 @@ is Drive exports, textbooks and Markdown at once.
 installed and are subprocess calls from any language, so the choice turns on the embedding and
 vector stack, where Python's pieces all have working wheels today and an embedder can be swapped in
 one line while the model is still being trialled. One consequence is load-bearing: **the search
-tool runs as a long-lived MCP server with the model resident, never a per-query script.** Query
-latency at 67,000 chunks is dominated by interpreter and model load, not by the vector scan, so a
-resident process is what makes the language choice free.
+tool runs as a long-lived MCP server, never a per-query script.** Query latency at 67,000 chunks is
+dominated by interpreter and model load, not by the vector scan, so a resident *process* is what
+makes the language choice free. The long-lived process is the load-bearing part; whether the model
+itself stays in memory the whole time is settled separately below, and it does not.
 
 **Two tools, and this amends #12.** `search` ranks a corpus; `read` returns the text of a named
 file. #12 decided General carries *exactly one retrieval tool*, and that rule is restated as
@@ -239,13 +240,27 @@ resident at 4.0 chunks/s — because int8 weights are dequantised to fp32 to com
 onnxruntime's arena makes it worse, not better (1,904 MB), so the resident size is the model's
 rather than a tuning default.
 
-## What is not decided here
+## The embedder is evicted after an idle window
 
-**Whether the embedder stays resident 24/7.** This ADR requires it resident to avoid ~4 s of model
-load per query, which was reasoned against a per-query script and not against the third option:
-evicting after an idle window. Search is bursty, so an idle eviction would hold 698 MB for minutes
-a day rather than continuously, at the cost of one slow first query after a gap. That is a
-[#18](https://github.com/Jerome-Group/syrax/issues/18) supervision question, not an index one.
+This ADR originally required the model resident continuously, having weighed that only against a
+per-query script. There is a third option it did not consider, and it is the one taken: **hold the
+model while search is being used and evict it after 30 minutes idle.**
+
+Search is bursty. Continuous residency spends 698 MB for twenty-four hours to save a few seconds on
+the handful of occasions a day the tool is actually reached, which is the wrong side of that trade
+on a 16 GB machine already carrying the gateway and a media stack. The idle window is 30 minutes to
+match the TTL ephemeral extraction already uses below, so the search service has one idea of "recently
+used" rather than two.
+
+The cost is stated plainly rather than minimised: **the first search after a gap pays the model
+load**, and on a bursty pattern that is a large share of searches. The load was measured at 3.8 s
+for the int8 export; **q4's own load time is unmeasured**, and should be lower on a 197 MB file
+against 309 MB, but it has not been taken.
+
+Deliberately **not** gated on a footprint measurement. [ADR-0005](0005-launchd-supervises-syrax-as-two-launchagents.md)
+defers footprint decisions to a 7-day steady-state observation, and that observation is not worth
+blocking this on: eviction is cheap to build, reversible in configuration, and waiting for a number
+before spending it would hold up the thing the number is meant to inform.
 
 ## Consequences
 
