@@ -104,19 +104,36 @@ HTTP 429 and a router that reads only the status code cannot tell them apart. Th
 answer to #7's warning that a daily-exhausted provider 429s every probe for hours and eats
 LiteLLM's `allowed_fails` budget — **on Z.AI, the body says which kind of 429 it is.**
 
-### 1305 was observed as a wall, not a blip — 2026-08-17
+### 1305 held the free lane down for half an hour, then let go — 2026-08-17
 
 [#39](https://github.com/Jerome-Group/syrax/issues/39) wanted one small completion out of
-`glm-4.7-flash` and never got one. Every request across a ~12-minute window came back **429 with
-code 1305** — the *service overloaded* row above rather than the 1302 concurrency row, with a single
+`glm-4.7-flash` and could not get one for **~30 minutes**: every request came back **429 with code
+1305** — the *service overloaded* row above rather than the 1302 concurrency row — with a single
 request in flight and nothing else of ours running. Retrying with backoff, which is what that row
-prescribes, did not clear it.
+prescribes, did not clear it inside that window. It then recovered on its own, and `glm-4.7-flash`
+and `glm-4.5-flash` both answered 200 immediately afterwards.
 
-So the free Flash lane has a second way to be unavailable, and it is not one Syrax can pace around:
-[#13](https://github.com/Jerome-Group/syrax/issues/13)'s *never dark, only slow* rests on the floor
-answering at all, and here it did not. One window is not a base rate and the code says the condition
-is temporary — what it rules out is the assumption that a 429 from Z.AI is always a stall Syrax
-caused by asking too fast.
+So 1305 is what the table says it is — temporary — but *temporary* here meant tens of minutes, not
+seconds. [#13](https://github.com/Jerome-Group/syrax/issues/13)'s *never dark, only slow* survives
+over a day and not over any given half-hour, which is the interval a person waiting on a reply
+actually experiences. The floor needs a lane beside it, not a longer backoff.
+
+**Two more codes, measured while establishing that, and both are the discriminator #15 wanted:**
+
+| Code | HTTP | Sent when | What it means for the router |
+|---|---|---|---|
+| **1113** | 429 | a **paid** model is asked for on a balance-free key (`glm-4.6`, `glm-4.7-flashx`) | never retry — the model is not on this plan, and the account cannot spend |
+| **1214** | 400 | the model id does not exist at all | never retry — a configuration error |
+
+That matters because it is what separates *the free lane is busy* from *you asked for something this
+account will never serve*: 1305 is the first, 1113 the second, and only the first is worth waiting
+out. It also means the no-spend constraint is enforced by the provider rather than by our restraint —
+a paid GLM model returns 1113 rather than a bill.
+
+**The free Flash models are not in the catalogue.** `GET /models` lists nine GLM models
+(`glm-4.5` … `glm-5.3`) and **no `-flash` variant at all**, yet `glm-4.7-flash` and `glm-4.5-flash`
+both answer. So the catalogue endpoint cannot be used to check whether a free rung still exists —
+only a request can, and a `1214` is the only reliable *gone* signal.
 
 ## What the other three providers give away for free
 
