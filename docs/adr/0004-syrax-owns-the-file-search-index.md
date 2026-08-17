@@ -253,9 +253,8 @@ match the TTL ephemeral extraction already uses below, so the search service has
 used" rather than two.
 
 The cost is stated plainly rather than minimised: **the first search after a gap pays the model
-load**, and on a bursty pattern that is a large share of searches. The load was measured at 3.8 s
-for the int8 export; **q4's own load time is unmeasured**, and should be lower on a 197 MB file
-against 309 MB, but it has not been taken.
+load — 2.27 s**, measured, against 9 ms for a query on a warm model. On a bursty pattern that is a
+large share of searches, so the window is the knob that decides how often it is paid.
 
 Deliberately **not** gated on a footprint measurement. [ADR-0005](0005-launchd-supervises-syrax-as-two-launchagents.md)
 defers footprint decisions to a 7-day steady-state observation, and that observation is not worth
