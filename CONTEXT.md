@@ -145,15 +145,26 @@ _Avoid_: tier — it ranks by strength and implies the members are alternatives,
 are wrong here; model group, which names a mechanism a router happens to offer rather than the
 division of labour it is being used for
 
+**Slow turn**:
+A turn in which the front lane delegates to the worker lane. It is defined by **delegation rather
+than by elapsed time**: nothing in this system sits on the request path to hold a stopwatch, and
+the front agent knows it is about to delegate at the moment it decides to. So a turn that merely
+takes a while — several retrieval calls, or a degraded rung answering slowly — is not one of these
+and shows a typing indicator like any other. This is the whole of the distinction, because it is
+what decides whether the Owner gets a *progress message* or nothing.
+_Avoid_: long turn, slow reply — both name elapsed time, which is the reading this entry exists to
+rule out; background task, which suggests something the Owner is no longer waiting on
+
 **Progress message**:
 The single message a slow turn keeps up to date: posted at once saying what is about to happen,
 edited as the work proceeds, and finally reduced to a line recording that it finished — with the
 answer itself arriving beneath it rather than replacing it. It exists because the lane that thinks
 is not the lane that talks, so a turn can be slow without being silent, and the thread keeps a
 record of what happened rather than overwriting it.
-_Avoid_: draft — that names the ephemeral platform mechanism for streaming a *fast* reply, which
-this is defined not to be; status update, notification — both are per-event, where this is one
-message per turn
+_Avoid_: typing indicator — the other thing the front lane can show, and the one this is paired
+against: an indicator says only that *something* is happening where this says *what*, and a turn
+shows one or the other rather than both; status update, notification — both are per-event, where
+this is one message per turn
 
 **Headroom**:
 How much of a lane's capacity remains right now, as last stated by the provider itself rather than
