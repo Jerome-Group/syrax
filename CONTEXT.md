@@ -113,6 +113,27 @@ the request is live and never written down, so nothing has to decide when deleti
 _Avoid_: cache, temp file — a cache is kept because keeping it is the point, and a temp file is a
 thing on disk, which this is defined not to be
 
+**Miss**:
+A search result the Owner has said was wrong. It is one word for five different failures — a
+confident answer that was wrong, a shortlist without the answer in it, a shortlist that buried it,
+an *empty* verdict over a corpus that held the answer, and the right document at the wrong
+granularity — so each one records which of them it was, because they are fixed in different places:
+a threshold for some, the ranking or the chunking for others. A miss exists only where the Owner
+said so, in reply to the result itself; nothing infers one from how the next message reads.
+_Avoid_: false positive, bad result — the first names one of the five and silently excludes the
+other four, and the second says nothing about who decided; feedback, which suggests something the
+system acts on where this is something it records
+
+**Retrieval benchmark**:
+The one set of queries the search index is scored against: the fixed ones written by hand and the
+misses captured from live use, in a single file where each entry carries which of the two it is. One
+set rather than two, because two would leave a standing question about which of them is the bar. It
+lives outside the repository with the rest of private runtime state, since every entry is a real
+query against a real private path — so nothing running off this machine can score it.
+_Avoid_: fixture — what it was while it was only the hand-written half, and a word that stops being
+true the moment a live entry lands; test suite, which promises a pass or a fail where this yields a
+score
+
 **Lane**:
 A named set of models a caller may reach, defined by the **role** it plays rather than by how
 strong it is. There are three: the *front* lane, which answers the Owner and owns the message; the
@@ -169,6 +190,17 @@ its absence is the signal, and nothing depends on this one arriving. It can be a
 time instead, which is why the chat that carries it is conversational rather than a feed.
 _Avoid_: daily brief — the shape it is most likely to be mistaken for and deliberately is not;
 dashboard, which suggests a surface that is always on display
+
+**Retrieval report**:
+What the System chat says about how the search index is scoring against the retrieval benchmark:
+posted only when a number moved or a run failed, and written to a file either way. Its subject is
+retrieval quality where the *usage report*'s is lane headroom — the two arrive in the same chat
+under the same exceptions-only discipline, which is the whole reason both are named here. It states
+what the confident floor would be if it were re-fitted against the benchmark as it now stands, and
+never applies it: computing a number is reporting, and changing the configuration is a person's act.
+_Avoid_: usage report — the sibling it arrives beside and the one it is most likely to be folded
+into; eval, benchmark run — the first names a discipline and the second an event, where this is the
+thing that gets read
 
 **Context ceiling**:
 The limit on how much a single turn may carry, with the oldest trimmed away until the turn fits.
