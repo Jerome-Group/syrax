@@ -91,6 +91,13 @@ The adapter therefore keeps one small map: domain → topic id, created via `cre
 
 ### Native draft streaming — private chats only
 
+> **Superseded by [#50](https://github.com/Jerome-Group/syrax/issues/50).** Everything in this
+> section is accurate about the *platform* and unreachable in *this system*: the pinned runtime
+> (`openclaw@2026.6.34`) contains no reference to `sendMessageDraft` anywhere in `dist` or `docs`,
+> and [#14](https://github.com/Jerome-Group/syrax/issues/14) gave the channel to the runtime. The
+> front lane sends a finished `sendMessage` and does not stream. Read on for the mechanics; do not
+> reach for the method.
+
 Bot API 9.3 added [`sendMessageDraft`](https://core.telegram.org/bots/api#sendmessagedraft):
 "Use this method to stream a partial message to a user while the message is being generated.
 Note that the streamed draft is ephemeral and acts as a temporary 30-second preview — once the
@@ -224,7 +231,10 @@ API server with a live bot in Threaded mode, the last in the Telegram client its
   both streamed a sentence a word at a time at roughly two drafts per second, with **no draft
   rejected** and no `retry_after`. The streaming section above *inferred* per-topic drafts from the
   parameter list; it is now measured. This is the combination the surface choice rests on, and the
-  one a supergroup would cost.
+  one a supergroup would cost. *(Still true of the platform, and moot for this system — the
+  measurement was a bare `curl`, and no code path from Syrax to Telegram can reach the method. See
+  [#50](https://github.com/Jerome-Group/syrax/issues/50) below. The "roughly two drafts per second"
+  is also not a platform ceiling: the wizard sleeps 0.5 s between drafts by design.)*
 - **A private threaded chat has no General topic at all.** `editForumTopic` on
   `message_thread_id: 1` and `editGeneralForumTopic` both return `Bad Request: TOPIC_ID_INVALID`,
   and `sendMessage` to thread 1 returns `Bad Request: message thread not found`. Thread 1 does not
@@ -273,7 +283,32 @@ inline keyboards without saying anything about topics either way, and #28 did no
   the **first** thing a handler does, before any work the tap triggers — which matters here because
   the work behind a capture tap is a database write, and behind a candidate tap is a file read.
 
+Read from the pinned runtime on 2026-08-17 for
+[#50](https://github.com/Jerome-Group/syrax/issues/50), against `openclaw@2026.6.34` as installed —
+its own `dist/` and `docs/`, not the published documentation site.
+
+- **The runtime cannot send a draft.** `sendMessageDraft` occurs **zero** times across the entire
+  package. Its Telegram channel calls `sendMessage` (216 occurrences), `sendChatAction` (25),
+  `createForumTopic` (23), `sendPhoto` (11), `editMessageText` (9) and `answerCallbackQuery` (6).
+  Since [#14](https://github.com/Jerome-Group/syrax/issues/14) gave the channel to the runtime and
+  [ADR-0003](../adr/0003-the-runtime-adapter-wraps-openclaw.md) made the adapter a configuration
+  contract rather than a wrapper, **the recommendation below named a method this system was never
+  able to call.** Everything else the design needs is present: `editMessageText` for the progress
+  message, `answerCallbackQuery` for the shortlist, `sendChatAction` for typing.
+- **What the runtime streams is not tokens.** `agents.defaults.blockStreamingDefault` is `"off"` by
+  default, and when on it emits 800–1200 character *blocks* with a 1 s coalesce window
+  (`blockStreamingChunk`, `blockStreamingCoalesce`) — never word by word. Token-level streaming was
+  not on offer from this runtime under any setting.
+- **Typing indicators are built in.** `agents.defaults.typingMode` defaults to `"instant"` for
+  direct chats, refreshing on `typingIntervalSeconds` (default 6), so the gap a draft would have
+  filled is already covered without a message being sent or a rate limit being spent.
+
 ## Recommendation
+
+> **Amended by [#50](https://github.com/Jerome-Group/syrax/issues/50)**: point 3 below is
+> withdrawn — the front lane does not stream, and `sendMessageDraft` is unreachable from the
+> chosen runtime regardless. The surface recommendation itself **stands**, re-decided on its
+> remaining planks rather than on drafts.
 
 **One bot, locked to the Owner's user id, with Threaded mode enabled — per-domain topics inside
 the bot's own private chat.** This is the ticket's "one home with per-domain chats" with less
@@ -289,9 +324,13 @@ Concretely, for the decision ticket:
 2. Adapter: allowlist `from.id` + chat id (numeric, private runtime state); route by
    `message_thread_id` with a domain → topic map built through `createForumTopic`; absent
    thread id = General.
-3. Streaming: `sendMessageDraft` per token batch (same `draft_id`), finalize with `sendMessage`;
+3. ~~Streaming: `sendMessageDraft` per token batch (same `draft_id`), finalize with `sendMessage`;
    fall back to edit-throttled `editMessageText` (~1/s, honour `retry_after`) if drafts
-   misbehave — the feature is under a year old.
+   misbehave — the feature is under a year old.~~ **Withdrawn by
+   [#50](https://github.com/Jerome-Group/syrax/issues/50).** The front lane does not stream: it
+   sends a finished `sendMessage`, with `typingMode: "instant"` covering the gap. A *slow turn* —
+   one where the front lane delegates — gets the progress message and its `editMessageText`
+   instead.
 4. Confirmations: inline keyboards with index-valued `callback_data`, always
    `answerCallbackQuery`, edit the message after the choice.
 5. Transport: `getUpdates` long polling from the mini (timeout ~30-50 s); no inbound ports.
@@ -302,3 +341,14 @@ supergroup with the bot as admin (`can_manage_topics`) reproduces everything abo
 streaming — there, throttle edits to one per 3-5 s under the 20/min group ceiling. Nothing else
 in the adapter design changes; the routing key (`message_thread_id`) is identical, which keeps
 the switch cheap in both directions.
+
+> **[#50](https://github.com/Jerome-Group/syrax/issues/50) re-weighed this fallback and kept the
+> private chat.** With drafts unreachable, "reproduces everything above except draft streaming"
+> means the supergroup now reproduces *everything*, and the choice rests on the remaining planks:
+> the private chat is already provisioned, needs no group membership secured, and keeps the 1 msg/s
+> limit against the group's 20/min. The one thing the supergroup would still buy is a non-deletable
+> General at `id=1` — where the private chat's root is a *thread factory*, so a message typed
+> without picking a topic creates a new one instead of landing in General. That is closed instead
+> by turning `allows_users_to_create_topics` **off** in @BotFather, which also removes the topic
+> deletion that made #11's startup reconciliation load-bearing. The toggle's effect on the root
+> composer is unmeasured — [#63](https://github.com/Jerome-Group/syrax/issues/63).
