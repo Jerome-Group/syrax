@@ -7,7 +7,9 @@ sets of numbers, because both sit behind an account. This file reaches them.
 **Most of what follows was measured rather than read.** The accounts exist now
 ([#17](https://github.com/Jerome-Group/syrax/issues/17)), so the console pages are legible and the
 APIs answer. Every number below says which it is: read off a page, returned in a header, or
-observed by making the call fail on purpose. Facts checked **2026-08-16**.
+observed by making the call fail on purpose. Facts checked **2026-08-16**, and re-checked against
+the pinned runtime on **2026-08-18** — see [Every rung, put on the spot](#every-rung-put-on-the-spot--2026-08-18),
+and the inline annotations wherever a 2026-08-16 fact did not survive.
 
 ## The short version
 
@@ -118,6 +120,19 @@ seconds. [#13](https://github.com/Jerome-Group/syrax/issues/13)'s *never dark, o
 over a day and not over any given half-hour, which is the interval a person waiting on a reply
 actually experiences. The floor needs a lane beside it, not a longer backoff.
 
+> **[#56](https://github.com/Jerome-Group/syrax/issues/56), 2026-08-18 — it is neither a wall nor a
+> window. It is a rejection rate.** Twenty sequential calls, two seconds apart: `glm-4.7-flash`
+> answered **3 of 20**, the other seventeen 429/`1305`. Within the same minute it refused a
+> 160-token request and served a 6,458-token one. So [#39](https://github.com/Jerome-Group/syrax/issues/39)'s
+> *wall for the whole session* and this section's *recovered after thirty minutes* are both
+> descriptions of an 85% coin-flip sampled at different rates — there is no outage to wait out and
+> no recovery to detect.
+>
+> **And it is per model, not per service.** `glm-4.5-flash` on the same key over the same twenty
+> calls answered **20 of 20**, median 0.68 s. The *service temporarily overloaded* wording names a
+> model's capacity, not Z.AI's, which is why a router reading only the code would stand down a
+> provider that has a working free model on it.
+
 **Two more codes, measured while establishing that, and both are the discriminator #15 wanted:**
 
 | Code | HTTP | Sent when | What it means for the router |
@@ -134,6 +149,13 @@ a paid GLM model returns 1113 rather than a bill.
 (`glm-4.5` … `glm-5.3`) and **no `-flash` variant at all**, yet `glm-4.7-flash` and `glm-4.5-flash`
 both answer. So the catalogue endpoint cannot be used to check whether a free rung still exists —
 only a request can, and a `1214` is the only reliable *gone* signal.
+
+> **[#56](https://github.com/Jerome-Group/syrax/issues/56), 2026-08-18 — and Cerebras' catalogue is
+> unreliable in the other direction.** It listed `zai-glm-4.7`, which served a tool call at 15:2x,
+> and answered `404 model_archived` ninety minutes later; the listing had dropped it by then. So
+> neither provider's catalogue is an authority on what a rung will do: Z.AI omits models that work,
+> Cerebras lists models that stop working. **Only a request answers the question**, and the answer
+> has a shelf life measured in hours.
 
 ## What the other three providers give away for free
 
@@ -153,10 +175,24 @@ The per-hour and per-day **request** rungs — 150/hour and 2,400/day — are no
 table, which lists only 5 RPM and the token ceilings. Quota awareness on Cerebras needs nothing
 built: it is a header read on a call already being made.
 
+> **[#56](https://github.com/Jerome-Group/syrax/issues/56), 2026-08-18 — the rung that binds is
+> `tokens-day`, not `requests-day`.** Every prompt token is charged on every call: two identical
+> 6,377-token requests consumed 6,189 and 6,177 of the daily budget, and `prompt_tokens_details`
+> reported `cached_tokens: 0`. At a measured 6.1K per simple turn and 12.5K per delegating one, the
+> 1,000,000/day ceiling is **~160 or ~80 turns** — where 2,400 requests/day would suggest an order
+> of magnitude more. Reasoning about Cerebras in requests overstates it by 15-30×.
+
 **Groq returns limits plus an explicit reset duration** — `x-ratelimit-reset-requests: 6s`,
 `x-ratelimit-reset-tokens: 370ms`. A duration rather than a timestamp, so no clock-skew handling is
 needed. Measured TPM for `llama-3.1-8b-instant` is **6,000**, which the published table does not
 carry.
+
+> **[#56](https://github.com/Jerome-Group/syrax/issues/56), 2026-08-18.** That model no longer
+> exists ([#39](https://github.com/Jerome-Group/syrax/issues/39)), and neither does the whole llama
+> family. On the models that replaced it the limits are **8,000 TPM and 1,000 requests/day**, and
+> both are **per model**: burning 2,873 tokens on `openai/gpt-oss-20b` left `openai/gpt-oss-120b`
+> reporting a full 8,000 and `qwen/qwen3.6-27b` its own. The reset durations are computed rather
+> than tracked — 1 request of 1,000 reports `1m26.4s`, which is 1/1000 of a day.
 
 **OpenRouter exposes the key itself** at `GET /api/v1/key`, returning usage, the spend cap and
 `is_free_tier`. Nothing about per-model quota, but the daily `:free` allowance is derivable from
@@ -199,6 +235,13 @@ every upstream provider returned a retry hint.
   Groq carries fan-out (14,400 req/day), Z.AI carries anything that tolerates being serialised, and
   **Gemini carries 20 things a day**. A tiering policy that treats Gemini as a general-purpose smart
   tier will exhaust it before lunch.
+
+  > **[#56](https://github.com/Jerome-Group/syrax/issues/56), 2026-08-18 — two of those four are
+  > wrong, and both in the direction of overstating what is there.** Cerebras carries **~80-160
+  > turns/day**, not 2,400, because the daily *token* rung binds first. Groq carries **no fan-out at
+  > all**: 8,000 TPM is a per-request ceiling as well as a per-minute one, and a sub-agent's first
+  > call measured 13,200-13,431 tokens, so the request is refused at full quota at any hour. The
+  > free capacity is not merely uneven — it is smaller than requests-per-day made it look.
 - **[#15](https://github.com/Jerome-Group/syrax/issues/15) (router design)** — the retry signal is
   per-provider and inconsistent: read headers on Cerebras and Groq, read the **error code** on Z.AI,
   and **count locally** on Gemini rather than probing. A uniform "429 means back off" rule is wrong
@@ -208,6 +251,92 @@ every upstream provider returned a retry hint.
   looked: three of five providers report nothing at all until they fail. The two units that actually
   exist are *requests against a daily cap* and *concurrent slots*, and only the first is reportable
   as a number that moves during the day.
+
+## Every rung, put on the spot — 2026-08-18
+
+[#56](https://github.com/Jerome-Group/syrax/issues/56) asked what no earlier ticket had: not what a
+provider publishes, and not whether it returns 200 to a one-token probe, but whether a rung can
+**carry a real turn from the pinned runtime**. Everything below was measured on
+`openclaw@2026.6.34`, against the lean prompt configuration, on 2026-08-18.
+
+### What a turn actually costs
+
+The number every rung is judged against, measured rather than assumed:
+
+| | Prompt tokens | Calls |
+|---|---|---|
+| Simple turn (front lane answers) | **6,115** | 1 |
+| Delegating turn (front spawns a sub-agent) | **12,537** | 3 |
+| A sub-agent's **first** call, on its own | **13,200-13,431** | 1 |
+
+The last row is the one that decides things. A sub-agent's opening call is *larger* than the whole
+front-lane turn that spawned it, because sub-agents receive their own instruction set and tool
+schemas, and the schemas dominate at this size.
+
+### The verdict per rung
+
+| Rung | Id today | Tool calls | Carries a real turn | Verdict |
+|---|---|---|---|---|
+| front 1 — Cerebras | `gpt-oss-120b` ✅ | ✅ | ✅ 8.9 s | **Keep.** Refused twice on `queue_exceeded` capacity, not quota |
+| front 2 — Groq | `openai/gpt-oss-120b` ✅ | ✅ | ⚠️ **40.4 s** | **Demote.** Survives by retrying, at 4.5× the latency |
+| front 3 — Gemini | `gemini-3.5-flash-lite` ✅ | ✅ | ✅ 1.1 s/call | **Promote.** Fastest failover measured |
+| worker 1 — Z.AI | `glm-4.7-flash` ✅ | ✅ | ⚠️ **3 of 20** | **Replace with `glm-4.5-flash`** (20 of 20) |
+| worker 2 — Gemini | `gemini-3.1-flash-lite` ✅ | ✅ | ✅ 3.8-11.4 s | **Keep.** |
+| worker 3 — OpenRouter | slug **gone** | ✅ | ❌ queue timeout | **Re-slug and demote** |
+| worker 4 — Groq | `openai/gpt-oss-20b` ✅ | ✅ | ❌ **413, four times** | **Remove.** Structurally impossible |
+
+**Groq cannot be a worker rung at any hour of any day.** Its 8,000 TPM is a ceiling on the single
+request as well as on the minute: a 13.2K sub-agent call is refused `413 Request too large` with the
+bucket reporting a full 8,000 remaining. This is not a quota that refills — it is a wall. Four
+retries were refused at 13,200, 13,277, 13,354 and 13,431 tokens, each carrying slightly more
+context than the last. And the 49% prompt cut the ticket's own comment found does not rescue it:
+13.2K is still 65% over.
+
+**Groq as front rung 2 survives a delegating turn only by waiting.** The turn's first call
+(6,141 tokens) fits under 8,000; its second does not, and the runtime **retries in place rather than
+advancing the chain** — no fallback decision is logged at all. The turn completes, in **40.4 s
+against Cerebras' 8.9 s**. That is a rung which degrades the one property the front lane exists for,
+so it belongs below Gemini rather than above it.
+
+**The OpenRouter rung named in [ADR-0006](https://github.com/Jerome-Group/syrax/blob/main/docs/adr/0006-the-runtime-routes-and-syrax-owns-the-escape-hatch.md)
+no longer exists.** `z-ai/glm-4.7-flash:free` answers `404 … The paid version is available now`.
+Fifteen `:free` models do advertise tool support, and `openai/gpt-oss-20b:free` tool-calls on a
+small request — but under a real sub-agent turn it failed with *all providers for model are at
+capacity (queue timeout)*, which the runtime classified `timeout` rather than `rate_limit`. It is a
+tail, not a lane.
+
+**The revised composition, run end to end.** Front `Cerebras → Gemini 3.5 Flash Lite → Groq`, worker
+`Z.AI glm-4.5-flash → Gemini 3.1 Flash Lite → Z.AI glm-4.7-flash → OpenRouter`: Cerebras refused on
+its 5 RPM, the front fell to Gemini in 1.1 s, the sub-agent ran on `glm-4.5-flash` in 3.4 s, and the
+whole delegating turn — **including a front-lane failover** — finished in **2.9 s**. Neither #39 nor
+#45 got a chain to do this.
+
+### Model ids rot faster than a decision does
+
+Four rungs named in tickets have disappeared, three of them inside 48 hours:
+
+| Model | Named in | Status |
+|---|---|---|
+| `llama-3.1-8b-instant` (Groq) | [#17](https://github.com/Jerome-Group/syrax/issues/17) | 404, retired 2026-08-17 |
+| `llama-3.3-70b-versatile` (Groq) | [#45](https://github.com/Jerome-Group/syrax/issues/45) | 404, retired 2026-08-17 |
+| `z-ai/glm-4.7-flash:free` (OpenRouter) | [#15](https://github.com/Jerome-Group/syrax/issues/15) | 404, no longer free |
+| `zai-glm-4.7` (Cerebras) | this session | **archived mid-session** |
+
+Groq's entire llama family is gone; what remains is `openai/gpt-oss-120b`, `openai/gpt-oss-20b`,
+`qwen/qwen3.6-27b` and the `groq/compound` pair. The last row is the sharpest: `zai-glm-4.7` was
+listed by the catalogue and served a tool call, and ninety minutes later answered
+`404 model_archived`. **A chain is a list of names that decay**, and the runtime does advance past a
+`model_not_found` — but nothing says the rung has gone, so a chain can rot silently until the lane
+runs out of rungs.
+
+### Two things worth knowing that are not about rungs
+
+- **Cerebras and Groq sit behind Cloudflare**, which answers `403 error code: 1010` to a client
+  whose User-Agent is `Python-urllib/3.x`. Anything Syrax writes that talks to them directly — the
+  escape-hatch counters, the usage report's header reads — needs a normal User-Agent or it will look
+  like an auth failure.
+- **This session spent ~47% of Cerebras' daily token budget measuring.** Which is the finding above,
+  demonstrated: 1,000,000 tokens/day is not a large number when a turn costs six to twelve thousand.
 
 ## Sources
 
