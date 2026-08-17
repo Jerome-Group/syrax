@@ -51,6 +51,41 @@ popularity has made misconfigured public gateways a recurring incident theme —
 pairing defaults, kept, are the mitigation. The skill ecosystem is a supply chain; treat
 third-party skills as untrusted input.
 
+#### Measured against the pinned release, 2026-08-17
+
+Everything above is documentation. [#39](https://github.com/Jerome-Group/syrax/issues/39) installed
+the exact release [ADR-0003](../adr/0003-the-runtime-adapter-wraps-openclaw.md) pins — `2026.6.34`
+from `extended-stable`, still the head of that channel — and put one claim to the API, because
+[ADR-0006](../adr/0006-the-runtime-routes-and-syrax-owns-the-escape-hatch.md) hangs the worker lane
+on it.
+
+**The sub-agent model override binds, with a custom provider on both sides.** Two providers declared
+under `models.providers` with `api: "openai-completions"` — one on Cerebras, one on Z.AI — and the
+child ran on the second while the parent ran on the first. It binds from `agents.list[].subagents.model`
+and from `agents.defaults.subagents.model` alike, so the split is per-agent configuration and does not
+need a global default. Read it back from `sessions_spawn`, which returns `resolvedModel`,
+`resolvedProvider` and an undocumented `modelApplied: true` in its tool result.
+
+That metadata is **not** on its own proof: an upstream report has it reading `true` while the run
+went elsewhere. What settles it is the request — the runtime logs each outbound call as
+`provider=… model=… url=…`, and the child's went to the worker provider's own base URL.
+
+Two further shapes, neither of them obvious from the table above: the per-agent override lives at
+`agents.list[].subagents.model` — an `agents.entries.*` path appears in circulation and does not
+exist — and a model id containing a slash resolves on the **first** separator, so
+`syrax-worker/openai/gpt-oss-120b` is provider `syrax-worker`, model `openai/gpt-oss-120b`. Every
+OpenRouter id is shaped that way.
+
+One thing this could not measure. Under `openclaw agent --local` the child's announce back to its
+parent fails with `GatewayCredentialsRequiredError`, retries three times and gives up: an embedded
+one-shot run has no gateway credentials to open the socket the announce needs. Model routing is
+therefore observable without a gateway and **completion delivery is not**, so anything that rests on
+the parent seeing the child's result has to be verified against a running gateway.
+
+The Node figure in the table above belongs to `latest`, not to the pin: `2026.6.34` declares
+`engines.node: ">=22.19.0"`, where `2026.7.1-2` declares `>=22.22.3 <23 || >=24.15.0 <25 || >=25.9.0`.
+The mini's Node 26.4.0 satisfies both, so nothing downstream moves.
+
 ### 2. Hermes Agent
 
 | Constraint | Finding |

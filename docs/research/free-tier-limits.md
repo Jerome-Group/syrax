@@ -104,6 +104,20 @@ HTTP 429 and a router that reads only the status code cannot tell them apart. Th
 answer to #7's warning that a daily-exhausted provider 429s every probe for hours and eats
 LiteLLM's `allowed_fails` budget — **on Z.AI, the body says which kind of 429 it is.**
 
+### 1305 was observed as a wall, not a blip — 2026-08-17
+
+[#39](https://github.com/Jerome-Group/syrax/issues/39) wanted one small completion out of
+`glm-4.7-flash` and never got one. Every request across a ~12-minute window came back **429 with
+code 1305** — the *service overloaded* row above rather than the 1302 concurrency row, with a single
+request in flight and nothing else of ours running. Retrying with backoff, which is what that row
+prescribes, did not clear it.
+
+So the free Flash lane has a second way to be unavailable, and it is not one Syrax can pace around:
+[#13](https://github.com/Jerome-Group/syrax/issues/13)'s *never dark, only slow* rests on the floor
+answering at all, and here it did not. One window is not a base rate and the code says the condition
+is temporary — what it rules out is the assumption that a 429 from Z.AI is always a stall Syrax
+caused by asking too fast.
+
 ## What the other three providers give away for free
 
 Provisioning probed all five, so the comparison is worth recording even though #24 only asked about
