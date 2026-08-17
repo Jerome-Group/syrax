@@ -86,6 +86,69 @@ The Node figure in the table above belongs to `latest`, not to the pin: `2026.6.
 `engines.node: ">=22.19.0"`, where `2026.7.1-2` declares `>=22.22.3 <23 || >=24.15.0 <25 || >=25.9.0`.
 The mini's Node 26.4.0 satisfies both, so nothing downstream moves.
 
+#### Failover, cooldowns and quota state — measured 2026-08-17
+
+[#45](https://github.com/Jerome-Group/syrax/issues/45) put the four failover facts
+[ADR-0006](../adr/0006-the-runtime-routes-and-syrax-owns-the-escape-hatch.md) inferred from
+documentation to the pinned release. The row above and ADR-0006's own §"What the runtime already
+does" should be read against this section, not on their own.
+
+**A 429 is classified on its HTTP status alone; the provider's error code cannot be reached.** Z.AI's
+`1302`, `1305`, `1308` and `1310` all classify as `rate_limit`, and so does an invented `9999`: the
+classifier consults the status before the error code, and the code table it would otherwise consult
+recognises only symbolic names (`RESOURCE_EXHAUSTED`, `THROTTLED`, …), never a provider's numeric
+code. The only text that escapes `rate_limit` at 429 is billing wording. No configuration changes
+this, and neither does a provider plugin — the hook that lets a plugin reclassify is honoured at
+401/403 and ignored at 429. So ADR-0006's *"the runtime matches the message, not the code"* is wrong
+in its mechanism and right in its conclusion, and the conclusion is the stronger one: the
+distinction #24 measured is not merely unmatched, it is unreachable.
+
+**A cooled-down rung is probed, not skipped — the unmetered floor is not abandoned.** With 6.8 s
+left on a live `rate_limit` cooldown, the next turn logged
+`decision=probe_cooldown_candidate … reason=rate_limit` and *succeeded on the cooled-down provider*.
+So a `1302`/`1305` costs one rejection and a fail-over **for the turn that was refused**, and does
+not take the lane out of service. ADR-0006's *"it will fail over to a finite provider and cool the
+unmetered one down for 30 s, escalating to 5 minutes"* overstates the consequence it accepted.
+
+**The cooldown ladder is 30 s → 1 min → 5 min in code, and 30 s in practice.** Not user-configurable,
+as ADR-0006 has it: `auth.cooldowns.*` reaches only the billing and permanent-auth lane and the 24-hour
+failure window, and nothing feeds the rate-limit ladder (`OPENCLAW_SDK_RETRY_MAX_WAIT_SECONDS` is a
+separate SDK retry-after cap). But the higher rungs were never observed — every cooldown measured
+~30 s at error counts of 4, 6 and 7 — because an already-active window is **kept rather than
+extended**, and any success resets the counter to zero. The runtime's own shipped
+`docs/concepts/model-failover.md` claims 1 min → 5 min → 25 min → 1 hour; the code disagrees with its
+own documentation, and the code is what runs. Cooldowns are also skipped entirely for two
+hard-coded providers, `openrouter` and `kilocode`, so the `:free` tail can never be cooled down.
+
+**A model can be taken out of a chain from outside the runtime, with no restart.**
+`openclaw config set agents.defaults.model.fallbacks '[]'` against a running gateway logged
+`config hot reload applied (agents.defaults.model.fallbacks)` with the process id unchanged, and the
+next turn moved from `next=none` to `next=<the re-added rung>` — the edited chain was live on the
+following turn. `agents` and `models` are hot-applying sections; only `gateway.*`, `discovery` and
+`plugins` require a restart. The CLI prints *"Restart the gateway to apply"* for this field, which is
+wrong, and following it is how a needless restart gets built into a stand-down path. **Stand down is
+therefore a config write, not a restart** — which contradicts ADR-0006's
+*"no API, no file, no command … takes a model out of service from outside the runtime"* and fires
+that record's own *revisit when* trigger. Resetting a **cooldown** is a separate question and closer
+to ADR-0006's claim: `models auth login` clears every lockout for a provider, but it is undocumented
+and refuses to run without an interactive TTY, while the scriptable `models auth paste-api-key` does
+not clear anything.
+
+**Quota state exists only once an auth profile does.** The store is
+`<state>/agents/<agentId>/agent/openclaw-agent.sqlite` — reported by `models auth list --json` as
+`authStatePath`, and created lazily. Two tables carry it, `auth_profile_store(store_key, store_json,
+updated_at)` and `auth_profile_state(state_key, state_json, updated_at)`, with `state_key` = `primary`.
+There are **no cooldown columns**: `usageStats` is JSON inside `state_json`, shaped
+`{version, lastGood: {provider: profileId}, usageStats: {<profileId>: {lastUsed, cooldownUntil,
+cooldownReason, cooldownModel, errorCount, failureCounts: {<reason>: n}, lastFailureAt}}}`. A reader
+therefore parses a blob, and an upstream break shows up as a JSON-shape change rather than a missing
+column. The load-bearing caveat: under #39's config shape — keys inline as
+`models.providers.<id>.apiKey` — **no auth profile is created at all**, failover logs `profile=-`,
+the file is never written, and nothing is recorded to read. A profile has to be added deliberately;
+doing it with `models auth paste-api-key` also rewrites `openclaw.json` (adding `auth.profiles` and a
+`meta` block, leaving a `.bak`) and stores the key in `store_json` **in plaintext** — a third copy of
+the secret after `providers.env` and the `models.json` copy #39 found.
+
 ### 2. Hermes Agent
 
 | Constraint | Finding |
