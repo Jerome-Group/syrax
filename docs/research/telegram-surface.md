@@ -139,6 +139,11 @@ react ... even if no notification to the user is needed"
 message to reflect the choice and drop the keyboard. `answerCallbackQuery` can show a passive
 toast (0-200 chars) or an alert (`show_alert`).
 
+This paragraph says nothing about topics, because the documentation it is drawn from says nothing
+about the combination. All of it is now measured on the surface actually chosen — including two
+things the documentation does not state: the callback carries the thread id, and the query id
+expires. See **Verified in practice**.
+
 **ForceReply** exists for free-text follow-ups — it opens the reply interface so the next
 message threads back to the bot's question, designed so a privacy-mode group bot still sees the
 answer ([ForceReply](https://core.telegram.org/bots/api#forcereply)). In a single-user private
@@ -244,6 +249,29 @@ API server with a live bot in Threaded mode, the last in the Telegram client its
   the four results above said: a forum supergroup's topic UI has been mature since 2022, so a
   private chat that routed perfectly and *drew* as a single stream would have been the weaker
   option despite winning every API measure. It does not, so it is not.
+
+Observed on 2026-08-17 for [#53](https://github.com/Jerome-Group/syrax/issues/53), against the same
+live bot. The **Confirmation flows** section above was read from documentation that describes
+inline keyboards without saying anything about topics either way, and #28 did not measure them.
+
+- **Inline keyboards render inside a topic, and the callback identifies which one.** A three-button
+  keyboard sent with `message_thread_id` set to a created topic was accepted, drew in the client,
+  and the tap returned a `callback_query` whose `message` carries **`message_thread_id`** and
+  **`is_topic_message: true`** alongside the usual `chat.id`. That thread id is what makes a tap
+  attributable to a chat, and a chat is a capability boundary — a callback that could not be
+  attributed would have made the button useless whatever else it did. `chat.type` remains `private`,
+  so the topic is the only thing distinguishing one boundary from another on the way in.
+- **An edit drops the keyboard unless the edit re-sends it.** `editMessageText` without
+  `reply_markup` returns a message with no `reply_markup` at all; passing it again restores it.
+  This is the documented semantic, measured here because [#13](https://github.com/Jerome-Group/syrax/issues/13)'s
+  progress message is edited in place — so a keyboard on an edited message must be re-passed on
+  **every** edit or it silently disappears mid-turn.
+- **`answerCallbackQuery` expires, and it is not a long window.** An answer sent roughly two minutes
+  after the tap was rejected with `Bad Request: query is too old and response timeout expired or
+  query ID is invalid`. The documentation quoted above says a client shows a progress bar until the
+  query is answered; it does not say the id stops being answerable. So the acknowledgement has to be
+  the **first** thing a handler does, before any work the tap triggers — which matters here because
+  the work behind a capture tap is a database write, and behind a candidate tap is a file read.
 
 ## Recommendation
 
