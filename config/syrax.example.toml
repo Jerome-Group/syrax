@@ -24,6 +24,20 @@ logs = "/absolute/path/outside/this/repository/logs"
 # checkout can read it. It holds provider telemetry, which is private runtime state.
 usage_report = "/absolute/path/outside/this/repository/usage-report"
 
+[search]
+# Pinned by measurement in ADR-0004, not by preference. The quantisation is part of the pin:
+# the int8 export of the same model holds twice the memory at two thirds of the speed.
+embedder = "onnx-community/embeddinggemma-300m-ONNX"
+embedder_variant = "model_q4"
+# `confident` sends a file without asking, so this is set for precision and not for coverage.
+# Provisional: fitted to a fifteen-query benchmark, and revisited as that benchmark grows.
+confident_floor = 0.12
+# Below this, the answer is "nothing here" rather than a shortlist of the least-bad matches.
+empty_floor = -0.23
+# The model is held while search is in use and dropped after this long idle, rather than
+# sitting in memory around the clock. The first search after a gap pays the model load.
+idle_evict_after = "30m"
+
 [security]
 secrets_from = "environment-or-private-secret-store"
 tool_policy = "explicit-allowlist"
