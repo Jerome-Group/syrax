@@ -196,6 +196,18 @@ said it.
 _Avoid_: quota — that is the provider's allowance, where this is what is left of it; budget — a
 self-imposed allowance, which this system deliberately does not have
 
+**Wall**:
+A limit a request fails on for its **size alone** — a model's per-request token ceiling, which
+refuses the call whether or not any allowance remains, and which no amount of waiting changes. It is
+the counterpart of *headroom*: headroom is what is left of an allowance and empties and refills,
+where a wall is a fixed property of the model, and a request either clears it or never will. The two
+earn separate names because a provider need not distinguish them — one answers both with the same
+error code and a `retry-after` on each, so a caller that reads the header alone will keep retrying a
+call that cannot succeed. Whether a lane's rungs clear that lane's largest call is therefore settled
+in configuration, before anything is sent.
+_Avoid_: rate limit — it names the allowance, which is the thing this is not; context window — a
+different ceiling, belonging to what the model can read rather than to what the plan will accept
+
 **Stand down**:
 Removing a provider from a lane until a stated reset, as against retrying it in a moment. The
 distinction is the whole of quota awareness and the transport hides it: a per-minute limit and an
@@ -206,13 +218,17 @@ like a setting a human changed
 
 **Pre-emptive switch**:
 Leaving a provider *before* it refuses, on what its telemetry already says rather than on a failure
-that has happened. It is reserved for where being refused is expensive — a rationed lane, where a
-single probe spends a measurable share of the day's allowance. Where the allowance is large enough
-that a refusal costs one call, the system waits to be refused instead, and that is a choice rather
-than an omission.
+that has happened. It is reserved for where being refused is expensive, and expense is measured
+against a **daily** allowance — the rationed lane, where a single probe spends a measurable share of
+the day, and any rung whose binding limit is tokens-per-day rather than requests. It is always a
+*stand down* written into configuration, off the request path, and **never a filter that weighs a
+request on its way out**: a request no rung can accept has met a *wall*, and a wall is settled by
+which rungs are in the lane rather than by anything decided per call. Where the allowance is large
+enough that a refusal costs one call, the system waits to be refused instead, and that is a choice
+rather than an omission.
 _Avoid_: fallback, failover — both name the move made *after* something failed, which is a
 different move and the more common one here; using them interchangeably hides which of the two a
-lane actually does
+lane actually does; throttling, which slows a caller down where this moves it
 
 **Usage report**:
 What the System chat says about how much of each lane is left. It is posted **only when something
