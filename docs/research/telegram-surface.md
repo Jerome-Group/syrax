@@ -26,8 +26,11 @@ also behave like forums if **Threaded mode** is enabled via @BotFather"
   `message_thread_id` accepted by `sendMessage` and every other send/copy/forward method, and by
   `sendChatAction`; plus `sendMessageDraft` (see Streaming below).
 - **9.4** (2026-02-09) — bots can create private-chat topics via `createForumTopic`; a
-  @BotFather setting controls whether the *user* may create/delete topics
+  @BotFather setting controls whether the *user* may ~~create/delete~~ **create** topics
   (`allows_users_to_create_topics` on `getMe`); `has_topics_enabled` on `getMe` reports the mode.
+  *(The "/delete" half is this document's paraphrase and it is wrong:
+  [#63](https://github.com/Jerome-Group/syrax/issues/63) measured the Owner deleting a topic with
+  the flag `false`. It gates creation only.)*
 
 `createForumTopic`, `editForumTopic`, `deleteForumTopic` and `unpinAllForumTopicMessages` all
 operate on "a forum supergroup chat **or a private chat with a user**"; the admin-rights clauses
@@ -77,9 +80,13 @@ Incoming: a message in a topic carries `message_thread_id` ("unique identifier o
 thread or forum topic to which the message belongs; for supergroups and private chats with forum
 topics only") and `is_topic_message`
 ([Message](https://core.telegram.org/bots/api#message)). Messages in the General topic of a
-forum supergroup carry no thread id — treat "absent" as General. *(Supergroups only: a private
-threaded chat has no General topic, and its thread-less root creates a new topic on the user's
-next message. See [Verified in practice](#verified-in-practice).)*
+forum supergroup carry no thread id — treat "absent" as General. *(A private threaded chat has no
+General topic, and with `allows_users_to_create_topics` **on** its thread-less root creates a new
+topic on the user's next message. With it **off**, "absent" is a real destination again —
+[#63](https://github.com/Jerome-Group/syrax/issues/63) measured a root message arriving with no
+`message_thread_id` and no topic created, so the "treat absent as General" rule holds on this
+surface too, by configuration rather than by platform. See
+[Verified in practice](#verified-in-practice).)*
 
 Outgoing: pass `message_thread_id` on `sendMessage` (and every other send method, plus
 `sendChatAction`) to land the reply in the right topic. Topic ids are stable: the id is the
@@ -193,6 +200,17 @@ and works behind NAT/CGNAT. It "will not work if an outgoing webhook is set up" 
 mutually exclusive, and only one poller may run at a time. `drop_pending_updates` (via
 `deleteWebhook`) discards a backlog after downtime if staleness matters more than completeness.
 
+**`allowed_updates` is persistent state on the bot, not a per-call argument.** The Bot API
+documents it as "a JSON-serialized list of the update types you want your bot to receive… Please
+note that this parameter doesn't affect updates created before the call to `getUpdates`, so unwanted
+updates may be received for a short period of time" — which reads as a per-call filter with a lag.
+It is not: whatever the last caller passed keeps filtering every subsequent poll until another call
+changes it, and filtered updates are **dropped rather than buffered**, so they cannot be recovered
+by re-polling with a wider list. [#63](https://github.com/Jerome-Group/syrax/issues/63) found this
+bot still narrowed to `["callback_query"]` by [#53](https://github.com/Jerome-Group/syrax/issues/53)'s
+harness — silently deaf to every message for two days. Nothing in @BotFather shows it; the only
+read path is `getWebhookInfo.allowed_updates`, on a bot with no webhook.
+
 A [webhook](https://core.telegram.org/bots/webhooks) requires a public HTTPS endpoint on port
 "443, 80, 88, or 8443" with a verifiable certificate (self-signed possible by uploading the PEM)
 — i.e. an inbound port or a tunnel (Cloudflare Tunnel, Tailscale Funnel), which adds a
@@ -248,11 +266,13 @@ API server with a live bot in Threaded mode, the last in the Telegram client its
   [#11](https://github.com/Jerome-Group/syrax/issues/11), which adopted General as `id=1` and
   concluded its icon was not ours to set.
 - **`allows_users_to_create_topics` defaults to _on_.** A fresh bot with Threaded mode enabled
-  reports `true` from `getMe`, so the user may create and delete topics until it is turned off in
-  @BotFather. This corrects the premise [#11](https://github.com/Jerome-Group/syrax/issues/11)
+  reports `true` from `getMe`, so the user may create ~~and delete~~ topics until it is turned off
+  in @BotFather. This corrects the premise [#11](https://github.com/Jerome-Group/syrax/issues/11)
   reasoned from when it judged a deleted topic unrealistic: its startup reconciliation rule —
   verify each stored id, recreate only what is gone, never match by name — is load-bearing rather
-  than belt-and-braces.
+  than belt-and-braces. *(The deletion half is struck by
+  [#63](https://github.com/Jerome-Group/syrax/issues/63): turning the flag off does not take
+  deletion away, so the rule is load-bearing for a reason that outlives the toggle.)*
 - **The client draws the topic list.** Four threads were posted to and the Owner confirmed they
   appear as a topic list rather than as one flat conversation. This is a different question from
   whether the API routes correctly, and it is the one that would have flipped the surface whatever
@@ -303,6 +323,55 @@ its own `dist/` and `docs/`, not the published documentation site.
   direct chats, refreshing on `typingIntervalSeconds` (default 6), so the gap a draft would have
   filled is already covered without a message being sent or a rate limit being spent.
 
+Observed on 2026-08-18 for [#63](https://github.com/Jerome-Group/syrax/issues/63), both sides of
+`allows_users_to_create_topics` — the flag flipped in @BotFather between two runs of the same
+probes, so each result below is a before/after pair rather than a single reading.
+
+- **With the flag off, the root stops being a thread factory.** The client's composer placeholder
+  changes from *"type any message to create a new thread"* to **"Off-topic message"**, and a
+  message sent there arrives with **no `message_thread_id`, no `is_topic_message`, and no
+  `forum_topic_created` service message** — nothing is created. With the flag on, the same gesture
+  produced two updates on a fresh thread: `forum_topic_created` carrying
+  `{"name": "before-toggle", "is_name_implicit": true}` — the topic is named after whatever was
+  typed — followed by the message itself. So the flag decides whether the most natural gesture on
+  this surface lands somewhere addressable or invents a capability boundary per message. The root
+  is a full two-way channel with the flag off: the bot can `sendMessage` there, reply by
+  `reply_to_message_id`, and raise a typing indicator, all with no thread id.
+- **The bot is unaffected by the flag.** `createForumTopic` and `deleteForumTopic` both succeed
+  with it `false`; it governs the *user*, which is what makes startup reconciliation still possible
+  after it is turned off.
+- **The Owner can still delete topics with the flag off.** Measured directly on a bot-created
+  throwaway. This is the one result that contradicts what the ticket set out to confirm, and it
+  keeps #11's startup reconciliation rule at full strength rather than downgrading it.
+- **A user's deletion of a bot-created topic is not durable — the next bot write resurrects it,
+  same id.** Three deletions were measured and only two stuck:
+
+  | created by | deleted by | writes afterwards |
+  | --- | --- | --- |
+  | user, at the root | user, in the client | `400 message thread not found` — gone |
+  | bot, `createForumTopic` | bot, `deleteForumTopic` | `400 message thread not found` — gone |
+  | bot, `createForumTopic` | user, in the client | **`ok: true`, repeatedly** — the topic reappears in the client holding the messages |
+
+  Every topic Syrax owns is bot-created and the Owner is the only human, so the third row is the
+  only one that describes this system. Two variables differ across the rows and this was not
+  controlled further; what is recorded is the observation, not the mechanism. The consequence for
+  reconciliation is concrete either way: **verifying a stored id by sending to it is not a
+  read-only check** — it is the very act that brings a deleted topic back, so "verify each stored
+  id, recreate only what is gone" can never observe the gone case for a topic the Owner deleted.
+- **Topic deletion emits no update at all.** Neither the Owner's deletion nor the bot's produced
+  anything on `getUpdates` — there is no `forum_topic_deleted` counterpart to `forum_topic_created`.
+  A deleted topic is discoverable only by writing to it, which per the row above may recreate it.
+- **`sendChatAction` does not validate `message_thread_id`.** It returns `ok: true` for thread
+  `99999`, which has never existed, and for a thread confirmed dead by `sendMessage`. It is
+  therefore useless as a liveness probe, and worth knowing because
+  [#50](https://github.com/Jerome-Group/syrax/issues/50) found the runtime's `typingMode: "instant"`
+  raises a typing indicator before the reply: the indicator will succeed against a deleted topic and
+  the reply behind it will not.
+- **A topic created while the update filter was narrowed is invisible forever.** One of the two
+  before-toggle topics was created while `allowed_updates` was still `["callback_query"]`; it exists
+  in the client and Syrax received nothing, and no re-poll replays it. Reconciliation verifies
+  stored ids — it does not discover unknown ones.
+
 ## Recommendation
 
 > **Amended by [#50](https://github.com/Jerome-Group/syrax/issues/50)**: point 3 below is
@@ -349,6 +418,14 @@ the switch cheap in both directions.
 > limit against the group's 20/min. The one thing the supergroup would still buy is a non-deletable
 > General at `id=1` — where the private chat's root is a *thread factory*, so a message typed
 > without picking a topic creates a new one instead of landing in General. That is closed instead
-> by turning `allows_users_to_create_topics` **off** in @BotFather, which also removes the topic
-> deletion that made #11's startup reconciliation load-bearing. The toggle's effect on the root
+> by turning `allows_users_to_create_topics` **off** in @BotFather, ~~which also removes the topic
+> deletion that made #11's startup reconciliation load-bearing~~. The toggle's effect on the root
 > composer is unmeasured — [#63](https://github.com/Jerome-Group/syrax/issues/63).
+>
+> **[#63](https://github.com/Jerome-Group/syrax/issues/63) measured it, and the judgement holds on
+> a better result than it assumed.** The root does not merely stop creating topics: a message typed
+> there arrives with **no thread id**, which is the same "absent means General" rule this document's
+> routing section already describes for supergroups. So the private chat now reproduces the one
+> thing the supergroup was still buying, in the form the adapter was already written for. The
+> struck clause is the half that did not survive — deletion is untouched by the flag, so #11's
+> startup reconciliation stays load-bearing.
