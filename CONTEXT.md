@@ -27,6 +27,20 @@ of the runtime rather than a boundary Syrax owns.
 _Avoid_: provider, model — and *platform adapter*, which sounds like a sibling of this term but
 names a component this system does not build
 
+**Skill**:
+An instruction sheet the agent runtime can read: a name, a description, and a body telling the
+agent how to go about something. It is **not a capability** — a skill grants no reach of its own,
+and everything it describes doing is done through the tool layer, which is where the boundary
+actually sits. What it costs in context is its index card rather than its body: name and
+description are injected on every turn, and the body is read only where the skill is used. Which
+skills an agent carries is configuration and is resolved per agent, so a skill can be paid for in
+one chat alone. Syrax carries none at v1 — the runtime's own bundled catalogue is switched off
+alongside the third-party one, because a description of a capability the tool layer does not grant
+is a cost with nothing on the other side of it.
+_Avoid_: tool — the thing a skill tells the agent how to use, and the thing that actually grants
+the reach, so folding the two together hides where the capability boundary is; plugin, extension —
+both name something that adds a capability, which is what this is defined not to do
+
 **Gateway**:
 The agent runtime's own long-lived process: the one that holds the sessions and carries every chat.
 The word is upstream's and is reserved for it, because the provider side of this system is *the
