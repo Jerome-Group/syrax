@@ -66,6 +66,27 @@ Credentials, sessions, chats, memory, provider responses, caches, logs, and mach
 paths produced or consumed while Syrax runs. It stays outside the repository.
 _Avoid_: source, fixture
 
+**Secrets store**:
+The single file every Syrax credential lives in, and the only place any of them is ever written.
+The runtime reads it directly rather than being handed its contents through the environment, so a
+credential is never a variable a child process could inherit and never a second copy left to go
+stale where nothing thinks to look for it. Its protection is the file's own mode, and a store the
+machine has left readable is **refused rather than used** — which is the property that makes one
+file safer than one file plus whatever the runtime decided to persist beside it.
+_Avoid_: env file — the shape this had while a wrapper was passing credentials through the
+environment, and a name that suggests the process is handed them; vault, secret manager — both name
+a service standing somewhere else, where this is a file on the same disk as the things it protects
+
+**Credential marker**:
+The non-secret placeholder written where a resolved credential would otherwise have been persisted.
+It exists to make an absence *legible*: a generated file that simply omitted the field would read
+the same as one nobody had configured. Whether a marker can be recognised as one is a property of
+the marker and not of the reader — a marker that names an environment variable is only understood
+where that name is already known, so the form worth using is the one that names nothing.
+_Avoid_: placeholder — this repository already uses that word for the public-configuration sense,
+where a human is expected to substitute a real value; redaction, which names something done to a
+secret that was there, where this stands in a place one never was
+
 **Scoped search**:
 Retrieval bounded to one capability's corpus, such as the academic chat reaching only what sits
 under the modules root. It is not a second search: it is the *same* retrieval with a restriction,
