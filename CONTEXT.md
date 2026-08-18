@@ -73,6 +73,18 @@ _Avoid_: topic, thread — both name the Telegram mechanism that currently carri
 than the boundary it draws, and that mechanism has a documented fallback that would strand the
 word
 
+**Carrier**:
+The Telegram mechanism a chat is currently delivered through. Three chats are carried by a
+**topic**, addressed by its `message_thread_id`; **General is carried by the chat root**, the
+thread-less area whose composer reads *"Off-topic message"*. The root is not a topic and has no
+id — a message arriving there carries no `message_thread_id` at all, and the runtime binds it to
+General by making General the **default agent** rather than by mapping anything. A carrier can be
+cleared, recreated and re-addressed without the chat changing; the root cannot be cleared, which
+is why the chat that cannot be wrong is the one carried by it.
+_Avoid_: topic as a synonym — a topic is one kind of carrier and General does not have one;
+"General topic" — naming a carrier that must not exist, because a second one would split General
+across two sessions
+
 **Public configuration**:
 A tracked example or interface contract containing placeholders and no live secrets or private
 state.
