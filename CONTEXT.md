@@ -65,7 +65,10 @@ which chat a message arrives in determines the tool layer that is reachable, the
 and the session state. A question a chat does not own is redirected to the chat that does, never
 answered by reaching across — so the boundary is what keeps each turn's context small. The
 boundary is drawn around the **tool layer**, not around the documents: two chats may reach the
-same file while only one of them may call the capability that owns it.
+same file while only one of them may call the capability that owns it. **A chat's existence is
+Syrax's, not the Owner's furniture**: the set of chats is the system's shape, so clearing away the
+Telegram topic that carries one is a view operation rather than a decommission. A chat ends when
+Syrax stops being configured for it, and never because its carrier was cleared.
 _Avoid_: topic, thread — both name the Telegram mechanism that currently carries a chat rather
 than the boundary it draws, and that mechanism has a documented fallback that would strand the
 word

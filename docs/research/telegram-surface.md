@@ -358,6 +358,10 @@ probes, so each result below is a before/after pair rather than a single reading
   reconciliation is concrete either way: **verifying a stored id by sending to it is not a
   read-only check** — it is the very act that brings a deleted topic back, so "verify each stored
   id, recreate only what is gone" can never observe the gone case for a topic the Owner deleted.
+  *(Decided on [#79](https://github.com/Jerome-Group/syrax/issues/79): the gesture is not an
+  instruction, because it is not addressed to Syrax — a chat's existence is Syrax's, and the
+  resurrection is Telegram restoring the Owner's view. #11's startup pass is struck and verification
+  moves onto the write path, so there is nothing here Syrax wants to detect.)*
 - **Topic deletion emits no update at all.** Neither the Owner's deletion nor the bot's produced
   anything on `getUpdates` — there is no `forum_topic_deleted` counterpart to `forum_topic_created`.
   A deleted topic is discoverable only by writing to it, which per the row above may recreate it.
@@ -366,7 +370,10 @@ probes, so each result below is a before/after pair rather than a single reading
   therefore useless as a liveness probe, and worth knowing because
   [#50](https://github.com/Jerome-Group/syrax/issues/50) found the runtime's `typingMode: "instant"`
   raises a typing indicator before the reply: the indicator will succeed against a deleted topic and
-  the reply behind it will not.
+  the reply behind it will not. *(One candidate probe is left untested — `editForumTopic` with no
+  fields changed, which does validate the thread id per the `TOPIC_ID_INVALID` result above.
+  [#95](https://github.com/Jerome-Group/syrax/issues/95) measures it, so that "no read-only probe
+  exists" becomes a fact about the platform rather than about how far this ticket looked.)*
 - **A topic created while the update filter was narrowed is invisible forever.** One of the two
   before-toggle topics was created while `allowed_updates` was still `["callback_query"]`; it exists
   in the client and Syrax received nothing, and no re-poll replays it. Reconciliation verifies
