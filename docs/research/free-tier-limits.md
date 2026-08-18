@@ -509,15 +509,35 @@ because generation duration is 20-50 ms terse and ~270 ms expanded — arithmeti
 speed. The same expanded reply from Mistral takes **~3 seconds**, so that ruling is safe only while
 the front lane stays fast. Which rung Mistral earns is #56's to decide with these numbers.
 
+### There is no monthly ceiling anywhere Mistral shows one
+
+The reported figure is 1,000,000,000 tokens/month, and it is the last of the three numbers this
+ticket started from. Every surface an account holder can reach was checked on **2026-08-18**:
+
+| Surface | Says |
+|---|---|
+| Limits page (`admin.mistral.ai/plateforme/limits`) | per-model TPM and RPS columns, no monthly column |
+| Admin → Billing | nothing stating an included monthly usage |
+| Response headers | per-minute rungs only — no month, no day, no hour |
+| `/v1/organization`, `/limits`, `/usage`, `/billing`, `/me` | all `404 no Route matched` |
+
+The docs' phrase is "included monthly usage within the limits shown on the Limits page", which points
+back at a page showing only per-minute rungs. **So the 1B figure is unsupported by anything Mistral
+exposes** — it is neither confirmed nor contradicted, which is a different and worse position than
+being wrong.
+
+**The operational consequence is the point, not the number.** Where Cerebras publishes a day rung and
+counts down against it in a header, Mistral offers nothing to design a reserve against above the
+minute. If a monthly ceiling does exist, nothing warns before it bites and the only signal is a
+refusal that arrives with no rung to explain it — which is the one case
+[#25](https://github.com/Jerome-Group/syrax/issues/25)'s *pre-emptive switching* cannot be built for
+on this provider. Per-lane headroom for Mistral is a per-minute statement or it is nothing.
+
 ### What is not established here
 
-- **Whether a monthly ceiling exists.** The community figure is 1B tokens/month. The console's Limits
-  page carries no monthly column, no response header mentions one, and `/v1/organization`, `/limits`,
-  `/usage`, `/billing` and `/me` are all `404 no Route matched` — there is no public endpoint to ask.
-  The docs' phrase is "included monthly usage within the limits shown on the Limits page", which
-  points back at a page that shows only per-minute rungs.
-- **Whether a monthly exhaustion looks different from a per-minute one.** Unforced, for the obvious
-  reason.
+- **Whether a monthly ceiling exists silently**, and what its refusal would carry. `1300` is already
+  overloaded across two unrelated conditions (above), so it is a poor bet that a third would be
+  distinguishable. Unforced, for the obvious reason.
 
 ### Two corrections to this repository's own record
 
