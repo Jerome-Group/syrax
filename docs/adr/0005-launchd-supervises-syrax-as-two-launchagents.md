@@ -1,5 +1,10 @@
 # launchd supervises Syrax as two LaunchAgents
 
+> **Amended by [ADR-0010](0010-one-secrets-store-reached-by-file-backed-refs.md)** — the wrapper no
+> longer carries credentials — and by
+> [ADR-0011](0011-the-front-lane-carries-no-skills-and-a-pinned-workspace.md), which pins the
+> workspace path.
+
 Syrax runs on the mini under **launchd**, as **two LaunchAgents** — not containerised, and not one
 process. `com.jerome-group.syrax.gateway` runs OpenClaw; `com.jerome-group.syrax.search` runs the
 resident MCP search service [ADR-0004](0004-syrax-owns-the-file-search-index.md) built. Both take

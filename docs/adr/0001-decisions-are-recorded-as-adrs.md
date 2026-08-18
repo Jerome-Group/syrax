@@ -18,9 +18,16 @@ The shape is the one used across the Organisation, and it is deliberately not a 
 - **`## Revisit when`** — the condition that would make this the wrong answer. This is what
   stops a record from quietly becoming a rule.
 
-A record is **immutable**. A decision that no longer holds is superseded by a new record that
-links back to it; the old one stays, because the reasoning that was true at the time is what
-makes the reversal legible.
+A record's **reasoning is immutable**. A decision that no longer holds is superseded — or amended
+in part — by a new record that links back to it; the old one stays, because the reasoning that
+was true at the time is what makes the reversal legible.
+
+The one edit an existing record takes is the **pointer forward** to whatever superseded or amended
+it, as a line under the title. It adds no reasoning and removes none, which is why it is not the
+thing the paragraph above forbids — and the Organisation's conformance check already requires it
+of a superseded record, so the practice is the Baseline's rather than this repository's invention.
+It is written here because the alternative is worse than untidy: a record found on its own, from a
+link in an issue, otherwise reads as current when it is not.
 
 ## Consequences
 

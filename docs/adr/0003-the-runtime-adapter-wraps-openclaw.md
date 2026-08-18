@@ -1,5 +1,9 @@
 # The runtime adapter wraps OpenClaw
 
+> **Amended by [ADR-0005](0005-launchd-supervises-syrax-as-two-launchagents.md)** on the footprint
+> budget, and by [ADR-0011](0011-the-front-lane-carries-no-skills-and-a-pinned-workspace.md) on the
+> skill posture, which widens the empty allowlist to cover the runtime's own bundled catalogue.
+
 Syrax's **runtime adapter** wraps [OpenClaw](https://github.com/openclaw/openclaw), pinned to its
 `extended-stable` release channel. Hermes Agent and ZeroClaw were the other two candidates on the
 research shortlist ([`docs/research/runtime-candidates.md`](../research/runtime-candidates.md));
