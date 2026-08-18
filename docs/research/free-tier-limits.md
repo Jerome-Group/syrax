@@ -300,6 +300,30 @@ advancing the chain** — no fallback decision is logged at all. The turn comple
 against Cerebras' 8.9 s**. That is a rung which degrades the one property the front lane exists for,
 so it belongs below Gemini rather than above it.
 
+> **[#60](https://github.com/Jerome-Group/syrax/issues/60), 2026-08-18 — these last two paragraphs
+> are not the same failure, and reading them as one is what kept the pre-emption question alive.**
+> Groq refuses on two distinct conditions that share a `code` and a `type` and differ in status,
+> message and remedy. Measured on `openai/gpt-oss-120b`:
+>
+> | | Status | Body | `retry-after` | Waiting helps? |
+> |---|---|---|---|---|
+> | **Wall** — requested > limit | **413** | `Request too large … Limit 8000, Requested 11088, please reduce your message size` | `65` | **Never** |
+> | **Bucket** — requested > remaining | **429** | `Rate limit reached … Limit 8000, Used 2591, Requested 5863. Please try again in 3.405s` | `4` | Yes |
+>
+> Both carry `"type": "tokens"` and `"code": "rate_limit_exceeded"`, so the code separates nothing —
+> the **status** and the wording do. The worker-lane result above is the wall; this front-lane one is
+> the bucket, and its 40.4 s is the measured `x-ratelimit-reset-tokens` of ~41 s, not a Groq quirk.
+> The retry that rescued the front turn could never have rescued the worker one.
+>
+> **The wall sends a `retry-after` it cannot honour.** 65 seconds of waiting does not make an 11,088-token
+> request fit an 8,000-token ceiling, which is why the worker lane retried four times against a
+> condition no retry could satisfy. A client that reads `retry-after` and nothing else will always
+> take the wall for a bucket.
+>
+> The distinction is the one that decides
+> [#60](https://github.com/Jerome-Group/syrax/issues/60): the wall is **arithmetic**, knowable before
+> the call with no network at all, and the bucket is **quota state**, knowable only by asking.
+
 **The OpenRouter rung named in [ADR-0006](https://github.com/Jerome-Group/syrax/blob/main/docs/adr/0006-the-runtime-routes-and-syrax-owns-the-escape-hatch.md)
 no longer exists.** `z-ai/glm-4.7-flash:free` answers `404 … The paid version is available now`.
 Fifteen `:free` models do advertise tool support, and `openai/gpt-oss-20b:free` tool-calls on a
