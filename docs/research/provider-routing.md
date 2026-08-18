@@ -56,8 +56,9 @@ Free tiers break that assumption in specific, structural ways:
   > **[#59](https://github.com/Jerome-Group/syrax/issues/59), 2026-08-18 — measured, and all three
   > numbers are wrong as stated.** Limits are per **model**, not per plan: 25,000 TPM on the newest
   > medium, 1,300,000 on `ministral-3b`. The "1 request/second" is the console's per-minute rung
-  > divided by 60 and bursts fine. No monthly ceiling is visible anywhere — not on the Limits page,
-  > not in a header, and there is no usage endpoint to ask. Mistral does, however, return
+  > divided by 60 and bursts fine. And no monthly ceiling is visible **anywhere** — not on the Limits
+  > page, not on Billing, not in a header, and there is no usage endpoint to ask — so above the
+  > minute there is nothing to hold a reserve against. Mistral does, however, return
   > `x-ratelimit-remaining-tokens-minute` on every response **including its refusals**, which is
   > more than any other provider surveyed here manages. Details in
   > [`free-tier-limits.md`](free-tier-limits.md#mistral--the-sixth-provider-added-2026-08-18).
