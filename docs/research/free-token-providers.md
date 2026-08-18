@@ -96,6 +96,15 @@ changed or withdrawn at any time, and upstream data policies vary per endpoint.
 
 ### Mistral — fine as a tertiary
 
+> **[#59](https://github.com/Jerome-Group/syrax/issues/59), 2026-08-18 — provisioned and measured;
+> see [`free-tier-limits.md`](free-tier-limits.md#mistral--the-sixth-provider-added-2026-08-18).**
+> The plan is called **Free mode** now, not Experiment. There is no per-plan number: limits are
+> **per model**, from 25,000 to 1,300,000 tokens/minute, and every model reports its own in its
+> response headers. "~1 req/s" is the console's own per-minute rung divided by 60 — the enforced
+> bucket is per minute and permits bursts. Phone verification was not required; training consent is
+> on by default and opted out of in the console. Nothing here is *tertiary*: on tokens per minute
+> Mistral is the widest free lane on the board, and on generation speed (48-109 tok/s) the slowest.
+
 The free Experiment plan still exists but its numbers are no longer published — the
 [docs](https://docs.mistral.ai/admin/user-management-finops/tier) point at the admin console;
 reporting suggests ~1 req/s and ~1B tokens/month

@@ -102,7 +102,7 @@ every later query costs a few hundred. Against current free tiers:
 | Voyage AI | First 200 M tokens free per model for the voyage-4 family ([pricing](https://docs.voyageai.com/docs/pricing), [models](https://www.mongodb.com/docs/voyageai/models/)) | Covers this corpus ~20× over; still a cloud dependency per query |
 | Jina | 10 M free tokens per new key; free keys 100 RPM / 100 K TPM ([embeddings](https://jina.ai/embeddings/)) | One-shot: the corpus alone roughly exhausts it |
 | Cohere | Trial keys: 1 000 calls/month total, Embed capped at 5 calls/min ([rate limits](https://docs.cohere.com/docs/rate-limits)) | Too tight for indexing plus queries |
-| Mistral | Free "Experiment" tier includes embeddings; exact limits per-account in the console ([tiers](https://docs.mistral.ai/deployment/laplateforme/tier)) | Evaluation-only positioning |
+| Mistral | Free "Free mode" tier includes embeddings — `mistral-embed` measured at **60 requests/minute**, with the console additionally showing 20,000,000 tokens/minute that the embeddings endpoint's headers do not report ([limits](free-tier-limits.md#mistral--the-sixth-provider-added-2026-08-18)) | Evaluation-only positioning, which [#59](https://github.com/Jerome-Group/syrax/issues/59) found is not in the terms — though [ADR-0004](../adr/0004-syrax-owns-the-file-search-index.md) rejects remote embeddings on other grounds |
 
 Beyond quotas: every search needs the network, re-indexing spends tokens forever, and the
 file contents themselves become private runtime state held by a third party — on the free

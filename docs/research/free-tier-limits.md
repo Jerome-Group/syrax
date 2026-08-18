@@ -9,7 +9,9 @@ sets of numbers, because both sit behind an account. This file reaches them.
 APIs answer. Every number below says which it is: read off a page, returned in a header, or
 observed by making the call fail on purpose. Facts checked **2026-08-16**, and re-checked against
 the pinned runtime on **2026-08-18** — see [Every rung, put on the spot](#every-rung-put-on-the-spot--2026-08-18),
-and the inline annotations wherever a 2026-08-16 fact did not survive.
+and the inline annotations wherever a 2026-08-16 fact did not survive. A sixth provider joined the
+same day: [Mistral](#mistral--the-sixth-provider-added-2026-08-18), whose numbers are also
+login-gated and turned out to be per model rather than per plan.
 
 ## The short version
 
@@ -338,6 +340,196 @@ runs out of rungs.
 - **This session spent ~47% of Cerebras' daily token budget measuring.** Which is the finding above,
   demonstrated: 1,000,000 tokens/day is not a large number when a turn costs six to twelve thousand.
 
+## Mistral — the sixth provider, added 2026-08-18
+
+[#17](https://github.com/Jerome-Group/syrax/issues/17) skipped Mistral deliberately.
+[#59](https://github.com/Jerome-Group/syrax/issues/59) reversed that on
+[#39](https://github.com/Jerome-Group/syrax/issues/39)'s finding that the constraint which actually
+binds Syrax is per-minute **tokens**, against a community figure of 500K TPM — roughly 16× Cerebras'
+30K. The account exists now, so this section is measured rather than reported.
+
+**The premise half-survives, and the conclusion it was reaching for does not.** The width is real on
+most models, but Mistral generates at **48-109 tokens/second** against Cerebras' ~3,000, so it is
+not a front-lane candidate at any token allowance. What it is, is the widest **worker** lane on the
+board by a large margin.
+
+### There is no free-tier number — there are thirty-six
+
+The console's Limits page lists 19 rows; the catalogue lists 55 models; every chat model returns its
+own limit in its own response headers. Swept directly, 2026-08-18:
+
+| Model | req/min | tokens/min |
+|---|---|---|
+| `ministral-3b-2512` / `-latest` | **750** | **1,300,000** |
+| `devstral-2512` / `-latest` / `devstral-medium-latest` | 50 | 1,000,000 |
+| `ministral-14b-2512` / `-latest` | 30 | 937,500 |
+| `codestral-2508` / `-latest`, `mistral-code-latest`, `mistral-code-fim-latest` | 125 | 625,000 |
+| `ministral-8b-2512` / `-latest` | 188 | 625,000 |
+| `mistral-code-agent-latest` | 50 | 1,000,000 |
+| `mistral-medium-2505` | 25 | 375,000 |
+| `mistral-medium-2508` | 23 | 356,250 |
+| `mistral-large-2512` / `-latest` | **4** | 250,000 |
+| `mistral-small-2603` / `-latest`, `magistral-small-latest` | 50 | 50,000 |
+| `mistral-medium-latest` and its six aliases | 50 | **25,000** |
+| `glm-5-2`, `zai-glm-5-2` | 0 | **0** |
+| `labs-leanstral-1-5`, `-1-5-1` | — | 403 |
+
+Three things fall out of that table that no published figure carries:
+
+**The "requests per second" column in the console is the per-minute rung divided by 60.** `0.83` is
+50/minute, `3.13` is 188, `12.50` is 750, `0.07` is 4. The enforced bucket is per **minute** and it
+permits bursts: eight concurrent requests against `mistral-large-2512`'s rung of 4 were served 4 and
+refused 4, immediately — not serialised at one per second. So the widely-reported "1 request/second"
+describes neither the shape nor the size of the limit.
+
+**The newest model is the tightest, not the widest.** `mistral-medium-latest` — and `mistral-medium`,
+`-2604`, `-3`, `-3-5`, `-3.5`, all one quota row — carries **25,000 TPM**, which is *below* Cerebras'
+30,000. The superseded `mistral-medium-2505` and `-2508` carry 375,000 and 356,250, fourteen times
+more. Reaching for the newest medium by its obvious name costs a factor of 14 on the only rung that
+binds.
+
+**Sixteen models with real limits are absent from the console's table**, `magistral-small-latest`,
+the `mistral-code-*` family and `devstral-medium-latest` among them. The Limits page is a selection,
+not an inventory, and the headers are the complete source.
+
+### The headers are the best of any provider so far
+
+On the inference path, every response — including a refusal — carries:
+
+```
+x-ratelimit-limit-req-minute: 188        x-ratelimit-limit-tokens-minute: 625000
+x-ratelimit-remaining-req-minute: 187    x-ratelimit-remaining-tokens-minute: 624982
+x-ratelimit-tokens-query-cost: 18
+```
+
+This is what [#25](https://github.com/Jerome-Group/syrax/issues/25)'s report wants and what no other
+provider gives it: **remaining tokens per minute, stated by the provider, on a call already being
+made**. Cerebras reports six rungs but goes silent exactly when it refuses
+([#45](https://github.com/Jerome-Group/syrax/issues/45)); Z.AI, Gemini and OpenRouter say nothing on
+a success at all. Mistral says both, always.
+
+`x-ratelimit-tokens-query-cost` equals `usage.total_tokens` — so **completion tokens are charged
+against the same per-minute bucket as prompt tokens**, and the cost of a turn is not knowable before
+it is made.
+
+Three caveats. The headers are on the inference path only: `GET /v1/models` returns none, which is
+why #59 moved the wizard's Mistral probe onto `/chat/completions`. `/v1/embeddings` returns the
+**request rung alone** — `mistral-embed` at 60/minute, no token pair — even though the console shows
+it a token limit of 20,000,000. And there is **no `Retry-After`**, on any response, refused or not.
+
+### What a 429 carries
+
+```
+HTTP 429
+{"object":"error","message":"Rate limit exceeded","type":"rate_limited",
+ "param":null,"code":"1300","raw_status_code":429}
+x-ratelimit-limit-req-minute: 4    x-ratelimit-remaining-req-minute: 0
+```
+
+The refusal **names the rung that refused it** — the token pair is dropped when the request rung is
+what ran out — which is the one thing #45 found Cerebras will not do.
+
+**The code does not distinguish an exhausted quota from a model that never had one.** `1300` is
+returned both by `mistral-large-2512` after its 4 requests are spent and by `glm-5-2`, which has no
+free allowance at any time. Only the headers separate them: a limit of `0` is *never allowed*, a
+limit above zero with `remaining: 0` is *come back next minute*. This is the same shape as Z.AI's
+`1302` versus `1308` ([#24](https://github.com/Jerome-Group/syrax/issues/24)) with the distinction
+moved out of the code and into the headers — and, as #45 established, unreachable for routing either
+way, since the runtime classifies on HTTP status before it consults any code. It is reachable for
+the **report**, which reads headers rather than routes on them.
+
+### Two rows that look like lanes and are not
+
+- **`glm-5-2` and `zai-glm-5-2`** are in the catalogue at 1,048,576 context with function calling
+  declared, and are on the console's Limits page — with a blank in the tokens column. The blank
+  means **zero**: both refuse every request with `1300` and report `limit-tokens-minute: 0`. Mistral
+  hosts GLM 5.2 as a paid model only, which is the same trap
+  [#56](https://github.com/Jerome-Group/syrax/issues/56) hit on OpenRouter's free GLM-5.2.
+- **`labs-leanstral-1-5` and `-1-5-1`** carry the console's single widest row — 5,000,000 TPM — and
+  answer `403`, code `1913`, *"is a Labs model. To use Labs models…"*. That matches the
+  [Commercial Terms](https://legal.mistral.ai/terms/commercial-terms-of-service) §4.3, which
+  restricts Labs and Preview models to commercial customers and states that a training opt-out
+  chosen elsewhere does not apply to them.
+
+**The console's Limits page is not an entitlement.** Its widest row is a 403 and its GLM row is a
+zero. A row there means a limit would apply *if* the plan reached the model.
+
+### The "evaluation, not production" caveat is not in the terms
+
+Every third-party summary of the free plan says it is for evaluation and not for production. #59 went
+looking for the clause. It is **not in the
+[Commercial Terms of Service](https://legal.mistral.ai/terms/commercial-terms-of-service) or the
+[Additional Terms](https://legal.mistral.ai/terms/additional-terms)**. What those documents actually
+restrict is narrower and does not cover the free plan:
+
+- §2.3 **Beta Products** — "provided solely on an 'as-is' basis without any warranties", not to be
+  redistributed.
+- §4.3 **Labs or Preview Models** — "exclusively available to Mistral AI's commercial Customers and
+  are restricted to professional use only", and outside any training opt-out.
+- Additional Terms §5.1 excludes products "provided to Customer for evaluation purposes, such as any
+  such services available in alpha or beta test" from EU Data Act switching and deletion requests.
+
+So the caveat is positioning rather than a term, and the lane is not built on something that forbids
+it. The one place the restriction is real is the Labs rows above — which the API enforces itself.
+
+**Training on free-tier inputs is on by default** and is opted out of in the console's Privacy menu,
+not by a term. That is acceptable under this effort's standing constraint that nothing private passes
+through Syrax, on the same reasoning that admitted Gemini.
+
+### Cached tokens are not discounted, and did not engage
+
+Two identical 6,210-token prompts sent 2 seconds apart both reported
+`prompt_tokens_details.cached_tokens: 0` and both were charged `6214` against the minute. Same
+result as Cerebras (#56): **a re-sent context costs full price on every tool call**, which is
+[#13](https://github.com/Jerome-Group/syrax/issues/13)'s whole argument for why per-minute tokens are
+the scarce resource. Mistral's answer to it is width rather than discount — at 625,000 TPM a 12.5K
+delegating turn is 1/50th of a minute's budget.
+
+### Tool calling holds at real prompt size
+
+Every chat model tested returned a correct `tool_calls` block at a ~9,000-token prompt with a tool
+schema attached: `mistral-medium-latest`, `-2508`, `mistral-small-2603`, `ministral-3b/8b/14b-2512`.
+Round-trip 0.84-2.45 s. This is the failure that took OpenRouter's free GLM-5.2 out of contention in
+#56 (*no endpoints support tool use*), and Mistral does not have it.
+
+Generation speed, measured separately at 300 output tokens:
+
+| Model | tok/s |
+|---|---|
+| `ministral-3b-2512` | 109 |
+| `mistral-small-2603` | 105 |
+| `ministral-8b-2512` | 91 |
+| `mistral-medium-2505` | 52 |
+| `ministral-14b-2512` | 51 |
+| `devstral-medium-latest` | 48 |
+
+Against Cerebras at ~3,000 tok/s this is a 30× gap, and it is the number that decides where Mistral
+can sit. [#50](https://github.com/Jerome-Group/syrax/issues/50) ruled the front lane does not stream
+because generation duration is 20-50 ms terse and ~270 ms expanded — arithmetic done at Cerebras'
+speed. The same expanded reply from Mistral takes **~3 seconds**, so that ruling is safe only while
+the front lane stays fast. Which rung Mistral earns is #56's to decide with these numbers.
+
+### What is not established here
+
+- **Whether a monthly ceiling exists.** The community figure is 1B tokens/month. The console's Limits
+  page carries no monthly column, no response header mentions one, and `/v1/organization`, `/limits`,
+  `/usage`, `/billing` and `/me` are all `404 no Route matched` — there is no public endpoint to ask.
+  The docs' phrase is "included monthly usage within the limits shown on the Limits page", which
+  points back at a page that shows only per-minute rungs.
+- **Whether a monthly exhaustion looks different from a per-minute one.** Unforced, for the obvious
+  reason.
+
+### Two corrections to this repository's own record
+
+- The free plan is called **"Free mode"** in the live docs. "Experiment" is the 2024 name, and it is
+  what `free-token-providers.md`, `provider-routing.md` and `file-search-approaches.md` all still say.
+- **`docs.mistral.ai/deployment/laplateforme/tier` is a hard 404** — the URL
+  `file-search-approaches.md` cites for Mistral's tiers. The live page is
+  [`admin/user-management-finops/tier`](https://docs.mistral.ai/admin/user-management-finops/tier),
+  and it publishes **no numbers at all**. #56 found that model ids rot faster than the decisions
+  naming them; documentation URLs rot the same way, and a citation that 404s is worse than one that
+  is merely stale, because nothing is left to correct against.
+
 ## Sources
 
 - [Gemini API rate limits](https://ai.google.dev/gemini-api/docs/rate-limits) — tier ladder;
@@ -353,3 +545,10 @@ runs out of rungs.
 - [Cerebras rate limits](https://inference-docs.cerebras.ai/support/rate-limits) and
   [Groq rate limits](https://console.groq.com/docs/rate-limits) — published tables, extended here by
   the response headers each actually returns
+- [Mistral usage and limits](https://docs.mistral.ai/admin/user-management-finops/tier) — points at
+  the console; publishes no numbers. The older `deployment/laplateforme/tier` path is a 404
+- [Mistral Limits console](https://admin.mistral.ai/plateforme/limits) — login-gated, per model,
+  and a subset of what the response headers report
+- [Mistral Commercial Terms of Service](https://legal.mistral.ai/terms/commercial-terms-of-service)
+  and [Additional Terms](https://legal.mistral.ai/terms/additional-terms) — Beta Products §2.3,
+  Labs and Preview Models §4.3; no free-plan production restriction
