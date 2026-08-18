@@ -134,6 +134,17 @@ actually experiences. The floor needs a lane beside it, not a longer backoff.
 > calls answered **20 of 20**, median 0.68 s. The *service temporarily overloaded* wording names a
 > model's capacity, not Z.AI's, which is why a router reading only the code would stand down a
 > provider that has a working free model on it.
+>
+> **[#62](https://github.com/Jerome-Group/syrax/issues/62), 2026-08-18 — the phrase is a claim about
+> allowance, and only about allowance.** Z.AI publishes no token or daily ceiling, so no lane in this
+> system runs out of *allowance*, and that much holds. What every reading above actually met is
+> **capacity** — a provider with headroom to spare refusing because it is busy — which is a third
+> thing beside a *wall* and *headroom*, has no quantity to count and no header to read, and is not
+> Z.AI's alone: [#45](https://github.com/Jerome-Group/syrax/issues/45) found Cerebras answering
+> `queue_exceeded` with `x-should-retry: false` and no rate-limit headers at all. So the guarantee is
+> *never dark for want of allowance*, and the honest remainder is that any rung can be refused for
+> capacity at any moment. The paragraph above is right that the floor needs a lane beside it; it is
+> the rejection rate rather than the half-hour that says so.
 
 **Two more codes, measured while establishing that, and both are the discriminator #15 wanted:**
 

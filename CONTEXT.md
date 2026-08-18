@@ -212,9 +212,14 @@ different ceiling, belonging to what the model can read rather than to what the 
 Removing a provider from a lane until a stated reset, as against retrying it in a moment. The
 distinction is the whole of quota awareness and the transport hides it: a per-minute limit and an
 exhausted day are both HTTP 429, and only the response body or a locally-kept count says which. A
-stood-down provider is neither broken nor reconfigured — it returns on its own.
-_Avoid_: cooldown — it names seconds, where this may last until tomorrow; disable, which sounds
-like a setting a human changed
+stood-down provider is not broken — nothing ails it that the reset will not cure — but it **is
+reconfigured, and it does not come back by itself**. A lane's membership is configuration, so the
+rung returns only when something writes it back at the reset it was stood down until: the return is
+owned rather than awaited, and a stand down with no return scheduled is a rung retired by accident.
+_Avoid_: cooldown — it lapses on its own after seconds, where this lasts until a stated reset and
+lapses only when something acts; disable, which sounds permanent where this is bounded by the reset
+that ends it; pin — the apparent opposite and not one, since a pin forces a *selection* within a
+lane and belongs to the runtime, where this changes a lane's *membership* and belongs here
 
 **Pre-emptive switch**:
 Leaving a provider *before* it refuses, on what its telemetry already says rather than on a failure
