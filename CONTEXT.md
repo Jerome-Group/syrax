@@ -180,6 +180,19 @@ _Avoid_: tier — it ranks by strength and implies the members are alternatives,
 are wrong here; model group, which names a mechanism a router happens to offer rather than the
 division of labour it is being used for
 
+**Rung**:
+One position in a lane's ordered chain: a single model at a single provider, tried in turn until one
+answers. It is the unit almost everything else here is counted against — *headroom* is read per
+rung, a *wall* is a property of one, a *stand down* removes one — so the word carries weight it is
+rarely given. Two rungs may name the same provider and differ only by model, and that is not
+redundancy: a provider's limits and its outages are per model, so one model of a provider can be
+refusing while another on the same key answers everything. A rung is named in configuration and
+nowhere else, which is what makes its contents a matter of judgement rather than of code.
+_Avoid_: fallback — it names the *move* to the next rung rather than the position itself, and using
+it for both hides which is meant; model, which omits the provider that half of a rung's behaviour
+belongs to; tier — ruled out at *lane* for the same reason, and worse here, since rungs are ordered
+by suitability rather than by strength
+
 **Slow turn**:
 A turn in which the front lane delegates to the worker lane. It is defined by **delegation rather
 than by elapsed time**: nothing in this system sits on the request path to hold a stopwatch, and
@@ -235,6 +248,20 @@ lapses only when something acts; disable, which sounds permanent where this is b
 that ends it; pin — the apparent opposite and not one, since a pin forces a *selection* within a
 lane and belongs to the runtime, where this changes a lane's *membership* and belongs here
 
+**Rotted rung**:
+A rung whose model no longer answers to the name its chain calls it by — archived, retired, renamed,
+or moved off the free plan. It is the opposite of a *stand down* rather than a kind of one: a stand
+down is bounded by the reset it ends at, where nothing a rotted rung waits for ever arrives, so it
+returns only when a person writes the chain. Nor is it *headroom*, having no allowance left to
+measure, nor a *wall*, which is a living model refusing a request for its size. What makes it worth a
+word is that it is **silent**: the chain simply advances, every turn pays for the dead rung again,
+and the lane goes on working until it runs out of rungs. It is discovered by being reported, not by
+being noticed.
+_Avoid_: stand down — the entry above, bounded by a reset this has none of, and the confusion that
+would file a permanent loss as a temporary one; outage, which is the provider being down rather than
+the model being gone; deprecated — the provider's word for an announcement, where this is the state
+after the model has already stopped answering
+
 **Pre-emptive switch**:
 Leaving a provider *before* it refuses, on what its telemetry already says rather than on a failure
 that has happened. It is reserved for where being refused is expensive, and expense is measured
@@ -249,9 +276,25 @@ _Avoid_: fallback, failover — both name the move made *after* something failed
 different move and the more common one here; using them interchangeably hides which of the two a
 lane actually does; throttling, which slows a caller down where this moves it
 
+**Lane monitor**:
+The one thing that holds what Syrax knows about its own lanes and the runtime does not: the rationed
+lane's counters, which rungs have *rotted*, and when each source it reads was last read. It writes
+the *usage report* and it serves the escape hatch, but neither is what it is — both are things that
+follow from being the only place lane state is kept, which is why it is named for the state rather
+than for either job. It observes and refuses; it never chooses a model, and it sits on no path a
+reply travels.
+_Avoid_: router — fixed elsewhere on a behaviour, and on the explicit finding that no such process
+exists here; gateway, which is the runtime's own process; escape-hatch unit, the name it had while
+the hatch was the only thing it did — accurate then and now the smallest of three, so a reader
+looking for what watches the front lane would not think to open it
+
 **Usage report**:
-What the System chat says about how much of each lane is left. It is posted **only when something
-moved** — a provider stood down, a lane switched, a rationed call spent — and is otherwise silent,
+What the System chat says about the state of each lane: how much of it is left, and whether its
+rungs are still there. The second subject is not the first — a *rotted rung* has no allowance to be
+low on — and they share a report because they answer one question between them, whether the lane can
+still be relied on. It is posted **only when something
+moved** — a provider stood down, a lane switched, a rationed call spent, a rung found rotted or
+found working again — and is otherwise silent,
 which is exactly what separates it from a *daily brief*: a brief is posted on an empty day because
 its absence is the signal, and nothing depends on this one arriving. It can be asked for at any
 time instead, which is why the chat that carries it is conversational rather than a feed.
