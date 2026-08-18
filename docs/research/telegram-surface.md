@@ -379,6 +379,45 @@ probes, so each result below is a before/after pair rather than a single reading
   in the client and Syrax received nothing, and no re-poll replays it. Reconciliation verifies
   stored ids — it does not discover unknown ones.
 
+## What the runtime does with the root — [#81](https://github.com/Jerome-Group/syrax/issues/81)
+
+Everything above measures the platform. This section measures `openclaw@2026.6.34`, because
+[ADR-0003](../adr/0003-the-runtime-adapter-wraps-openclaw.md) makes the adapter a configuration
+contract: a thread-less message reaching the General **agent** is the runtime's behaviour, not
+Telegram's. Observed 2026-08-19 against the pinned package, driven by a local stand-in for the Bot
+API so the inbound path, the config resolution and the route are the runtime's real ones and only
+Telegram is substituted.
+
+- **A thread-less message routes, and it lands on the default agent.** The root message reached
+  `sessionKey=agent:general:main` and was answered — with `message_thread_id` **absent** from the
+  `sendMessage`, so the reply comes back to the root rather than into a topic. A mapped topic
+  reached `agent:academic:main:thread:<chat>:<topic>` in the same run, so per-topic routing and the
+  root are one mechanism with two branches rather than two mechanisms.
+- **"No thread id" is not expressible as a topic key.** `resolveTelegramScopedGroupConfig` returns
+  no topic config at all when the thread id is absent — the check precedes the lookup, so
+  `topics."*"` never runs. Measured as a pair in one configuration: with
+  `direct.<chat>.topics."*".agentId = "media"` set, an **unmapped topic** routed to
+  `agent:media:main:thread:…` and the **root** still routed to `agent:general:main`. The wildcard
+  works; the missing thread id escapes it. `agentId` is topic-only and does not inherit from the
+  chat-level entry, so there is no chat-level slot to put it in either.
+- **The root is bindable, and binding it does not cost the topics.** A top-level `bindings[]` entry
+  matching the DM peer sent the root to the bound agent (`agent:system:main`), while a mapped topic
+  in the same run still reached `agent:academic:main:thread:…` — the per-topic `agentId` override
+  wins over a peer binding inside a topic. So General reaches the root two ways: implicitly as the
+  default agent (`agents.list[].default`), or explicitly by a peer binding.
+- **`requireTopic: true` drops the root silently.** With it set on the chat's `direct` entry the
+  root message produced no turn and no reply — `Blocked telegram DM <chat>: requireTopic=true but no
+  topic present`, at verbose level only. It is the one setting that breaks the arrangement above,
+  and it is undocumented: neither `requireTopic` nor `autoTopicLabel` appears anywhere in the pinned
+  package's docs, only in its config schema.
+- **Chat-level `systemPrompt` reaches the root; topic-level stacks on top.** The root answered from
+  `direct.<chat>.systemPrompt` and a mapped topic answered from its own, which is the ordinary
+  inheritance the package documents for groups, holding for a private chat's root.
+
+**Consequence for the configuration:** General is the default agent and `requireTopic` stays unset.
+That pair is what makes [#11](https://github.com/Jerome-Group/syrax/issues/11)'s *"General is the one
+chat that cannot be wrong"* true of this runtime and not merely of this platform.
+
 ## Recommendation
 
 > **Amended by [#50](https://github.com/Jerome-Group/syrax/issues/50)**: point 3 below is
@@ -399,7 +438,9 @@ Concretely, for the decision ticket:
    deployment environment.
 2. Adapter: allowlist `from.id` + chat id (numeric, private runtime state); route by
    `message_thread_id` with a domain → topic map built through `createForumTopic`; absent
-   thread id = General.
+   thread id = General. *(Sharpened by [#81](https://github.com/Jerome-Group/syrax/issues/81):
+   "absent = General" is not a mapping the runtime can hold — it is General being the **default
+   agent**, with `requireTopic` left unset. See the section above.)*
 3. ~~Streaming: `sendMessageDraft` per token batch (same `draft_id`), finalize with `sendMessage`;
    fall back to edit-throttled `editMessageText` (~1/s, honour `retry_after`) if drafts
    misbehave — the feature is under a year old.~~ **Withdrawn by
