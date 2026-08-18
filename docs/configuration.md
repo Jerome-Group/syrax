@@ -44,7 +44,7 @@ split is **one unit per resident thing that must exist exactly once**.
 |------|--------------|------------------------|
 | `com.jerome-group.syrax.gateway` | The agent runtime | It holds the sessions and carries every chat |
 | `com.jerome-group.syrax.search` | The resident search service | One embedder in memory regardless of how many agents connect |
-| `com.jerome-group.syrax.hatch` | The escape-hatch tool and the usage report | Its counters must be single-instance and must survive a restart of anything else |
+| `com.jerome-group.syrax.hatch` | The **lane monitor**: the escape-hatch tool, the usage report, and the rung watch | Its counters must be single-instance and must survive a restart of anything else |
 
 The second is the one that is easy to get wrong. The usual MCP transport has each client spawn the
 server as a child process, which would put one resident embedding model behind **every** agent. The
@@ -58,6 +58,11 @@ embedder restart silently handing back an allowance that has already been spent.
 and the decision it rests on — that there is **no provider-router process**, because the runtime's
 own fallback chains do the routing.
 
+It is called the **lane monitor** because the hatch is now the smallest of three things it does. It
+also reads the gateway log for rungs the chains have dropped, and sweeps the rungs the log cannot
+see, per [ADR-0012](adr/0012-a-rotted-rung-is-reported-and-never-repaired.md). The launchd label
+stays `com.jerome-group.syrax.hatch`; the name is vocabulary rather than a redeploy.
+
 ## The usage report
 
 The hatch unit writes the usage report to the `usage_report` path, and a launchd calendar job pokes
@@ -69,6 +74,18 @@ It carries per-lane headroom with each provider's own telemetry beneath it, and 
 last successfully read each source**. That timestamp is not decoration: most of the telemetry is
 read out of the runtime's own internal state, so a change there would otherwise break the report
 silently — and a stale report is indistinguishable from a quiet day.
+
+It also reports **rotted rungs** — chain members whose model no longer answers to the name the chain
+calls it by. That is a different subject from headroom, a vanished model having no allowance left to
+measure, and it arrives in the same report because the two answer one question between them: whether
+the lane can still be relied on. A rung is reported when it changes state and listed in between, with
+the provider's own message passed through verbatim and a tappable action that removes it — the write
+is Syrax's, the decision is the Owner's. Nothing is ever replaced automatically.
+[ADR-0012](adr/0012-a-rotted-rung-is-reported-and-never-repaired.md) carries the reasoning.
+
+For this the unit reads the gateway's own log, so it keeps a byte offset and reports **the window it
+actually covered** rather than only when it last ran — a log it cannot open, or a gap it can prove it
+missed, is *unknown* rather than a quiet day.
 
 Both units are launched through a wrapper script rather than the binary. The wrapper is what sources
 the secrets file and sets the `PATH` a supervisor does not provide; putting credentials in the unit
@@ -87,6 +104,14 @@ contain **chat content** — private runtime state by the same definition as the
 `newsyslog.d` entry rather than something to be remembered. If the volume holding the logs is not
 mounted, the job cannot open its log and fails loudly, which is the correct failure: the runtime's
 state directory is on that volume anyway.
+
+**The runtime writes a log of its own, and its path must be set.** Left unset it lands outside the
+`logs` path entirely, which is chat content in the wrong place — but it is no longer only a placement
+question, because the lane monitor reads that file to find rotted rungs. Two consequences follow.
+Point the runtime's own log setting at the `logs` path explicitly rather than relying on its default.
+And do **not** put a second rotator over it: the runtime already rotates and prunes on its own, and
+two rotators over one file lose the window a reader is part-way through. Setting the path is
+[#71](https://github.com/Jerome-Group/syrax/issues/71).
 
 ## Rolling the runtime pin forward
 

@@ -1,5 +1,12 @@
 # The runtime routes, and Syrax owns the escape hatch
 
+> **Amended twice.**
+> [ADR-0009](0009-the-chains-are-recomposed-and-stand-down-is-a-config-write.md) re-composes both
+> chains and makes a stand down a config write with no restart — so this record's *"a configuration
+> change plus a unit restart"*, its *"drops in-flight turns"* and its *"escalating to 5 minutes"*
+> no longer hold. [ADR-0012](0012-a-rotted-rung-is-reported-and-never-repaired.md) gives the usage
+> report a second subject and a second source, and renames the third unit the **lane monitor**.
+
 There is no provider router. The runtime's own fallback chains do the routing, and Syrax builds only
 the two things the runtime cannot express: an **escape-hatch tool** that refuses before it spends,
 and a **usage report** assembled from telemetry the runtime already collects. Neither sits on the
