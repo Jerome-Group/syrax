@@ -3,7 +3,10 @@
 > **Amended by [ADR-0010](0010-one-secrets-store-reached-by-file-backed-refs.md)** — the wrapper no
 > longer carries credentials — and by
 > [ADR-0011](0011-the-front-lane-carries-no-skills-and-a-pinned-workspace.md), which pins the
-> workspace path.
+> workspace path — and by
+> [ADR-0014](0014-the-runtime-logs-to-a-fixed-basename-and-rotates-itself.md), which places the
+> runtime's own log and splits rotation ownership, so the **Logs** section below names one of two
+> log surfaces.
 
 Syrax runs on the mini under **launchd**, as **two LaunchAgents** — not containerised, and not one
 process. `com.jerome-group.syrax.gateway` runs OpenClaw; `com.jerome-group.syrax.search` runs the

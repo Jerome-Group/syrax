@@ -107,11 +107,33 @@ state directory is on that volume anyway.
 
 **The runtime writes a log of its own, and its path must be set.** Left unset it lands outside the
 `logs` path entirely, which is chat content in the wrong place — but it is no longer only a placement
-question, because the lane monitor reads that file to find rotted rungs. Two consequences follow.
-Point the runtime's own log setting at the `logs` path explicitly rather than relying on its default.
-And do **not** put a second rotator over it: the runtime already rotates and prunes on its own, and
-two rotators over one file lose the window a reader is part-way through. Setting the path is
-[#71](https://github.com/Jerome-Group/syrax/issues/71).
+question, because the lane monitor reads that file to find rotted rungs. Point the runtime's own log
+setting at the `logs` path explicitly rather than relying on its default.
+
+**Give it a fixed basename.** A basename shaped like `<name>-YYYY-MM-DD.log` switches the runtime
+into rolling mode, where it picks the date itself, reports the configured path in its startup banner
+whether or not that is the file it is writing, and prunes every same-prefix log in the directory
+older than a day — rotated archives included. The filename the runtime prints by default is of that
+shape, so copying it into the setting is the natural mistake.
+
+**Set the rotation size and the redaction level explicitly**, rather than inheriting them. The
+default size makes retention several hundred megabytes and time-unbounded, and rotation was asked
+for here rather than left to optimism. Redaction is stated because the secrets contract moved to
+file-backed refs and a log line is where that assumption gets tested.
+
+**Do not put a second rotator over it.** The runtime already rotates and prunes its own file, and two
+rotators over one file lose the window a reader is part-way through. The supervisor-level rotation
+entry names the supervisor's own capture files **individually** — a directory glob is how this fails
+silently once another file appears there. Name those captures so they fall outside the runtime's
+prune pattern.
+
+**Create the `logs` path at mode 700.** The runtime creates it with no mode and it lands
+world-readable under a default umask, which is wrong for a directory holding chat content. That
+belongs to the provisioning wizard or the unit wrapper, beside the secrets directory they already
+create at that mode.
+
+Setting the path is [#71](https://github.com/Jerome-Group/syrax/issues/71); the shape is
+[ADR-0014](adr/0014-the-runtime-logs-to-a-fixed-basename-and-rotates-itself.md).
 
 ## Rolling the runtime pin forward
 
