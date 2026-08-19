@@ -1,8 +1,9 @@
 # The scratch root stays in /tmp, and the pre-flight asserts its mode
 
 The runtime's scratch root remains the hardcoded `/tmp/openclaw`. No symlink, no sweep, no fork of
-the pinned build. The wrapper's pre-flight asserts the directory is mode `0700` before the gateway
-starts, because the runtime creates that mode without enforcing it.
+the pinned build. The wrapper's pre-flight is to assert the directory is mode `0700` before the
+gateway starts, because the runtime creates that mode without enforcing it. That assertion is what
+this decision buys and it is not built yet; nothing else changes.
 
 This is the first time the standing *everything installs and stores under `/Volumes/RAID0`;
 the internal disk only when technically impossible* constraint has had its second clause invoked.
@@ -12,9 +13,13 @@ for.
 Everything below is measured against the pinned `openclaw@2026.6.34`
 ([#92](https://github.com/Jerome-Group/syrax/issues/92)), on
 [#45](https://github.com/Jerome-Group/syrax/issues/45)'s precedent that the shipped doc and the
-shipped code disagree. It amends no existing record.
+shipped code disagree.
+
 [ADR-0014](0014-the-runtime-logs-to-a-fixed-basename-and-rotates-itself.md) moved the gateway's log
-and explicitly handed this on as a different question; this is that answer.
+and explicitly handed this on as a different question; this is that answer. It **amends that record
+in part**, and takes the pointer forward per
+[ADR-0001](0001-decisions-are-recorded-as-adrs.md): ADR-0014's account of what the scratch root
+carries is wrong in the direction that made this look urgent, and the correction is below.
 
 ## There is no compliant configuration, and that is the whole argument
 
@@ -48,8 +53,8 @@ matters: the index, the secrets store, `runtime-state/`, the logs.
 
 ## The exposure is one file, on one explicit gesture
 
-The ticket that raised this listed thirty-eight modules resolving paths under the scratch root. What
-survives sorting them by source region is much smaller.
+[#92](https://github.com/Jerome-Group/syrax/issues/92) listed thirty-eight modules resolving paths
+under the scratch root. What survives sorting them by source region is much smaller.
 
 **Most of the named writers are extension-gated.** The voice-waveform PCM scratch reached from
 `message-handler.process` and `reply-delivery` — which read like the generic send path and were the
@@ -114,8 +119,9 @@ ruled encrypting the volume out of scope.
 
 So the decision buys the property directly instead of through placement:
 
-**The wrapper's pre-flight asserts `/tmp/openclaw` is a directory, owned by the running uid, and
-mode `0700` — and refuses to start otherwise.** Same place and same shape as
+**The wrapper's pre-flight asserts `/tmp/openclaw` is mode `0700`, and refuses to start
+otherwise.** The mode is the whole assertion — ownership and type are the runtime's own resolver's
+job, and it does both. Same place and same shape as
 [ADR-0010](0010-one-secrets-store-reached-by-file-backed-refs.md)'s audit, which already exits `2`
 on an unresolved secrets ref. A refusal to start is the right severity for the same reason it is
 there: a gateway that runs with its scratch readable is worse than one that does not run.
@@ -124,9 +130,9 @@ there: a gateway that runs with its scratch readable is worse than one that does
 
 Recorded so this record does not imply a sweeper that does not exist.
 
-`periodic` is **gone from this macOS entirely** — no binary, no `/etc/periodic`, no
-`com.apple.periodic-*` daemon — so the `110.clean-tmps` mechanism that used to clear `/tmp` is not
-running. The only launchd job on the system referencing tmp cleanup is `com.apple.bsd.dirhelper`
+On **macOS 27.0** (`26A5388g`), `periodic` is **gone entirely** — no binary, no `/etc/periodic`,
+no `com.apple.periodic-*` daemon — so the `110.clean-tmps` mechanism that used to clear `/tmp` is
+not running. The only launchd job on the system referencing tmp cleanup is `com.apple.bsd.dirhelper`
 (03:35 daily, `CLEAN_FILES_OLDER_THAN_DAYS=3`), and the filesystem argues it does not reach
 `/private/tmp`: files there carried mtime *and* atime four days old having survived two of its runs,
 while the user `$TMPDIR` held 5,625 entries older than three days.
@@ -143,8 +149,8 @@ Noted and deliberately not decided. `/var/folders/…/T/openclaw-<uid>` exists o
 `755`, holding gateway lock files with dead pids, written by a path that is not this resolver — which
 would have created it at `0700`. That is
 [#108](https://github.com/Jerome-Group/syrax/issues/108), and its subject is supervision rather than
-placement: a lock that outlives its process under `KeepAlive` is a restart question, not a privacy
-one.
+placement. The locks carry `pid`, `createdAt` and `configPath` and no credentials, so what they
+raise is a lock outliving its process under `KeepAlive` rather than anything about Owner content.
 
 ## Consequences
 
@@ -173,6 +179,9 @@ one.
 - **v1 enables any of the extensions this record excused** — browser, Codex, Discord, Talk voice.
   The exposure was sized on a Telegram-only tool layer, and each of those puts named Owner content
   back under the scratch root.
+- **macOS changes underneath this.** The sweep argument is a property of macOS 27.0 on this
+  machine, not of macOS. An OS upgrade can reintroduce a `/tmp` cleaner or change `dirhelper`'s
+  reach, and the section above should be re-measured rather than re-read.
 - **The volume gets encrypted**, which #18 ruled out of scope. That would make placement buy
   something it does not buy today, and the readability-not-placement argument would need re-asking.
 - **A `SIGTERM` is measured leaving media workspaces behind.** The `finally` is the guarantee relied
