@@ -4,8 +4,39 @@ An issue's acceptance criteria are the checkboxes under its **Acceptance criteri
 are what the ticket asked for, in a form a reader who did not write it can check. This file says
 what an agent does with them when it finishes.
 
-Three obligations, in the order they come up. An issue with no criteria — a Decision, whose output
-is a decision record rather than a checklist — owes the first two nothing and the third all of it.
+## 0. A criterion states a property of the work, not the state of the tracker
+
+This one comes before the three below, because it is about **writing** a criterion rather than
+discharging one — and it is the only failure the practice has actually produced.
+
+A criterion is read by a session that is not the one that wrote it, and often days later. Anything
+in it that describes *the tracker* — which issues are open, who will decide something next — is true
+when written and can be false when read. Anything that describes *the work* stays true.
+
+The failure that named this rule is [#96](https://github.com/Jerome-Group/syrax/issues/96)'s:
+
+> - [ ] It states that General's address is **#81's and #80's**, and does not decide it.
+
+Both were open when that was written and closed by the time it was worked, so obeying it literally
+would have written *"pending #81"* into a record ADR-0001 makes **immutable**. The criterion it
+should have been is the same sentence with the tracker taken out:
+
+> - [x] It **does not decide** General's address.
+
+That one never goes stale. The record still does not decide it, and a reader wanting to know who did
+follows the record's own links.
+
+Citing a **settled** decision is fine and common — *"records the line as #35 drew it"*, *"records why
+#7's recommendation was reversed"* — because a closed ticket's finding is a fact about the work.
+Twelve ADR follow-ups have been written here and six such citations have aged perfectly; the one that
+did not is the one above, which cited a question rather than an answer.
+
+**The test:** if the criterion would have to be rewritten because a ticket closed, it is describing
+the tracker. Move that part into the issue's prose, where it is context rather than an instruction.
+
+Three further obligations, in the order they come up. An issue with no criteria — a Decision, whose
+output is a decision record rather than a checklist — owes the first two nothing and the third all
+of it.
 
 All three are checked rather than remembered: the conformance workflow reads every pull request
 against the issue it closes and goes red on an unexplained box, a missing drift block or an issue
