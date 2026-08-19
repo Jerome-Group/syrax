@@ -1,5 +1,10 @@
 # The runtime logs to a fixed basename, and rotates itself
 
+> **Amended in part by [ADR-0015](0015-the-scratch-root-stays-in-tmp-and-the-preflight-asserts-its-mode.md)**
+> — the scratch root's contents are narrower than the section *This moves the log, and not the
+> scratch root* states. The voice-waveform scratch it names is Discord's, not the generic
+> message-send path, and the browser and Codex writers beside it are extension-gated too.
+
 The gateway's own log is placed by the runtime's `logging.file` key, at
 `/Volumes/RAID0/104 Syrax/logs/openclaw.log` — a **fixed** basename — and the runtime rotates it.
 `newsyslog` covers launchd's captures and nothing else.
