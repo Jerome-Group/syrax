@@ -1,5 +1,11 @@
 # The front lane carries no skills, and its workspace is pinned
 
+> **Amended by [ADR-0016](0016-the-lanes-are-recomposed-on-failure-rate-and-the-front-lane-is-told-not-to-guess.md) in one part.** The workspace is no longer empty: it carries an
+> `AGENTS.md` holding the front lane's standing instruction, which adds ~70 tokens to the ~2,900
+> below. The four settings are otherwise unchanged and `skipBootstrap: true` still saves what it
+> saved. The one line that does not survive is *"there is nothing left to inject"* — so
+> `contextInjection` now has something to skip and is no longer settled.
+
 Syrax's standing runtime configuration is four lines, and the prompt they produce costs **~2,900
 tokens per turn**:
 

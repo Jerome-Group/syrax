@@ -1,5 +1,11 @@
 # The front lane does not stream
 
+> **Amended by [ADR-0016](0016-the-lanes-are-recomposed-on-failure-rate-and-the-front-lane-is-told-not-to-guess.md).** The decision stands; its *value* argument does not. That
+> argument rested on Cerebras' ~3,000 tok/s making an expanded reply ~270 ms, and Cerebras is gone
+> — the same reply is 5.00 s on the current top rung, so this record's own first *revisit when*
+> has fired and the argument is struck. What survives untouched is the finding that the mechanism
+> was never reachable, and the decision now rests on that alone.
+
 The front lane sends a finished `sendMessage`. A typing indicator covers the gap. Only a **slow
 turn** — one where the front lane delegates to the worker — gets a progress message, and the
 progress message is triggered by that delegation rather than by a timer.
