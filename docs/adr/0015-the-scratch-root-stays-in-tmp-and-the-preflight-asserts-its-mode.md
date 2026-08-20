@@ -1,5 +1,15 @@
 # The scratch root stays in /tmp, and the pre-flight asserts its mode
 
+> **Amended by [ADR-0017](0017-the-gateway-lock-directory-is-not-relocated-and-the-preflight-creates-it-at-0700.md) in one part.** The
+> **"The scratch surface is larger than one directory"** section below defers
+> `os.tmpdir()/openclaw-<uid>` as noted-and-not-decided; it is decided there, and that section no
+> longer states an open question. Two of its readings do not carry across and are corrected there
+> rather than amended here: that directory **does** take `TMPDIR`, so this record's *no compliant
+> configuration* argument stops at `/tmp/openclaw` — and what makes a lock outliving its process
+> harmless is the gateway **port probe**, not the mtime sweep. Everything else below — the
+> placement, the technically-impossible argument, and the `0700` assertion on `/tmp/openclaw` — is
+> untouched.
+
 The runtime's scratch root remains the hardcoded `/tmp/openclaw`. No symlink, no sweep, no fork of
 the pinned build. The wrapper's pre-flight is to assert the directory is mode `0700` before the
 gateway starts, because the runtime creates that mode without enforcing it. That assertion is what
