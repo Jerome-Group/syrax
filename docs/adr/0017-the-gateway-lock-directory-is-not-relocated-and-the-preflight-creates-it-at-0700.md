@@ -6,11 +6,16 @@ The runtime's **second** scratch directory — `os.tmpdir()/openclaw-<uid>`, whe
 [ADR-0005](0005-launchd-supervises-syrax-as-two-launchagents.md)'s failure table gains no row.
 
 **This amends [ADR-0015](0015-the-scratch-root-stays-in-tmp-and-the-preflight-asserts-its-mode.md)
-in one part.** That record's *"The scratch surface is larger than one directory"* section noted this
-directory at mode `755` holding locks with dead pids, and deferred it by name; this is that answer,
-and it extends the same pre-flight. Everything else in ADR-0015 stands: its acceptance of
-`/tmp/openclaw`, its technically-impossible argument, and its reading that the RAID0 constraint
-reaches what Syrax *stores* are the ground this rests on and are not re-opened here.
+in one part, and discharges its deferral.** That record's *"The scratch surface is larger than one
+directory"* section noted this directory at mode `755` holding locks with dead pids and deferred it
+to [#108](https://github.com/Jerome-Group/syrax/issues/108) by name; this is that answer, and it
+extends the same pre-flight. The amendment proper is narrower and is argued below: ADR-0015's
+*no compliant configuration* argument is true of `/tmp/openclaw` and does not reach this directory,
+which takes `TMPDIR`.
+
+Everything else in ADR-0015 stands and is the ground this rests on: its acceptance of
+`/tmp/openclaw`, the technically-impossible clause **as applied to `/tmp/openclaw`**, and its
+reading that the RAID0 constraint reaches what Syrax *stores*. **Placement is not re-opened here.**
 
 Everything below is measured against the pinned `openclaw@2026.6.34`
 ([#92](https://github.com/Jerome-Group/syrax/issues/92)), driving `dist/gateway-lock-G25QtHgv.js`
@@ -46,7 +51,8 @@ invoked a second time.
 
 ## The port probe is what makes a stale lock harmless, and it runs first
 
-The ticket that raised this assumed a stale-lock sweep was the mechanism. It is not. `runGatewayLoop`
+[#108](https://github.com/Jerome-Group/syrax/issues/108) assumed a stale-lock sweep was the
+mechanism — ADR-0015 named the residue without naming a mechanism at all. It is not. `runGatewayLoop`
 always passes `lockPort`, and `resolveGatewayOwnerStatus` opens with
 `if (port != null) { if (await checkPortFree(port)) return "dead" }` — so a free gateway port
 classifies the lock's owner **dead before `isPidAlive` or the `ps` argv check is consulted at all**.
@@ -98,9 +104,12 @@ there is none.
 ## Orphaning is permanent, and that is not "reaping is missing"
 
 Reaping is lazy **and keyed by config path**. The filename hashes `configPath`, so the three locks
-found on the mini hash `prototype-57-WIPE-ME/openclaw.{secretref,interp,fileref}.json` — paths v1
-will never compute again. Nothing ever tries to acquire *those* paths, so nothing ever reaps them,
-and ADR-0015 established that nothing sweeps `$TMPDIR` on this macOS.
+#108 found on the mini hashed `prototype-57-WIPE-ME/openclaw.{secretref,interp,fileref}.json` —
+paths v1 will never compute again. Nothing ever tries to acquire *those* paths, so nothing ever
+reaps them, and ADR-0015 established that nothing sweeps `$TMPDIR` on this macOS. (#108 deleted
+those three by hand and `chmod 700`'d the directory, as one-off prototype cleanup rather than as a
+mechanism; an unwrapped `openclaw gateway` recreates it at `755`, which is what the decision below
+exists to prevent.)
 
 **Every config-path change therefore strands one lock file forever.** In v1 that is one path, so the
 steady state is one live lock and zero orphans — which is why the finding changes nothing here and
