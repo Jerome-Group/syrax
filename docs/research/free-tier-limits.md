@@ -13,6 +13,12 @@ and the inline annotations wherever a 2026-08-16 fact did not survive. A sixth p
 same day: [Mistral](#mistral--the-sixth-provider-added-2026-08-18), whose numbers are also
 login-gated and turned out to be per model rather than per plan.
 
+> **Read [Every rung re-measured — 2026-08-20](#every-rung-re-measured--2026-08-20) first.**
+> Cerebras had **no free tier** — every `5 RPM · 30K TPM · 1M tokens/day` figure in this file is its
+> Free **Trial** row, and the balance ran out on 2026-08-18. Groq's binding limit is 8,000 TPM on
+> every tool-capable model, Mistral is the widest free lane rather than one the front cannot use,
+> Gemini's quota is per model with half its names being aliases, and Z.AI's floor has slowed 20×.
+
 ## The short version
 
 | | Gemini 3.6 / 3.7 Flash | Z.AI `glm-4.7-flash` |
@@ -584,6 +590,131 @@ on this provider. Per-lane headroom for Mistral is a per-minute statement or it 
   and it publishes **no numbers at all**. #56 found that model ids rot faster than the decisions
   naming them; documentation URLs rot the same way, and a citation that 404s is worse than one that
   is merely stale, because nothing is left to correct against.
+
+## Every rung re-measured — 2026-08-20
+
+Research for [#94](https://github.com/Jerome-Group/syrax/issues/94), after Cerebras' trial balance
+ran out and took the front lane's top rung with it. Everything below was measured against the live
+APIs and, where it concerns a turn rather than a call, against the pinned `openclaw@2026.6.34`.
+
+### The 40.4 s that demoted Groq was Syrax's own configuration
+
+[#56](https://github.com/Jerome-Group/syrax/issues/56) recorded a delegating turn on Groq at
+**40.4 s** and a sub-agent call refused `413 Request too large` four times, and concluded that Groq
+*"cannot be a worker rung at any hour of any day"*. Both findings rest on a setting nobody had
+looked at.
+
+`maxTokens: 8192` sat in the prototype's model definitions. Groq charges a **streaming** request its
+prompt *plus the output it reserves*, so a 2,745-token front prompt was presented as **10,931**
+against an 8,000 ceiling — `Limit 8000, Requested 10931`, reproduced exactly. Set `maxTokens: 1024`
+and the identical turn answers **200 in 776 ms**; a full delegating turn runs **4.4 s** with no
+failover and no 429, and Groq **serves sub-agent calls** at 620 ms and 1,089 ms.
+
+The rule is narrower than it first looks and was isolated by elimination: the same request with
+`max_tokens: 8192` **not** streaming returns 200, and so does one variant carrying
+`reasoning_effort`. What is established is the trap, not the formula — a streaming request plus a
+large reservation is refused, and OpenClaw streams.
+
+So Groq's demotion survives, and **its recorded reason does not**. What disqualifies Groq from the
+top of the front lane is that 8,000 TPM against a ~2,745-token prompt is **~2.6 calls a minute**,
+where one delegating turn is two front calls. Measured as a conversation rather than as a
+benchmark: three messages five seconds apart, twice. The first run cost **12.8 s** on the third
+message — two 429s, then a success — and the second run cost nothing, the bucket having refilled.
+**In neither run did the runtime advance to the configured Gemini fallbacks**; no
+`model_fallback_decision` was logged at all, which is #56's *retries in place* seen a second time.
+
+### Latency, paced — 10 calls per model, 20 s apart, ~2.7K prompt
+
+| Model | median | expanded (~1.2K out) | allowance | failures |
+|---|---|---|---|---|
+| Mistral `codestral-latest` | **0.86 s** | ~12 s | 125 req/min · 625K TPM | 0/5 |
+| Groq `openai/gpt-oss-20b` | 0.95 s | **2.28 s** | 1,000/day · 8,000 TPM | **4/10** (429) |
+| Mistral `ministral-3b-latest` | 0.98 s | 5.3–14.0 s | **750 req/min · 1.3M TPM** | 0/5 |
+| Gemini 3.5 Flash Lite | 1.01 s | 5.00 s | 15 RPM · 500/day | 0/10 |
+| Groq `openai/gpt-oss-120b` | 1.02 s | — | 1,000/day · 8,000 TPM | **4/10** (429) |
+| Gemini 3.1 Flash Lite | 1.09 s | — | 15 RPM · 500/day | 0/10 |
+| Mistral `mistral-small-latest` | 1.20 s | ~9 s | 50 req/min · 50K TPM | 0/5 |
+| Mistral `ministral-8b-latest` | 1.25 s | 10.7–19.5 s | 188 req/min · 625K TPM | 0/5 |
+| OpenRouter `nemotron-3-super-120b-a12b:free` | 1.33 s | — | account-wide cap | 0/4 |
+| Z.AI `glm-4.5-flash` | **13.99 s** (p90 39.8) | **32.7 s** (p90 73.8) | concurrency only | 0/10 |
+
+**Speed no longer discriminates.** Six candidates sit inside 0.86–1.09 s, a spread far smaller than
+the cost of one 429 — so the shortlist is chosen on latency and the winner on everything else.
+
+**Z.AI's floor has rotted and the guarantee it carries is now expensive.** #56 measured
+`glm-4.5-flash` at a **0.68 s** median over 20 of 20; today it is 14 s on a terse reply and 32.7 s
+on an expanded one, with a 73.8 s p90. Nothing failed, so *never dark for want of allowance* holds
+exactly as [ADR-0009](../adr/0009-the-chains-are-recomposed-and-stand-down-is-a-config-write.md)
+states it — but *only slow* now means a minute, and a rung this slow cannot be what answers an
+ordinary delegating turn.
+
+### Mistral is the widest free lane there is, and #59 measured it on the wrong axis
+
+[#59](https://github.com/Jerome-Group/syrax/issues/59) ruled Mistral *"not a front-lane rung at any
+token allowance"* on **48–109 tok/s** against Cerebras' ~3,000. That is throughput on a long
+generation, and the front lane's replies are terse — on the metric a conversation actually feels,
+`ministral-3b-latest` answers in **0.98 s**.
+
+Its allowance is the finding. Mistral publishes **only per-minute headers** — no daily row, no
+monthly row, on any of the twelve models sampled:
+
+| Model | req/min | tokens/min | terse |
+|---|---|---|---|
+| `ministral-3b-latest` | **750** | **1,300,000** | 0.98 s |
+| `devstral-latest` | 50 | 1,000,000 | 2.02 s |
+| `ministral-14b-latest` | 30 | 937,500 | 1.84 s |
+| `ministral-8b-latest` | 188 | 625,000 | 1.25 s |
+| `codestral-latest` | 125 | 625,000 | 0.86 s |
+| `mistral-medium-2505` | 25 | 375,000 | 1.60 s |
+| `mistral-small-latest` | 50 | 50,000 | 1.20 s |
+| `mistral-medium-latest` | 50 | **25,000** | 1.55 s |
+
+#59's sharpest finding is confirmed and now has a second instance: **the newest model is the
+tightest**, `mistral-medium-latest` at 25,000 TPM against `-2505`'s 375,000. All **37** Mistral chat
+models report `function_calling: true`, and `ministral-3b` and `-8b` both drove a real delegating
+turn through the runtime (3.18 s and 3.70 s).
+
+### Gemini's quota is per model, and half the model names are aliases
+
+The 429 body names its own quota:
+`GenerateRequestsPerMinutePerProjectPerModel-FreeTier`, value **15**, `retryDelay 49s`. Measured by
+saturating one row and immediately probing its neighbours:
+
+| Row | After saturating 3.5 Flash Lite | Verdict |
+|---|---|---|
+| `gemini-3.1-flash-lite` | **200** | **its own bucket** |
+| `gemini-flash-lite-latest` | 429 | alias of 3.5 — buys nothing |
+| `gemini-3.1-flash-lite-preview` | 429 (after saturating 3.1) | alias of 3.1 — buys nothing |
+| `gemini-2.5-flash-lite` | `404 no longer available` | **withdrawn** |
+
+So the Flash Lite stack is **two** rungs. The Flash rows (`gemini-3-flash-preview`, `3.6`, `3.7`)
+answer from their own buckets and remain the escape hatch at 20/day, not lanes.
+
+### Groq, per model
+
+| Model | req/day | TPM | tool calls |
+|---|---|---|---|
+| `openai/gpt-oss-120b` | 1,000 | 8,000 | yes |
+| `openai/gpt-oss-20b` | 1,000 | 8,000 | yes |
+| `openai/gpt-oss-safeguard-20b` | 1,000 | 8,000 | yes |
+| `qwen/qwen3.6-27b` | 1,000 | 8,000 | yes |
+| `groq/compound`, `groq/compound-mini` | 250 | **70,000** | **no** — `400 tool calling is not supported` |
+| `allam-2-7b` | 7,000 | 6,000 | no |
+
+The buckets are per model, so Groq rungs stack the way Gemini's do — but **every tool-capable model
+carries the same 8,000**, and the 70,000 rows cannot hold a lane that must call `sessions_spawn`.
+
+### OpenRouter has 16 free tool-capable models and one shared cap
+
+Sixteen `:free` models advertise tools at ≥32K context, against the single
+`openai/gpt-oss-20b:free` this repository has carried. The fast ones are
+`nvidia/nemotron-3-super-120b-a12b:free` (1.33 s), `nvidia/nemotron-3-nano-30b-a3b:free` (1.85 s)
+and the two `google/gemma-4` rows (~2.5 s).
+
+**Stacking them buys nothing.** Four models 429'd on every call once the batch had been running,
+including their tool probe, which is the account-wide free cap this document's provider matrix
+already records as *50 req/day*. Unlike Groq and Gemini, the ceiling is the account's, not the
+model's. Recorded as observed-and-consistent; it has not been isolated with a dedicated probe.
 
 ## Sources
 

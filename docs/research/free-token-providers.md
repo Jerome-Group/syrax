@@ -7,6 +7,34 @@ no local chat models — every candidate is a hosted API.
 
 ## Provider matrix
 
+> **[#94](https://github.com/Jerome-Group/syrax/issues/94), 2026-08-20 — the Cerebras row is a
+> trial, and three others are measured wrong.** Cerebras has **no free tier and never had one**: the
+> `$5` of credits expire in 30 days, they ran out on 2026-08-18, and every `5 RPM · 30K TPM · 1M
+> tokens/day` figure recorded across this repository is the Free **Trial** row. The note in this
+> table's last column — *"trial credits expire in 30 days"* — was the whole story and was read as a
+> footnote. **Strike Cerebras from the list.**
+>
+> Three more rows are wrong in the direction that matters, all measured against the live APIs:
+>
+> - **Groq's binding limit is 8,000 TPM, not the per-day figures here** — and it is 8,000 on *every*
+>   tool-capable model (`gpt-oss-120b`, `gpt-oss-20b`, `gpt-oss-safeguard-20b`, `qwen3.6-27b`), each
+>   with its own bucket at 1,000 req/day. `groq/compound` and `groq/compound-mini` carry 70,000 TPM
+>   and **reject tool calling outright**, so their headroom cannot be reached by any Syrax lane.
+> - **Mistral is far wider than "not published" suggests, and the numbers are in the headers.**
+>   `ministral-3b-latest` reports **750 req/min and 1,300,000 TPM**; `ministral-8b` and `codestral`
+>   625,000; `ministral-14b` 937,500. No daily or monthly header exists on any of them. The
+>   unofficial *~1 RPS, 500K TPM* figure understates the widest row by 2.6×.
+> - **Gemini's free quota is explicitly per model**, which the 429 body states in so many words:
+>   `GenerateRequestsPerMinutePerProjectPerModel-FreeTier`, value **15**. Saturating
+>   `gemini-3.5-flash-lite` leaves `gemini-3.1-flash-lite` answering — but `gemini-flash-lite-latest`
+>   and `gemini-3.1-flash-lite-preview` are **aliases that share their target's bucket**, and
+>   `gemini-2.5-flash-lite` now answers `404 no longer available`. Two real rungs, not five.
+>
+> The OpenRouter row is **confirmed** rather than corrected: its free cap is account-wide, not per
+> model, so stacking `:free` models buys nothing. See
+> [`free-tier-limits.md`](free-tier-limits.md#every-rung-re-measured--2026-08-20).
+
+
 | Provider | Best free model(s) | Context (free) | Rate limits (free) | Speed | Tool calls | Auth | ToS / data notes |
 |---|---|---|---|---|---|---|---|
 | [Cerebras](https://inference-docs.cerebras.ai/support/rate-limits) | `gpt-oss-120b`, `zai-glm-4.7` (†deprecating), `gemma-4-31b` | 64–65K (131K paid) | 5 RPM, 30K TPM, **1M tokens/day** per model | ~3,000 tok/s (gpt-oss-120b), ~1,000 (glm-4.7), ~1,850 (gemma) | Yes (OpenAI-compatible) | API key | Trial credits expire in 30 days; limits are per model |
