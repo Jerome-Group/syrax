@@ -1,5 +1,17 @@
 # The scratch root stays in /tmp, and the pre-flight asserts its mode
 
+> **Amended by [ADR-0017](0017-the-gateway-lock-directory-is-not-relocated-and-the-preflight-creates-it-at-0700.md) in one part, and its
+> deferral on the second directory is spent.** The deferral first: **"The scratch surface is larger
+> than one directory"** below hands `os.tmpdir()/openclaw-<uid>` to
+> [#108](https://github.com/Jerome-Group/syrax/issues/108) as noted-and-not-decided, and ADR-0017 is
+> that answer — so the section reads as an open question only if read on its own. The amendment
+> proper is to **"There is no compliant configuration"**, whose *"the only other path the resolver
+> will ever return is a user-scoped `os.tmpdir()/openclaw-<uid>`, which is the same internal disk"*
+> holds by default but not by construction: that path **does** take `TMPDIR`. The
+> technically-impossible argument is therefore true of `/tmp/openclaw`, which is what this record
+> decides, and is not general — ADR-0017 declines to relocate by choice rather than by
+> impossibility. Everything else below is untouched.
+
 The runtime's scratch root remains the hardcoded `/tmp/openclaw`. No symlink, no sweep, no fork of
 the pinned build. The wrapper's pre-flight is to assert the directory is mode `0700` before the
 gateway starts, because the runtime creates that mode without enforcing it. That assertion is what
