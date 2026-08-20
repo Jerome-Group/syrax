@@ -4,8 +4,8 @@
 > deferral on the second directory is spent.** The deferral first: **"The scratch surface is larger
 > than one directory"** below hands `os.tmpdir()/openclaw-<uid>` to
 > [#108](https://github.com/Jerome-Group/syrax/issues/108) as noted-and-not-decided, and ADR-0017 is
-> that answer — so the section reads as an open question only if read on its own. The amendment
-> proper is to **"There is no compliant configuration"**, whose *"the only other path the resolver
+> that answer. The amendment proper is to
+> **"There is no compliant configuration"**, whose *"the only other path the resolver
 > will ever return is a user-scoped `os.tmpdir()/openclaw-<uid>`, which is the same internal disk"*
 > holds by default but not by construction: that path **does** take `TMPDIR`. The
 > technically-impossible argument is therefore true of `/tmp/openclaw`, which is what this record
@@ -157,7 +157,9 @@ on macOS, and a later reader should not think it does.
 
 ## The scratch surface is larger than one directory
 
-Noted and deliberately not decided. `/var/folders/…/T/openclaw-<uid>` exists on the mini at mode
+Noted and deliberately not decided.
+*(Spent — [ADR-0017](0017-the-gateway-lock-directory-is-not-relocated-and-the-preflight-creates-it-at-0700.md).)*
+`/var/folders/…/T/openclaw-<uid>` exists on the mini at mode
 `755`, holding gateway lock files with dead pids, written by a path that is not this resolver — which
 would have created it at `0700`. That is
 [#108](https://github.com/Jerome-Group/syrax/issues/108), and its subject is supervision rather than

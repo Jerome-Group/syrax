@@ -361,3 +361,11 @@ The configuration every repository in the Organisation inherits — branch prote
 security defaults, and the per-repository settings. It is applied from the management hub, not
 from here.
 _Avoid_: template, policy, default
+
+**Spent-claim mark**:
+The italic parenthetical an ADR body carries on a claim a later record has spent, naming that
+record and linking to it — plus a `~~strikethrough~~` where the claim was wrong rather than merely
+overtaken. It sits immediately after the claim, names exactly one record, and adds no argument;
+ADR-0018 bounds it. Distinct from a **credential marker**, which is a placeholder in tracked
+configuration and has nothing to do with records.
+_Avoid_: marker, annotation, note
