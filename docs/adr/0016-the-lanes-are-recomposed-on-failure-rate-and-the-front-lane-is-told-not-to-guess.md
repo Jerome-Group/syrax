@@ -32,15 +32,28 @@ So the ordering criterion changes, and it is worth stating plainly because it is
 composition look wrong to anyone still reading the old records: **the shortlist is chosen on
 latency and the rung is chosen on failure rate.** The Owner set that order directly.
 
-Under it, Groq's demotion survives and **[#56](https://github.com/Jerome-Group/syrax/issues/56)'s
-reason for it does not.** That reason was a 40.4 s delegating turn, which turned out to be Syrax's
-own `maxTokens: 8192` rather than anything about Groq — corrected below, and at 1,024 the same turn
-runs 4.4 s. What actually disqualifies Groq from the top is that **8,000 TPM is ~2.6 calls a
-minute** and a delegating turn is two of them. Measured as a conversation rather than as a
-benchmark, the third message in a burst cost 12.8 s, and **the runtime never advanced to the
-configured fallbacks** — it retried in place, logging no fallback decision at all. A rung whose
-failure mode is a silent thirteen-second stall does not belong on the lane that owns the
-conversation. It belongs at the bottom of it, where the alternative is no answer at all.
+That criterion is what reverses ADR-0009's categorical that Mistral is *"not a front-lane rung at
+any token allowance"*. The judgement was sound on the axis it used — generation throughput — and
+the front lane's replies are terse, where throughput barely shows. On the axis that decides a
+conversation, `ministral-3b-latest` answers as fast as anything free and is the only candidate
+whose allowance a single user cannot exhaust. The categorical is withdrawn; the measurement behind
+it stands, and is why Mistral still loses the expanded-reply case.
+
+The same criterion keeps Groq's demotion and replaces its reason. **8,000 TPM is ~2.6 calls a
+minute** and a delegating turn is two of them, so the ceiling binds on an ordinary conversation
+rather than on load. Measured as a conversation instead of as a benchmark, the third message in a
+burst cost 12.8 s — and **the runtime never advanced to the configured fallbacks**, retrying in
+place and logging no fallback decision at all. A rung whose failure mode is a silent thirteen-second
+stall does not belong on the lane that owns the conversation. It belongs at the bottom of it, where
+the alternative is no answer.
+
+**What is *not* claimed here is that this re-explains the 40.4 s.** ADR-0009 already assigned that
+number to the ~41 s token-bucket reset, and nothing measured for this record contradicts it or
+reproduces it. There is an unreconciled detail rather than a correction: under the ceiling as
+measured now, #56's front-lane call of 6,141 prompt tokens carrying `maxTokens: 8192` should have
+been refused outright, and #56 records it as fitting. Either the accounting differed on the day or
+the front and worker calls were not shaped alike. It is left open, because the composition does not
+turn on it and a tidy story here would be invented rather than measured.
 
 ## No two lanes share a quota bucket, and that is now a choice rather than a hope
 
@@ -50,6 +63,11 @@ rather than one"*. Gemini's own refusal names the quota —
 model**, and two distinct Flash Lite models are two distinct allowances. Giving 3.5 to the front and
 3.1 to the worker retires that risk for free, and it is the reason 3.1 Flash Lite is deliberately
 absent from the front chain despite being fast enough for it.
+
+Mistral is the other pair split across lanes, and it is per model too, visibly: `ministral-3b` and
+`ministral-8b` report different per-minute rungs on the same key, so they are two rows rather than
+one allowance seen twice. Mistral publishes its remaining tokens on every response, which is what
+makes this checkable rather than inferred.
 
 The same per-model shape holds on Groq, and buys nothing: **every tool-capable Groq model carries
 the same 8,000 TPM**, and the two models with 70,000 refuse tool calling outright, so no Syrax lane
@@ -70,14 +88,16 @@ output it reserves**, so a 2,745-token prompt was presented as `Requested 10931`
 ceiling — and the identical call sent without streaming was not refused at all. OpenClaw streams.
 The invariant becomes:
 
-> **A rung's per-request ceiling must exceed the largest call its lane makes *plus that lane's
-> configured `maxTokens`*.** Both halves are Syrax's to set, so a lane that does not fit is a
-> configuration to change before it is a rung to remove.
+> **A rung's per-request ceiling must exceed the largest call its lane makes *plus that rung's own
+> configured `maxTokens`*.** The reservation is per model, not per lane, so two rungs of one chain
+> can sit on opposite sides of the same ceiling. Both halves are Syrax's to set, which makes a rung
+> that does not fit a configuration to change before it is a rung to remove.
 
-This is the correction that matters most, because the old form is what let a self-inflicted `413`
-be read as a property of the provider and produce ADR-0009's *"Groq cannot be a worker rung at any
-hour of any day"*. Groq serves sub-agent calls. `CONTEXT.md`'s **Wall** entry carried the same
-error in the glossary and was corrected in #94's own session.
+This is the correction that matters most, because the old form is what let a self-inflicted `413` be
+read as a property of the provider — ADR-0009 concluded that **Groq leaves the worker lane
+permanently**, and `docs/research/free-tier-limits.md` hardened that into *"at any hour of any
+day"*. Groq serves sub-agent calls, measured on the pinned runtime. `CONTEXT.md`'s **Wall** entry
+carried the same error in the glossary and was corrected in #94's own session.
 
 ## `maxTokens` is configuration Syrax states, per model
 
@@ -94,12 +114,12 @@ lanes' calls differ by a factor of two. A change to it is a change to which rung
 Disposition was the least-measured criterion, so it was measured: twenty questions no model could
 answer without a tool it did not have, graded for whether the reply asks or invents. The first
 result **inverted the composition this record was about to state** — the rung proposed for the tail
-invented nothing, and the proposed rung 1 invented half the time, with 3.1 Flash Lite inventing 18
-of 20 and answering *"the backup finished at 3:00 AM"*.
+invented nothing, and the proposed rung 1 invented half the time, with the worst of them answering *"the
+backup finished at 3:00 AM"* to a question about a machine it had never seen.
 
 The second result dissolved it. One instruction — *never state a fact you have not verified; if you
-cannot, say so and ask* — took every candidate to **0 or 1 of 20**, and the replies stayed useful
-rather than merely refusing. **Confabulation was a property of the prompt, not of the model.** So
+cannot, say so and ask* — took every candidate to at most one invention in twenty, and the replies
+stayed useful rather than merely refusing. **Confabulation was a property of the prompt, not of the model.** So
 the composition stands and acquires a line of standing prompt, and the general lesson is the one
 worth keeping: *an eval that overturns a model choice should be re-run against a fair prompt before
 the choice is changed.*
@@ -126,12 +146,12 @@ With it, the same question gets a plain refusal and a question back.
 ## ADR-0008 survives on one of its two arguments
 
 It argued the front lane need not stream **on value** — at Cerebras' ~3,000 tok/s an expanded reply
-was ~270 ms, so there was no perceptible window to fill — and **on availability**, since
+was a fraction of a second, so there was no perceptible window to fill — and **on availability**, since
 `sendMessageDraft` occurs zero times in the pinned runtime and ADR-0003 forswore building the call.
 
-The value argument is **struck, not amended.** An expanded reply on the new rung 1 is **5.00 s**,
-which is past the ~3 s [#59](https://github.com/Jerome-Group/syrax/issues/59) had already recorded
-as its stated bound, and ADR-0008's own first *revisit when* — *the front lane's fastest rung stops
+The value argument is **struck, not amended.** The same reply on the new rung 1 takes seconds
+rather than a fraction of one, past the bound [#59](https://github.com/Jerome-Group/syrax/issues/59)
+had already recorded, so ADR-0008's own first *revisit when* — *the front lane's fastest rung stops
 being fast* — has fired. Amending it would leave a reader weighing a comparison that no longer
 holds; striking it leaves the record honest about which leg it stands on.
 
@@ -143,8 +163,9 @@ argument in reserve, where before it had one.
 ## *Never dark, only slow* holds, and *slow* now means a minute
 
 Z.AI answered 10 of 10 and publishes no token or daily ceiling, so the guarantee — which ADR-0009
-narrowed to *never dark for want of allowance* — is intact exactly as written. Its median went from
-0.68 s to **32.7 s**, with a 73.8 s p90.
+narrowed to *never dark for want of allowance* — is intact exactly as written. What moved is the
+speed: like for like against #56's 0.68 s median on short calls, `glm-4.5-flash` now answers a terse
+turn in **13.99 s**, and an expanded one in 32.7 s with a 73.8 s p90.
 
 Nothing about the guarantee changes; what changes is what it buys. A floor that answers in a minute
 cannot be what serves an ordinary delegating turn, which is why Gemini 3.1 Flash Lite takes the top
@@ -161,11 +182,11 @@ working rung, and that is the honest reading of a promise that was made when it 
 - **The invariant is still a rule with no enforcement**, and now has two terms instead of one, so
   there is more to get wrong. Its failure still surfaces as a lane that refuses every large call.
 - **`ministral-3b-latest` is a 3B model on the front lane's second rung.** It was chosen because its
-  allowance cannot be exhausted by one person — 750 req/min against Gemini's 500/day — and it
-  invented 17 of 20 before the instruction and 1 of 20 after. That is a real dependence on a prompt
-  line holding, and it is the rung to suspect first if the Owner reports Syrax making things up.
-- **The front lane's prompt grows.** ADR-0011 measured it at ~2,900 tokens; the instruction adds
-  ~70 and the daily capacity falls proportionally. Small, and it is a cost rather than free.
+  allowance cannot be exhausted by one person, and it invented on most of the eval's questions
+  before the instruction and on one after. That is a real dependence on a prompt line holding, and it is the rung to suspect first if the Owner reports Syrax making things up.
+- **The front lane's prompt grows.** ADR-0011 measured it at ~2,900 tokens; the workspace file is
+  **258 injected characters**, or roughly 70 tokens at the 3.67 chars-per-token that ADR-0011
+  measured. Daily capacity falls proportionally. Small, and a cost rather than free.
 - **ADR-0011's `contextInjection: "continuation-skip"` is no longer worthless.** It was skipped
   because *"there is nothing left to inject"* once the workspace is empty. The workspace is no
   longer empty, so that knob now has something to skip and should be re-weighed rather than

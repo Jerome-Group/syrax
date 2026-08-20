@@ -1,10 +1,9 @@
 # The chains are re-composed, and a stand down is a config write
 
-> **Amended by [ADR-0016](0016-the-lanes-are-recomposed-on-failure-rate-and-the-front-lane-is-told-not-to-guess.md).** Both chains are re-composed again — Cerebras had no free
-> tier at all — and the invariant below measures the wrong quantity: a request is charged its
-> call **plus the output it reserves**, which is why this record's *"Groq cannot be a worker rung
-> at any hour of any day"* is false. The accepted risk that Flash Lite is load-bearing on two
-> lanes is retired, Gemini's quota being per model. Everything about stand down is untouched.
+> **Amended by [ADR-0016](0016-the-lanes-are-recomposed-on-failure-rate-and-the-front-lane-is-told-not-to-guess.md).** Both chains are composed again, the invariant below is
+> rewritten, *Groq leaves the worker lane permanently* is reversed, Mistral's exclusion from the
+> front lane is reversed, and the accepted risk that Flash Lite is load-bearing on two lanes is
+> retired. Everything about stand down is untouched.
 
 [ADR-0006](0006-the-runtime-routes-and-syrax-owns-the-escape-hatch.md)'s structure is untouched: the
 runtime's own chains route, Syrax owns the escape hatch and the usage report, and neither sits on
