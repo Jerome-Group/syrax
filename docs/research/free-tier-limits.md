@@ -711,10 +711,20 @@ Sixteen `:free` models advertise tools at ≥32K context, against the single
 `nvidia/nemotron-3-super-120b-a12b:free` (1.33 s), `nvidia/nemotron-3-nano-30b-a3b:free` (1.85 s)
 and the two `google/gemma-4` rows (~2.5 s).
 
-**Stacking them buys nothing.** Four models 429'd on every call once the batch had been running,
-including their tool probe, which is the account-wide free cap this document's provider matrix
-already records as *50 req/day*. Unlike Groq and Gemini, the ceiling is the account's, not the
-model's. Recorded as observed-and-consistent; it has not been isolated with a dedicated probe.
+**Stacking them buys nothing, and OpenRouter names the cap itself.** A dedicated probe long after
+the batch — where a per-model minute bucket would have recovered — returns
+`Rate limit exceeded: free-models-per-day`. The quota is the **account's, across all free models**,
+unlike Groq's and Gemini's per-model buckets, so a chain of `:free` rungs is one rung wearing
+several names.
+
+Two smaller corrections fall out. The unlock price in this document's provider matrix is **$5, not
+$10** — *"Add 5 credits to unlock 1000 free model requests"* — which changes nothing, since a
+purchased balance is ruled out on
+[#94](https://github.com/Jerome-Group/syrax/issues/94)'s own reasoning. And one row did **not**
+follow the cap: `google/gemma-4-31b-it:free` answered 200 while four others were refused in the
+same pass. That is recorded as measured and unexplained rather than reasoned away — it may be
+routed to an endpoint the counter does not reach, and anything built on it would be resting on
+that guess.
 
 ## Sources
 
