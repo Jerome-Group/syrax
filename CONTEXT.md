@@ -239,16 +239,22 @@ _Avoid_: quota — that is the provider's allowance, where this is what is left 
 self-imposed allowance, which this system deliberately does not have
 
 **Wall**:
-A limit a request fails on for its **size alone** — a model's per-request token ceiling, which
-refuses the call whether or not any allowance remains, and which no amount of waiting changes. It is
-the counterpart of *headroom*: headroom is what is left of an allowance and empties and refills,
-where a wall is a fixed property of the model, and a request either clears it or never will. The two
-earn separate names because a provider need not distinguish them — one answers both with the same
-error code and a `retry-after` on each, so a caller that reads the header alone will keep retrying a
-call that cannot succeed. Whether a lane's rungs clear that lane's largest call is therefore settled
-in configuration, before anything is sent.
+A limit a request fails on for its **size alone** — refused whether or not any allowance remains,
+and unchanged by any amount of waiting. It is the counterpart of *headroom*: headroom is what is
+left of an allowance and empties and refills, where a wall is met by a single call, which either
+clears it or never will. The two earn separate names because a provider need not distinguish them —
+one answers both with the same error code and a `retry-after` on each, so a caller that reads the
+header alone will keep retrying a call that cannot succeed.
+
+**The size that meets the wall is not the prompt, and it is partly Syrax's own choice.** A streaming
+request to Groq is charged its prompt *plus the output it reserves*, so the same conversation clears
+the wall or is refused by it depending on a `maxTokens` written in configuration — and the identical
+call sent without streaming is not refused at all. A wall is therefore a property of the request as
+sent rather than of the model as published: it moves when Syrax changes a setting, which makes
+clearing it something the configuration owns rather than something the provider fixes.
 _Avoid_: rate limit — it names the allowance, which is the thing this is not; context window — a
-different ceiling, belonging to what the model can read rather than to what the plan will accept
+different ceiling, belonging to what the model can read rather than to what the plan will accept;
+per-request ceiling — it names the wall as the model's alone, which is the half this entry corrects
 
 **Stand down**:
 Removing a provider from a lane until a stated reset, as against retrying it in a moment. The
