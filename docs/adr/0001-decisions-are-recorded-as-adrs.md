@@ -1,5 +1,10 @@
 # Decisions are recorded here, as ADRs
 
+> **Amended by [ADR-0018](0018-a-spent-claim-in-an-adr-body-is-marked-in-place.md) in one part.**
+> *"The **one** edit an existing record takes"* below is now two: a claim a later record has spent
+> may carry a mark where it sits. The pointer forward is unchanged, still required, and still comes
+> first; ADR-0018 bounds the second edit.
+
 Any decision this repository makes that the code cannot state for itself is written down in
 `docs/adr/` as a numbered, immutable record. `CODING_STANDARDS.md` §3 draws the line: the code
 carries *what* it does, and this directory carries the *why* — the constraint that ruled an
@@ -28,6 +33,7 @@ thing the paragraph above forbids — and the Organisation's conformance check a
 of a superseded record, so the practice is the Baseline's rather than this repository's invention.
 It is written here because the alternative is worse than untidy: a record found on its own, from a
 link in an issue, otherwise reads as current when it is not.
+*(Spent, on "the one edit" — [ADR-0018](0018-a-spent-claim-in-an-adr-body-is-marked-in-place.md).)*
 
 ## Consequences
 
