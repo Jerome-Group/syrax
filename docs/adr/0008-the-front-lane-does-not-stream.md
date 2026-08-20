@@ -1,5 +1,9 @@
 # The front lane does not stream
 
+> **Amended by [ADR-0016](0016-the-lanes-are-recomposed-on-failure-rate-and-the-front-lane-is-told-not-to-guess.md).** The decision stands. Its *value* argument — the one from
+> generation duration — does not, and is struck there rather than amended here. The finding that
+> the mechanism was never reachable is untouched.
+
 The front lane sends a finished `sendMessage`. A typing indicator covers the gap. Only a **slow
 turn** — one where the front lane delegates to the worker — gets a progress message, and the
 progress message is triggered by that delegation rather than by a timer.

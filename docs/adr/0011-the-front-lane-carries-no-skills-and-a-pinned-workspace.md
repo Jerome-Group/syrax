@@ -1,5 +1,9 @@
 # The front lane carries no skills, and its workspace is pinned
 
+> **Amended by [ADR-0016](0016-the-lanes-are-recomposed-on-failure-rate-and-the-front-lane-is-told-not-to-guess.md) in one part.** The workspace is no longer empty — it carries an
+> `AGENTS.md` holding the front lane's standing instruction — so the prompt cost below rises and
+> the line *"there is nothing left to inject"* no longer holds. The four settings are unchanged.
+
 Syrax's standing runtime configuration is four lines, and the prompt they produce costs **~2,900
 tokens per turn**:
 
