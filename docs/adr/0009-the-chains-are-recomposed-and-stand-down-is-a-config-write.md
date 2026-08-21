@@ -4,6 +4,11 @@
 > rewritten, *Groq leaves the worker lane permanently* is reversed, Mistral's exclusion from the
 > front lane is reversed, and the accepted risk that Flash Lite is load-bearing on two lanes is
 > retired. Everything about stand down is untouched.
+>
+> **Amended by [ADR-0021](0021-a-config-write-is-applied-when-it-is-written-and-landed-when-a-channel-reloads.md).** A stand down is still a config write, and the
+> write is still hot-applied — but it is not live on the next turn. It lands when a channel reloads,
+> so the actuator is the write **plus** a safe restart. Everything structural about stand down
+> stands.
 
 [ADR-0006](0006-the-runtime-routes-and-syrax-owns-the-escape-hatch.md)'s structure is untouched: the
 runtime's own chains route, Syrax owns the escape hatch and the usage report, and neither sits on
@@ -145,7 +150,8 @@ off-path stand down*, and never a per-request filter.
 
 #45 fired ADR-0006's first *revisit when* trigger by taking a model out of a chain from outside the
 runtime, with no restart — `config set agents.defaults.model.fallbacks` hot-applied on a running
-gateway, same process id, live on the next turn.
+gateway, same process id, ~~live on the next turn~~ *(spent —
+[ADR-0021](0021-a-config-write-is-applied-when-it-is-written-and-landed-when-a-channel-reloads.md))*.
 
 The answer turns on a separation the question ran together. **ADR-0006 made two arguments and #45
 killed exactly one:**

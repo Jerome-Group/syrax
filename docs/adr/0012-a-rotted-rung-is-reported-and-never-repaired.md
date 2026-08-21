@@ -86,9 +86,11 @@ capability it has. It is Syrax declining to guess from a source already measured
 
 **Removal is a different act and was weighed separately.** Taking a dead rung *out* needs no
 catalogue at all, and [#45](https://github.com/Jerome-Group/syrax/issues/45) and #62 established the
-actuator — a hot config write to `agents.defaults.model.fallbacks`, applied on a running gateway with
-no restart. So the cost of refusing removal is real: a dead first rung means every turn pays a
-round-trip until a person acts.
+actuator — a hot config write to `agents.defaults.model.fallbacks`, applied on a running gateway
+~~with no restart~~ *(spent —
+[ADR-0021](0021-a-config-write-is-applied-when-it-is-written-and-landed-when-a-channel-reloads.md))*.
+So the cost of refusing removal is real: a dead first rung means every turn pays a round-trip until a
+person acts.
 
 It is still refused as an automatic act, for two reasons. A 404 cannot be distinguished from a
 transient unrouting, so the evidence does not support an irreversible edit. And `CONTEXT.md`'s **stand
