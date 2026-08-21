@@ -3,6 +3,6 @@
   "private": true,
   "description": "The pin. `npm ci --prefix` installs this into a runtime root outside the checkout, so the installed tree is never a candidate for a commit and the lockfile is the only thing anybody reviews.",
   "dependencies": {
-    "openclaw": "2026.6.34"
+    "openclaw": "2026.7.1"
   }
 }
