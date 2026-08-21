@@ -118,10 +118,10 @@ keeping: **a provider's catalogue is evidence a model exists and is not evidence
 ## Revisit when
 
 - **The pinned runtime moves.** Both of this record's *cannot* claims are properties of
-  `2026.6.34`: the strict progress schema and the unconditional fallback notice. The Dependabot bump
-  to `2026.7.1` is open as [#134](https://github.com/Jerome-Group/syrax/pull/134), and
-  `test/delegating-turn.test.ts` is the cheapest check — it fails loudly if the draft stops being
-  deleted.
+  `2026.6.34`: the strict progress schema and the unconditional fallback notice.
+  `test/delegating-turn.test.ts` is the cheapest check against a new pin — it fails loudly if the
+  draft stops being deleted, and `test/runtime-config.test.ts` fails if a stated key stops being
+  one the runtime knows.
 - **A partial ever becomes visible.** If the runtime gains a token-level path to Telegram, ADR-0008
   reopens and so does this: a visible partial is the thing that would make continuing below one a
   real question rather than a described one.
