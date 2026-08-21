@@ -10,6 +10,8 @@ const deployment = readDeployment({
   stateDir: "/private/root/state",
   workspace: "/private/root/workspace",
   secretsStore: "/private/root/secrets/syrax.json",
+  logsDir: "/private/root/logs",
+  wrapperPath: "/private/root/bin/start-gateway.sh",
   ownerTelegramUserId: 100000000,
 });
 
@@ -40,6 +42,17 @@ describe("the generated runtime configuration", () => {
     assert.equal(config.agents.defaults.blockStreamingDefault, "off");
     assert.equal(config.agents.defaults.typingMode, "instant");
     assert.equal(config.tools.profile, "minimal");
+  });
+
+  it("states the log's fixed basename, its size bound and its redaction", () => {
+    assert.equal(config.logging.file, "/private/root/logs/openclaw.log");
+    assert.doesNotMatch(config.logging.file, /\d{4}-\d{2}-\d{2}/, "a dated basename rolls.");
+    assert.equal(config.logging.maxFileBytes, 26214400);
+    assert.equal(config.logging.redactSensitive, "tools");
+  });
+
+  it("names the port it listens on, so a second gateway collides rather than drifting", () => {
+    assert.equal(config.gateway.port, 18789);
   });
 
   it("leaves requireTopic unset, so a thread-less root message still binds to General", () => {

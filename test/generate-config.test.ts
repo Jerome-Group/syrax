@@ -1,31 +1,18 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { InvalidDeployment, readDeployment } from "../src/adapter/deployment.ts";
 import { InsecureSecretsStore } from "../src/adapter/secrets-store.ts";
 import { generateConfig } from "../src/cli/generate-config.ts";
+import { temporaryMachine, writePrivateSecretsStore } from "./machine.ts";
 
 function machine(overrides: Record<string, unknown> = {}) {
-  const root = mkdtempSync(join(tmpdir(), "syrax-generate-"));
-  const secrets = join(root, "secrets");
-  mkdirSync(secrets);
-  const store = join(secrets, "syrax.json");
-  writeFileSync(store, "{}");
-  chmodSync(store, 0o600);
-  chmodSync(secrets, 0o700);
+  const { root, deployment } = temporaryMachine({ configPath: undefined, ...overrides });
+  writePrivateSecretsStore(deployment.secretsStore as string);
   return {
     root,
-    deployment: {
-      runtimeRoot: join(root, "runtime"),
-      configPath: join(root, "shared", "openclaw.json"),
-      stateDir: join(root, "state"),
-      workspace: join(root, "workspace"),
-      secretsStore: store,
-      ownerTelegramUserId: 100000000,
-      ...overrides,
-    },
+    deployment: { ...deployment, configPath: join(root, "shared", "openclaw.json") },
   };
 }
 
@@ -43,6 +30,7 @@ describe("generating the runtime configuration", () => {
     assert.equal(statSync(join(root, "shared")).mode & 0o777, 0o700);
     assert.equal(statSync(resolved.workspace).mode & 0o777, 0o700);
     assert.equal(statSync(resolved.stateDir).mode & 0o777, 0o700);
+    assert.equal(statSync(resolved.logsDir).mode & 0o777, 0o700);
   });
 
   it("puts the standing instruction where the runtime injects it from", () => {

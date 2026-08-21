@@ -105,9 +105,18 @@ For this the unit reads the gateway's own log, so it keeps a byte offset and rep
 actually covered** rather than only when it last ran — a log it cannot open, or a gap it can prove it
 missed, is *unknown* rather than a quiet day.
 
-Both units are launched through a wrapper script rather than the binary. The wrapper is what sources
-the secrets file and sets the `PATH` a supervisor does not provide; putting credentials in the unit
-definition itself would leave live keys in plaintext in a file that is otherwise a tracked example.
+Both units are launched through a wrapper script rather than the binary, and the gateway's is
+generated from the deployment by `src/cli/install-gateway-agent.ts`. The wrapper sets the `PATH` a
+supervisor does not provide, opens the capture, and runs the **pre-flight**; credentials reach the
+runtime through the secrets store rather than through it, and putting them in the unit definition
+would leave live keys in plaintext in a file that is otherwise a tracked example.
+
+The pre-flight's gating is asymmetric and the asymmetry is the design. It **refuses to start**,
+exiting `2`, on a credential ref the runtime cannot resolve, on a scratch root the machine has left
+readable, and on a lock or logs directory it cannot make private — each of those being a gateway
+that would otherwise come up and be wrong. It **warns and proceeds** on a posture finding from the
+secrets audit and on automatic restart after power loss being switched off, neither of which costs
+the Owner their chatbot today. A check that always refuses is a check somebody removes.
 
 Every wall-clock schedule — the index passes and the morning brief — is a launchd calendar job that
 pokes a loopback endpoint, rather than being split between launchd and the runtime's own scheduler.
@@ -118,10 +127,9 @@ That keeps one auditable answer to *what can message me unprompted*.
 Logs go to the `logs` path, outside the checkout with the other private roots, because gateway logs
 contain **chat content** — private runtime state by the same definition as the chat archive.
 
-**Rotate them.** A supervisor's output redirection appends without bound, so rotation is a
-`newsyslog.d` entry rather than something to be remembered. If the volume holding the logs is not
-mounted, the job cannot open its log and fails loudly, which is the correct failure: the runtime's
-state directory is on that volume anyway.
+**Rotate them.** An append-only capture grows without bound, so rotation is arranged rather than
+remembered. If the volume holding the logs is not mounted, the job cannot open its log and fails
+loudly, which is the correct failure: the runtime's state directory is on that volume anyway.
 
 **The runtime writes a log of its own, and its path must be set.** Left unset it lands outside the
 `logs` path entirely, which is chat content in the wrong place — but it is no longer only a placement
@@ -140,10 +148,19 @@ for here rather than left to optimism. Redaction is stated because the secrets c
 file-backed refs and a log line is where that assumption gets tested.
 
 **Do not put a second rotator over it.** The runtime already rotates and prunes its own file, and two
-rotators over one file lose the window a reader is part-way through. The supervisor-level rotation
-entry names the supervisor's own capture files **individually** — a directory glob is how this fails
-silently once another file appears there. Name those captures so they fall outside the runtime's
-prune pattern.
+rotators over one file lose the window a reader is part-way through. The capture is a different file
+with a different writer, named so it falls outside the runtime's prune pattern, and it is rolled at
+each start rather than by anything that could reach the runtime's own log.
+
+**The supervisor may not be able to open the capture at all.** On this machine it cannot: launchd
+exits `EX_CONFIG` before the job runs when its capture path is on the external volume the logs live
+on — with a space in the path and without one alike — while the job's own process writes there
+without complaint. So the **wrapper** opens the capture, as its first statement, before any check
+that might need to report a refusal. Only the error stream is kept: the runtime's own log is a
+measured superset of its output stream, and capturing that too would be a second unrotated copy of a
+rotated file.
+[ADR-0020](adr/0020-the-wrapper-opens-the-gateways-capture-and-keeps-only-stderr.md) carries the
+measurements.
 
 **Create the `logs` path at mode 700.** The runtime creates it with no mode and it lands
 world-readable under a default umask, which is wrong for a directory holding chat content. That

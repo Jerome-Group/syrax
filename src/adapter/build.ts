@@ -6,6 +6,7 @@
 
 import type { Deployment } from "./deployment.ts";
 import { agentDefaults, agentList } from "./general-agent.ts";
+import { loggingBlock } from "./runtime-log.ts";
 import { providerBlocks } from "./providers.ts";
 import { secretsProviderBlock, secretPaths, secretRef } from "./secrets-store.ts";
 import { ownerCommandAllowlist, telegramChannel } from "./telegram-channel.ts";
@@ -26,8 +27,10 @@ export function buildRuntimeConfig(deployment: Deployment) {
     commands: ownerCommandAllowlist(deployment),
     gateway: {
       mode: "local",
+      port: deployment.gatewayPort,
       auth: { mode: "token", token: secretRef(secretPaths.gatewayAuthToken) },
     },
     secrets: { providers: secretsProviderBlock(deployment.secretsStore) },
+    logging: loggingBlock(deployment.logsDir),
   };
 }

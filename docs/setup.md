@@ -36,18 +36,32 @@ commit.
    It refuses before it writes: on a secrets store the machine has left readable, and on any root
    inside the checkout.
 
-6. **Start the gateway** against what was generated, with no credential in its environment:
+6. **Write the wrapper and the LaunchAgent**, then load it. Nothing is loaded for you: the files
+   are written, and starting the job is your command.
 
    ```sh
-   OPENCLAW_CONFIG_PATH="$GENERATED_CONFIG" OPENCLAW_STATE_DIR="$STATE_DIR" \
-     node "$RUNTIME_ROOT/node_modules/openclaw/openclaw.mjs" gateway
+   node src/cli/install-gateway-agent.ts "$DEPLOYMENT"
+   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jerome-group.syrax.gateway.plist
    ```
+
+   The wrapper is what runs, never the runtime binary directly. It sets the `PATH` a supervisor does
+   not provide, opens the capture, and runs the pre-flight — which **refuses to start** on a
+   credential ref the runtime cannot resolve or a scratch directory the machine has left readable,
+   and **warns and proceeds** on a posture finding. `KeepAlive` brings the gateway back from a
+   crash; `launchctl bootout gui/$(id -u)/com.jerome-group.syrax.gateway` stops it.
 
 7. Before committing a change, inspect the staged file list and search it for credentials, private
    conversations, machine-specific paths, and provider responses.
 
-Supervising this as a LaunchAgent, and the pre-flight that refuses to start rather than start
-wrong, is a later ticket. Until then it is a foreground process.
+Running it in the foreground is still the way to watch a start closely:
+
+```sh
+OPENCLAW_CONFIG_PATH="$GENERATED_CONFIG" OPENCLAW_STATE_DIR="$STATE_DIR" \
+  node "$RUNTIME_ROOT/node_modules/openclaw/openclaw.mjs" gateway
+```
+
+Only one gateway can hold port 18789, and a foreground one keeps the supervised one down without
+saying so — the runtime exits `0` on a taken port, which is not a failure `KeepAlive` retries.
 
 ## Proving it without a private account
 
@@ -68,7 +82,7 @@ An adapter is ready for a setup guide only when it can state:
 | Question | This adapter's answer |
 |----------|-----------------------|
 | the exact runtime and version | `openclaw@2026.6.34`, pinned in `runtime/package-lock.json` |
-| the install, start, test, and stop commands | steps 2 and 6, and the section above; stopping is a signal to the foreground process until supervision lands |
+| the install, start, test, and stop commands | steps 2 and 6, and the section above; `launchctl bootstrap` and `bootout`, or a signal to the foreground process |
 | where secrets are read from | one JSON store, by file-backed ref, refused at an insecure mode |
 | which tools are enabled by default | `tools.profile: "minimal"`, and both skills catalogues off |
 | where state is written and how it is kept outside this repository | `stateDir` and `workspace` in the deployment; the generator refuses either inside the checkout |

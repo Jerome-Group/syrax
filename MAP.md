@@ -16,6 +16,7 @@ Start here: `README.md`, then `AGENTS.md`.
 | Setup | Safe installation and runtime-injection sequence | `docs/setup.md` |
 | Configuration | Public contract and placeholder values | `config/syrax.example.toml` |
 | Runtime adapter | Syrax's decisions as one generated runtime configuration | `src/adapter/build.ts` |
+| Supervision | The LaunchAgent, and the wrapper's pre-flight that refuses to start wrong | `src/supervision/launch-agent.ts` |
 | Runtime pin | The exact runtime version, installed outside the checkout | `runtime/package.json` |
 | Tests | The suite and the two local wires it drives the gateway through | `test/` |
 | Agent skills | The routines an agent follows here, one file per skill | `docs/agents/` |

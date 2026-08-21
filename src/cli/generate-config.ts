@@ -35,6 +35,7 @@ export function generateConfig(deployment: Deployment): void {
   for (const directory of [
     deployment.workspace,
     deployment.stateDir,
+    deployment.logsDir,
     dirname(deployment.configPath),
   ]) {
     // `mode` applies only to a directory this call creates, and every one of these may already
