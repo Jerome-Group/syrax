@@ -21,6 +21,11 @@ to it is configuration rather than a layer of code on the request path: `src/ada
 runtime's own configuration file, and exits
 ([ADR-0019](adr/0019-the-configuration-contract-is-generated-and-the-generator-runs-before-the-gateway.md)).
 
+Syrax's own proactive writes do not travel that path. `src/surface/` sends them to the Bot API
+directly, because the failure is the point: a send into a cleared carrier is the only report the
+platform ever makes of one, and it only stays legible if Telegram's own description arrives intact
+([ADR-0013](adr/0013-a-chats-existence-is-syraxs-not-the-owners-furniture.md)).
+
 ## Components
 
 | Component | Public contract | Private material |
@@ -41,8 +46,9 @@ this checkout; the ignore rules are only the final backstop.
 
 ## Current state
 
-The walking skeleton stands: one bot locked to the Owner's Telegram ID, one **General** chat, and
-the front lane answering it — green against a local stub of each wire, so the reply path is proven
-without an external call. The four chats, the worker lane, the capability tool layers and the
-search index are future project work. Each concrete choice adds a decision record when its reason
+The four chats stand: one bot locked to the Owner's Telegram ID, carrying General, Academic, Media
+and System as an agent each, with a thread-less root message answered as General and a cleared
+carrier recreated by the write path — green against a local stub of each wire, so the reply path is
+proven without an external call. The worker lane, the capability tool layers and the search index
+are future project work. Each concrete choice adds a decision record when its reason
 would not be obvious from the code.

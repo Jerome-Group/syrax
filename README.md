@@ -9,11 +9,12 @@ the layout and [`AGENTS.md`](AGENTS.md) for the working rules.
 
 ## Status
 
-🚶 **Walking skeleton.** One bot locked to a single Telegram account, one **General** chat, and the
-front lane answering it. The runtime is OpenClaw, pinned to an exact version and installed outside
-this checkout; the adapter that configures it, and the suite that proves the reply path against a
-local stub of each wire, are here. The four chats, the worker lane, the capability tool layers and
-the search index are still ahead.
+🚶 **Four chats standing.** One bot locked to a single Telegram account, carrying **General**,
+**Academic**, **Media** and **System** as a capability boundary each, with the front lane answering
+all four and the write path recreating a chat's topic the moment a send finds it cleared. The
+runtime is OpenClaw, pinned to an exact version and installed outside this checkout; the adapter
+that configures it, and the suite that proves the reply path against a local stub of each wire, are
+here. The worker lane, the capability tool layers and the search index are still ahead.
 
 ## What is here
 

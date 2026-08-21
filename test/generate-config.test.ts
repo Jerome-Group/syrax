@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 import { InvalidDeployment, readDeployment } from "../src/adapter/deployment.ts";
 import { InsecureSecretsStore } from "../src/adapter/secrets-store.ts";
-import { generateConfig } from "../src/cli/generate-config.ts";
+import { generateConfig } from "../src/adapter/generator.ts";
 import { temporaryMachine, writePrivateSecretsStore } from "./machine.ts";
 
 function machine(overrides: Record<string, unknown> = {}) {
@@ -24,7 +24,7 @@ describe("generating the runtime configuration", () => {
     chmodSync(join(root, "shared"), 0o755);
 
     const resolved = readDeployment(deployment);
-    generateConfig(resolved);
+    generateConfig(resolved, {});
 
     assert.equal(statSync(resolved.configPath).mode & 0o777, 0o600);
     assert.equal(statSync(join(root, "shared")).mode & 0o777, 0o700);
@@ -36,9 +36,9 @@ describe("generating the runtime configuration", () => {
   it("puts the standing instruction where the runtime injects it from", () => {
     const { deployment } = machine();
     const resolved = readDeployment(deployment);
-    generateConfig(resolved);
+    generateConfig(resolved, {});
     assert.match(
-      readFileSync(join(resolved.workspace, "AGENTS.md"), "utf8"),
+      readFileSync(join(resolved.workspace, "general", "AGENTS.md"), "utf8"),
       /Never state a fact you have not verified/,
     );
   });
@@ -46,7 +46,7 @@ describe("generating the runtime configuration", () => {
   it("refuses a root inside the checkout, where one git add would make it public", () => {
     const { deployment } = machine();
     assert.throws(
-      () => generateConfig(readDeployment({ ...deployment, stateDir: import.meta.dirname })),
+      () => generateConfig(readDeployment({ ...deployment, stateDir: import.meta.dirname }), {}),
       /inside the checkout/,
     );
   });
@@ -54,7 +54,7 @@ describe("generating the runtime configuration", () => {
   it("refuses a secrets store the machine has left readable", () => {
     const { deployment } = machine();
     chmodSync(deployment.secretsStore as string, 0o644);
-    assert.throws(() => generateConfig(readDeployment(deployment)), InsecureSecretsStore);
+    assert.throws(() => generateConfig(readDeployment(deployment), {}), InsecureSecretsStore);
   });
 });
 

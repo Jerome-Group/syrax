@@ -5,6 +5,7 @@
   "stateDir": "/absolute/path/outside/this/repository/runtime-state",
   "workspace": "/absolute/path/outside/this/repository/workspace",
   "secretsStore": "/absolute/path/outside/this/repository/secrets/syrax.json",
+  "carrierMap": "/absolute/path/outside/this/repository/runtime-state/carriers.json",
   "logsDir": "/absolute/path/outside/this/repository/logs",
   "wrapperPath": "/absolute/path/outside/this/repository/bin/start-gateway.sh",
   "ownerTelegramUserId": 100000000

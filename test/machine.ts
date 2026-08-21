@@ -19,6 +19,7 @@ export function temporaryMachine(overrides: Record<string, unknown> = {}) {
       stateDir: join(root, "state"),
       workspace: join(root, "workspace"),
       secretsStore: join(root, "secrets", "syrax.json"),
+      carrierMap: join(root, "state", "carriers.json"),
       logsDir: join(root, "logs"),
       wrapperPath: join(root, "bin", "start-gateway.sh"),
       ownerTelegramUserId,

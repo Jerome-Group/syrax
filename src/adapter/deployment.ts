@@ -16,6 +16,8 @@ export type Deployment = {
   workspace: string;
   /** The one JSON secrets store (ADR-0010). */
   secretsStore: string;
+  /** The provisioning map: which topic carries each chat, rewritten wherever a send heals one. */
+  carrierMap: string;
   /** Where both log surfaces land: the runtime's own file, and the capture beside it (ADR-0020). */
   logsDir: string;
   /** The wrapper the LaunchAgent runs instead of the binary, and never the binary (ADR-0005). */
@@ -49,6 +51,7 @@ const requiredPaths = [
   "stateDir",
   "workspace",
   "secretsStore",
+  "carrierMap",
   "logsDir",
   "wrapperPath",
 ] as const;
@@ -77,6 +80,7 @@ export function readDeployment(source: unknown): Deployment {
     stateDir: input.stateDir as string,
     workspace: input.workspace as string,
     secretsStore: input.secretsStore as string,
+    carrierMap: input.carrierMap as string,
     logsDir: input.logsDir as string,
     gatewayPort: readPort(input.gatewayPort),
     wrapperPath: input.wrapperPath as string,

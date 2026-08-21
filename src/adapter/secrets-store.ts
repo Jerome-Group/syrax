@@ -4,7 +4,7 @@
  * so a store the machine has left readable is refused rather than used.
  */
 
-import { statSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { dirname } from "node:path";
 
 /** The SecretRef provider name the generated configuration refers to the store by. */
@@ -61,4 +61,25 @@ export function assertSecretsStoreIsPrivate(storePath: string): void {
       `${storePath} is mode ${(store.mode & 0o777).toString(8)}, expected 600.`,
     );
   }
+}
+
+export class MissingSecret extends Error {}
+
+/**
+ * What the runtime resolves a ref to, resolved here for the units that talk to a wire without
+ * going through the runtime. Reading is not enough on its own: the store's mode is its protection,
+ * so a store the machine has left readable is refused here exactly as it is at generation.
+ */
+export function readSecret(storePath: string, id: string): string {
+  assertSecretsStoreIsPrivate(storePath);
+  const path = id.split("/").filter((segment) => segment !== "");
+  let held: unknown = JSON.parse(readFileSync(storePath, "utf8"));
+  for (const segment of path) {
+    if (typeof held !== "object" || held === null) break;
+    held = (held as Record<string, unknown>)[segment];
+  }
+  if (typeof held !== "string" || held === "") {
+    throw new MissingSecret(`${storePath} holds nothing at ${id}.`);
+  }
+  return held;
 }
