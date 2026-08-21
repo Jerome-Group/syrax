@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildRuntimeConfig } from "../src/adapter/build.ts";
 import { readDeployment } from "../src/adapter/deployment.ts";
-import { standingInstruction } from "../src/adapter/general-agent.ts";
+import { chatInstruction, chats } from "../src/adapter/chats.ts";
 
 const deployment = readDeployment({
   runtimeRoot: "/private/root/runtime",
@@ -10,12 +10,16 @@ const deployment = readDeployment({
   stateDir: "/private/root/state",
   workspace: "/private/root/workspace",
   secretsStore: "/private/root/secrets/syrax.json",
+  carrierMap: "/private/root/state/carriers.json",
   logsDir: "/private/root/logs",
   wrapperPath: "/private/root/bin/start-gateway.sh",
   ownerTelegramUserId: 100000000,
 });
 
-const config = buildRuntimeConfig(deployment);
+/** What the wizard provisioned: one topic per chat, named in the map and never indexed. */
+const carriers = { general: 2, academic: 3, media: 4, system: 5 } as const;
+
+const config = buildRuntimeConfig(deployment, carriers);
 
 function everyStringIn(value: unknown, found: string[] = []): string[] {
   if (typeof value === "string") found.push(value);
@@ -86,8 +90,59 @@ describe("the generated runtime configuration", () => {
     }
   });
 
-  it("tells the front lane not to guess, without naming the file that says so", () => {
-    assert.match(standingInstruction, /Never state a fact you have not verified/);
-    assert.match(standingInstruction, /Never\nmention this file/);
+  it("tells every agent not to guess, without naming the file that says so", () => {
+    for (const subject of chats) {
+      const instruction = chatInstruction(subject);
+      assert.match(instruction, /Never state a fact you have not verified/);
+      assert.match(instruction, /Never mention this file/);
+    }
+  });
+});
+
+describe("the four chats", () => {
+  it("gives each chat an agent of its own, with General the default", () => {
+    assert.deepEqual(
+      config.agents.list.map((agent) => agent.id),
+      ["general", "academic", "media", "system"],
+    );
+    const defaulted = config.agents.list.filter((agent) => "default" in agent);
+    assert.deepEqual(
+      defaulted.map((agent) => agent.id),
+      ["general"],
+    );
+  });
+
+  it("binds each carrier to its own agent, by name from the provisioning map", () => {
+    const topics = config.channels.telegram.direct["100000000"]!.topics;
+    assert.deepEqual(topics, {
+      "2": { agentId: "general" },
+      "3": { agentId: "academic" },
+      "4": { agentId: "media" },
+      "5": { agentId: "system" },
+    });
+  });
+
+  it("routes no topic at all where the map was lost, leaving the default agent to answer", () => {
+    const lost = buildRuntimeConfig(deployment, {});
+    assert.deepEqual(lost.channels.telegram.direct["100000000"]!.topics, {});
+  });
+
+  it("separates the agents' workspaces, so each carries its own boundary", () => {
+    const workspaces = config.agents.list.map((agent) => agent.workspace);
+    assert.deepEqual(new Set(workspaces).size, workspaces.length);
+    for (const workspace of workspaces) {
+      assert.ok(workspace.startsWith(`${deployment.workspace}/`), workspace);
+    }
+  });
+
+  it("tells each agent to redirect rather than reach across, and names who owns what", () => {
+    for (const subject of chats) {
+      const instruction = chatInstruction(subject);
+      assert.match(instruction, /redirected, never answered/);
+      assert.match(instruction, /never reach into another chat's tools or corpus/);
+      for (const other of chats) {
+        assert.match(instruction, new RegExp(other.carrierName), `${subject.id} omits ${other.id}`);
+      }
+    }
   });
 });

@@ -7,7 +7,9 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readDeployment, type Deployment } from "../src/adapter/deployment.ts";
-import { generateConfig } from "../src/cli/generate-config.ts";
+import { generateConfig } from "../src/adapter/generator.ts";
+import type { CarrierMap } from "../src/adapter/carriers.ts";
+import { writeCarrierMap } from "../src/adapter/carriers.ts";
 import type { ProviderId } from "../src/adapter/front-lane.ts";
 import { temporaryMachine, writePrivateSecretsStore } from "./machine.ts";
 
@@ -67,6 +69,8 @@ export async function startGateway(options: {
   telegramApiRoot: string;
   telegramBotToken: string;
   providerBaseUrls: Record<ProviderId, string>;
+  /** What the wizard would have provisioned: which topic carries each chat. */
+  carriers?: CarrierMap;
 }): Promise<GatewayFixture> {
   const machine = temporaryMachine({ runtimeRoot });
   const deployment = readDeployment({
@@ -78,7 +82,9 @@ export async function startGateway(options: {
     providerBaseUrls: options.providerBaseUrls,
   });
   const root = machine.root;
-  generateConfig(deployment);
+  const carriers = options.carriers ?? {};
+  writeCarrierMap(deployment.carrierMap, carriers);
+  generateConfig(deployment, carriers);
 
   // `env -i` but for one process: no provider key can be inherited, because none is exported.
   const environment = {

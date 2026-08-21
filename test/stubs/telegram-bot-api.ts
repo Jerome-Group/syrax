@@ -33,6 +33,8 @@ export class TelegramStub {
   #waitingPolls = new Set<(updates: unknown[]) => void>();
   #nextUpdateId = 1;
   #nextMessageId = 1000;
+  #nextTopicId = 2;
+  #topics = new Set<number>();
 
   readonly apiRoot: string;
   readonly botToken: string;
@@ -55,6 +57,21 @@ export class TelegramStub {
     return stub;
   }
 
+  /**
+   * A topic the wizard created. Thread ids start at 2 because a private threaded chat has no
+   * thread 1 at all: the non-deletable General topic belongs to forum supergroups.
+   */
+  createTopic(): number {
+    const carrier = this.#nextTopicId++;
+    this.#topics.add(carrier);
+    return carrier;
+  }
+
+  /** The Owner clearing a topic in their client. Nothing is emitted; the next write discovers it. */
+  clearTopic(carrier: number): void {
+    this.#topics.delete(carrier);
+  }
+
   inject(message: InjectedMessage): void {
     const chatId = message.chatId ?? message.fromUserId;
     this.#deliver({
@@ -72,19 +89,31 @@ export class TelegramStub {
     });
   }
 
-  /** Resolves once a call matching `method` has crossed the wire, or rejects at the deadline. */
+  /**
+   * Resolves once a call matching `method` has crossed the wire, or rejects at the deadline.
+   * `since` is how many matching calls to skip, so a second turn waits for its own answer rather
+   * than finding the first one again.
+   */
   async waitFor(
     method: string,
     predicate: (call: OutboundCall) => boolean = () => true,
     timeoutMs = 120_000,
+    since = 0,
   ): Promise<OutboundCall> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
-      const found = this.calls.find((call) => call.method === method && predicate(call));
+      const found = this.matching(method, predicate)[since];
       if (found) return found;
       if (Date.now() > deadline) throw new Error(`No ${method} within ${timeoutMs}ms.`);
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
+  }
+
+  matching(
+    method: string,
+    predicate: (call: OutboundCall) => boolean = () => true,
+  ): OutboundCall[] {
+    return this.calls.filter((call) => call.method === method && predicate(call));
   }
 
   /** Nothing new crossed the wire: still `since` calls of `method` after settling for `quietMs`. */
@@ -130,7 +159,15 @@ export class TelegramStub {
     this.calls.push({ method, body });
 
     if (method === "getMe") return respond(response, botIdentity);
+    if (method === "createForumTopic") {
+      return respond(response, { message_thread_id: this.createTopic(), name: body.name });
+    }
     if (method === "sendMessage" || method === "editMessageText") {
+      const carrier = body.message_thread_id;
+      if (typeof carrier === "number" && !this.#topics.has(carrier)) {
+        return refuse(response, "Bad Request: message thread not found");
+      }
+      if (body.text === "") return refuse(response, "Bad Request: message text is empty");
       return respond(response, {
         message_id: this.#nextMessageId++,
         date: 1755000000,
@@ -166,6 +203,12 @@ async function readJsonBody(request: IncomingMessage): Promise<Record<string, un
   } catch {
     return {};
   }
+}
+
+/** Telegram answers a bad request with 400 and its own description, which is the only probe. */
+function refuse(response: import("node:http").ServerResponse, description: string): void {
+  response.writeHead(400, { "content-type": "application/json" });
+  response.end(JSON.stringify({ ok: false, error_code: 400, description }));
 }
 
 function respond(response: import("node:http").ServerResponse, result: unknown): void {

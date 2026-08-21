@@ -4,14 +4,15 @@
  * builds a file and nothing here ever sits on a request path.
  */
 
+import { agentDefaults, agentList } from "./agent-defaults.ts";
+import type { CarrierMap } from "./carriers.ts";
 import type { Deployment } from "./deployment.ts";
-import { agentDefaults, agentList } from "./general-agent.ts";
 import { loggingBlock } from "./runtime-log.ts";
 import { providerBlocks } from "./providers.ts";
 import { secretsProviderBlock, secretPaths, secretRef } from "./secrets-store.ts";
 import { ownerCommandAllowlist, telegramChannel } from "./telegram-channel.ts";
 
-export function buildRuntimeConfig(deployment: Deployment) {
+export function buildRuntimeConfig(deployment: Deployment, carriers: CarrierMap) {
   return {
     models: {
       mode: "merge",
@@ -19,11 +20,11 @@ export function buildRuntimeConfig(deployment: Deployment) {
     },
     agents: {
       defaults: agentDefaults(deployment),
-      list: agentList(),
+      list: agentList(deployment),
     },
     // ADR-0011's fourth standing line. The prompt the front lane pays for is a property of this.
     tools: { profile: "minimal" },
-    channels: { telegram: telegramChannel(deployment) },
+    channels: { telegram: telegramChannel(deployment, carriers) },
     commands: ownerCommandAllowlist(deployment),
     gateway: {
       mode: "local",
