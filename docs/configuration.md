@@ -5,6 +5,24 @@ the decisions a deployment must make without pretending that the current reposit
 the file. A runtime adapter may translate this contract into its own configuration, but it must
 keep the boundary intact.
 
+## The deployment file and what is generated from it
+
+Two files, and only the second is the runtime's. A **deployment** describes one machine — the roots
+the runtime must be told about rather than left to choose, the single Telegram account that is
+answered, and the two base URLs; [`config/deployment.example.json`](../config/deployment.example.json)
+is its public shape. `src/cli/generate-config.ts` reads it and writes the runtime's own
+configuration, which is where every decision this repository's records argue actually lands.
+
+Neither live file is tracked. The deployment names machine-local paths and the Owner's Telegram ID;
+the generated configuration carries both plus the shape of the secrets store. What is tracked is
+the generator and the tests that hold it to the records — a decision asserted in a test is one a
+later edit cannot quietly inherit away.
+[ADR-0019](adr/0019-the-configuration-contract-is-generated-and-the-generator-runs-before-the-gateway.md)
+argues why generating it is not the code layer ADR-0003 forswore.
+
+Regenerating is the deployment path. A decision changes in `src/adapter/`, the generator runs, the
+gateway restarts; there is no partial edit of a live configuration.
+
 | Section | Meaning | Public value |
 |---------|---------|--------------|
 | runtime | The selected adapter and executable entrypoint | Placeholder until a runtime is chosen |

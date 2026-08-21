@@ -1,0 +1,9 @@
+{
+  "_comment": "Public example only. What one machine supplies to the runtime adapter. Copy it outside this repository, replace every path, and keep the copy beside the private roots it names — never in the checkout. src/cli/generate-config.ts reads this and writes the runtime's own configuration; it refuses any root inside the checkout, and refuses a secrets store the machine has left readable.",
+  "runtimeRoot": "/absolute/path/outside/this/repository/runtime",
+  "configPath": "/absolute/path/outside/this/repository/openclaw.json",
+  "stateDir": "/absolute/path/outside/this/repository/runtime-state",
+  "workspace": "/absolute/path/outside/this/repository/workspace",
+  "secretsStore": "/absolute/path/outside/this/repository/secrets/syrax.json",
+  "ownerTelegramUserId": 100000000
+}

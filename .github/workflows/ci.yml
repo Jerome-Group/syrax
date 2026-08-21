@@ -11,7 +11,7 @@ on:
   # GitHub disables a schedule after 60 days without repository activity, and emails the Owner
   # when it does.
   schedule:
-    - cron: '17 4 * * 1'
+    - cron: "17 4 * * 1"
 
 permissions:
   contents: read
@@ -52,3 +52,42 @@ jobs:
       #
       # Renaming this job renames the check context, which the `Required checks` ruleset names by
       # hand. Rename both, or every merge blocks on a check that will never report.
+
+  # The repository's own artefact is a configuration contract expressed as TypeScript, run by Node
+  # without a build step, so there is nothing to compile and the type check is the whole of it.
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run check:format
+      - run: npm run check:lint
+      - run: npm run check:types
+
+      # The gateway-backed tests skip without SYRAX_RUNTIME_ROOT. Installing the pinned runtime
+      # here would be a 300-package download on every pull request to exercise a wire that only
+      # exists on the mini, and the suite that matters runs there.
+      - run: npm test
+
+  # The pin is the lockfile, so what is checked is that it still resolves to the version the
+  # tracked `package.json` names — a hand-edit to either that the other did not follow is the
+  # failure this catches, and it costs no network.
+  runtime-pin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: The lockfile pins the version runtime/package.json names
+        run: |
+          declared=$(node -p "require('./runtime/package.json').dependencies.openclaw")
+          locked=$(node -p "require('./runtime/package-lock.json').packages['node_modules/openclaw'].version")
+          [ "$declared" = "$locked" ] || {
+            echo "runtime/package.json names openclaw@$declared; the lockfile installs $locked." >&2
+            exit 1
+          }
