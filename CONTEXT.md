@@ -248,10 +248,11 @@ rule out; background task, which suggests something the Owner is no longer waiti
 
 **Progress message**:
 The single message a slow turn keeps up to date: posted at once saying what is about to happen,
-edited as the work proceeds, and finally reduced to a line recording that it finished — with the
-answer itself arriving beneath it rather than replacing it. It exists because the lane that thinks
-is not the lane that talks, so a turn can be slow without being silent, and the thread keeps a
-record of what happened rather than overwriting it.
+edited as the work proceeds, and **removed once the answer arrives beneath it**. It exists because
+the lane that thinks is not the lane that talks, so a turn can be slow without being silent. It is
+never edited into the answer, and the thread is left holding the answer rather than a record of the
+work — the reduction to a finished line this entry used to claim is not something the pinned runtime
+offers, and ADR-0022 is where that was measured.
 _Avoid_: typing indicator — the other thing the front lane can show, and the one this is paired
 against: an indicator says only that *something* is happening where this says *what*, and a turn
 shows one or the other rather than both; status update, notification — both are per-event, where

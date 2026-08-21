@@ -14,6 +14,7 @@ export function telegramChannel(deployment: Deployment, carriers: CarrierMap) {
     enabled: true,
     apiRoot: deployment.telegramApiRoot,
     botToken: secretRef(secretPaths.telegramBotToken),
+    streaming: progressDraft(),
     dmPolicy: "allowlist",
     allowFrom: [String(deployment.ownerTelegramUserId)],
     // The four chats are topics in the bot's own private chat, so no group is ever allowed in.
@@ -24,6 +25,26 @@ export function telegramChannel(deployment: Deployment, carriers: CarrierMap) {
     // General, which is the one setting that breaks this arrangement.
     direct: {
       [String(deployment.ownerTelegramUserId)]: { topics: topicRouting(carriers) },
+    },
+  };
+}
+
+/**
+ * The one message a slow turn is allowed to post. ADR-0008 leaves the answer unstreamed, so what
+ * fills a long turn is a status draft rather than the answer arriving in pieces: one message, sent
+ * once the turn has proved it is working, edited as the work proceeds.
+ */
+function progressDraft() {
+  return {
+    mode: "progress",
+    progress: {
+      // Stated rather than drawn from the runtime's pool of twenty, which would name the same work
+      // differently on every turn.
+      label: "Working",
+      toolProgress: true,
+      // What the Owner is told is that work is happening, never what the work is looking at.
+      commandText: "status",
+      maxLines: 4,
     },
   };
 }

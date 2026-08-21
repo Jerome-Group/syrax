@@ -23,7 +23,12 @@ export function buildRuntimeConfig(deployment: Deployment, carriers: CarrierMap)
       list: agentList(deployment),
     },
     // ADR-0011's fourth standing line. The prompt the front lane pays for is a property of this.
-    tools: { profile: "minimal" },
+    // The three delegation tools are named back in because `minimal` does not carry them, and a
+    // front lane that cannot spawn is a front lane that answers everything itself.
+    tools: {
+      profile: "minimal",
+      alsoAllow: ["sessions_spawn", "sessions_yield", "subagents"],
+    },
     channels: { telegram: telegramChannel(deployment, carriers) },
     commands: ownerCommandAllowlist(deployment),
     gateway: {

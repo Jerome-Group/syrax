@@ -10,7 +10,7 @@ import { readDeployment, type Deployment } from "../src/adapter/deployment.ts";
 import { generateConfig } from "../src/adapter/generator.ts";
 import type { CarrierMap } from "../src/adapter/carriers.ts";
 import { writeCarrierMap } from "../src/adapter/carriers.ts";
-import type { ProviderId } from "../src/adapter/front-lane.ts";
+import type { ProviderId } from "../src/adapter/lane.ts";
 import { everyChat } from "../src/adapter/chats.ts";
 import { ownerTelegramUserId, temporaryMachine, writePrivateSecretsStore } from "./machine.ts";
 import { ProviderStub } from "./stubs/openai-provider.ts";
@@ -39,6 +39,7 @@ export const sentinelKeys = {
   gemini: "syrax-sentinel-gemini-key",
   mistral: "syrax-sentinel-mistral-key",
   groq: "syrax-sentinel-groq-key",
+  zai: "syrax-sentinel-zai-key",
 } as const;
 
 export function writeSecretsStore(path: string, botToken: string): string {
@@ -47,10 +48,21 @@ export function writeSecretsStore(path: string, botToken: string): string {
       gemini: { apiKey: sentinelKeys.gemini },
       mistral: { apiKey: sentinelKeys.mistral },
       groq: { apiKey: sentinelKeys.groq },
+      zai: { apiKey: sentinelKeys.zai },
     },
     channels: { telegram: { botToken } },
     gateway: { authToken: "stub-gateway-token" },
   });
+}
+
+/** Every wire the gateway has pointed at one local stub, which is what makes a run spend nothing. */
+export function everyProviderAt(baseUrl: string): Record<ProviderId, string> {
+  return {
+    "syrax-gemini": baseUrl,
+    "syrax-mistral": baseUrl,
+    "syrax-groq": baseUrl,
+    "syrax-zai": baseUrl,
+  };
 }
 
 /** The mini runs a supervised gateway on the standing port, so the suite must never take it. */
@@ -147,11 +159,7 @@ export async function standSyrax(
     ownerTelegramUserId,
     telegramApiRoot: telegram.apiRoot,
     telegramBotToken: telegram.botToken,
-    providerBaseUrls: {
-      "syrax-gemini": provider.baseUrl,
-      "syrax-mistral": provider.baseUrl,
-      "syrax-groq": provider.baseUrl,
-    },
+    providerBaseUrls: everyProviderAt(provider.baseUrl),
     carriers,
   });
   await telegram.waitFor("getMe");

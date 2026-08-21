@@ -9,25 +9,30 @@ import type { AddressInfo } from "node:net";
 
 export type ScriptedResponse =
   | { kind: "reply"; text: string }
+  /** The model asking for a tool, which is how a delegating turn starts. */
+  | { kind: "toolCall"; name: string; arguments: Record<string, unknown> }
+  /** A rung that has gone silent: the connection is held open and nothing is ever sent. */
+  | { kind: "silence" }
+  /** A rung that dies mid-answer: this much text arrives, then the connection drops. */
+  | { kind: "died"; text: string }
   | { kind: "rateLimited"; code: string; message: string; retryAfterSeconds: number }
   | { kind: "wall"; requestedTokens: number; limitTokens: number };
 
 export type ProviderRequest = { path: string; body: Record<string, unknown> };
+
+/** A scripted response, and how long the rung takes to produce it. */
+export type ScriptedTurn = ScriptedResponse & { afterMs?: number };
 
 export class ProviderStub {
   readonly requests: ProviderRequest[] = [];
   readonly baseUrl: string;
   #server: Server;
   #catalogue: string[];
-  #script: ScriptedResponse[];
-  #standingReply: ScriptedResponse;
+  #script: ScriptedTurn[];
+  #byModel = new Map<string, ScriptedTurn[]>();
+  #standingReply: ScriptedTurn;
 
-  constructor(
-    server: Server,
-    baseUrl: string,
-    catalogue: string[],
-    standingReply: ScriptedResponse,
-  ) {
+  constructor(server: Server, baseUrl: string, catalogue: string[], standingReply: ScriptedTurn) {
     this.#server = server;
     this.baseUrl = baseUrl;
     this.#catalogue = catalogue;
@@ -38,7 +43,7 @@ export class ProviderStub {
   static async start(
     options: {
       catalogue?: string[];
-      standingReply?: ScriptedResponse;
+      standingReply?: ScriptedTurn;
     } = {},
   ): Promise<ProviderStub> {
     let stub: ProviderStub;
@@ -57,8 +62,23 @@ export class ProviderStub {
   }
 
   /** Queued responses are served in order; the standing reply answers everything after them. */
-  script(...responses: ScriptedResponse[]): void {
+  script(...responses: ScriptedTurn[]): void {
     this.#script.push(...responses);
+  }
+
+  /**
+   * Queued responses for one model, which is how a lane is scripted: a delegating turn puts two
+   * models on the wire at once, and what each is asked is the measurement.
+   */
+  scriptModel(model: string, ...responses: ScriptedTurn[]): void {
+    this.#byModel.set(model, [...(this.#byModel.get(model) ?? []), ...responses]);
+  }
+
+  /** Every model this stub was asked for, in the order it was asked. */
+  get askedModels(): string[] {
+    return this.requests
+      .filter((request) => request.path.endsWith("/chat/completions"))
+      .map((request) => String(request.body.model ?? ""));
   }
 
   setCatalogue(models: string[]): void {
@@ -84,7 +104,13 @@ export class ProviderStub {
     }
     if (!path.endsWith("/chat/completions")) return json(response, 404, { error: "not found" });
 
-    const scripted = this.#script.shift() ?? this.#standingReply;
+    const model = String(body.model ?? "stub-model");
+    const scripted =
+      this.#byModel.get(model)?.shift() ?? this.#script.shift() ?? this.#standingReply;
+    if (scripted.kind === "silence") return;
+    if (scripted.afterMs !== undefined) {
+      await new Promise((resolve) => setTimeout(resolve, scripted.afterMs));
+    }
     if (scripted.kind === "rateLimited") {
       response.setHeader("retry-after", String(scripted.retryAfterSeconds));
       return json(response, 429, {
@@ -101,30 +127,84 @@ export class ProviderStub {
       });
     }
 
-    const model = String(body.model ?? "stub-model");
+    if (scripted.kind === "died") return dieMidStream(response, model, scripted.text);
+    if (scripted.kind === "toolCall") {
+      const call = toolCall(scripted.name, scripted.arguments);
+      if (body.stream === true) return streamToolCall(response, model, call);
+      return json(response, 200, completion(model, { toolCalls: [call] }));
+    }
     if (body.stream === true) return streamCompletion(response, model, scripted.text);
-    return json(response, 200, completion(model, scripted.text));
+    return json(response, 200, completion(model, { content: scripted.text }));
   }
 }
 
-function completion(model: string, text: string) {
+type ToolCall = {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+};
+
+let nextToolCallId = 1;
+
+function toolCall(name: string, args: Record<string, unknown>): ToolCall {
+  return {
+    id: `call_stub_${nextToolCallId++}`,
+    type: "function",
+    function: { name, arguments: JSON.stringify(args) },
+  };
+}
+
+function completion(model: string, message: { content?: string; toolCalls?: ToolCall[] }) {
   return {
     id: "chatcmpl-stub",
     object: "chat.completion",
     created: 1755000000,
     model,
-    choices: [{ index: 0, message: { role: "assistant", content: text }, finish_reason: "stop" }],
+    choices: [
+      {
+        index: 0,
+        message: {
+          role: "assistant",
+          content: message.content ?? "",
+          ...(message.toolCalls === undefined ? {} : { tool_calls: message.toolCalls }),
+        },
+        finish_reason: message.toolCalls === undefined ? "stop" : "tool_calls",
+      },
+    ],
     usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
   };
 }
 
-function streamCompletion(response: ServerResponse, model: string, text: string): void {
+function streamToolCall(response: ServerResponse, model: string, call: ToolCall): void {
+  const chunks = openStream(response, model);
+  response.write(
+    chunks(
+      {
+        role: "assistant",
+        tool_calls: [
+          {
+            index: 0,
+            id: call.id,
+            type: "function",
+            function: { name: call.function.name, arguments: call.function.arguments },
+          },
+        ],
+      },
+      null,
+    ),
+  );
+  response.write(chunks({}, "tool_calls"));
+  response.write("data: [DONE]\n\n");
+  response.end();
+}
+
+function openStream(response: ServerResponse, model: string) {
   response.writeHead(200, {
     "content-type": "text/event-stream",
     "cache-control": "no-cache",
     connection: "keep-alive",
   });
-  const chunk = (delta: Record<string, unknown>, finishReason: string | null) =>
+  return (delta: Record<string, unknown>, finishReason: string | null) =>
     `data: ${JSON.stringify({
       id: "chatcmpl-stub",
       object: "chat.completion.chunk",
@@ -132,10 +212,21 @@ function streamCompletion(response: ServerResponse, model: string, text: string)
       model,
       choices: [{ index: 0, delta, finish_reason: finishReason }],
     })}\n\n`;
+}
+
+function streamCompletion(response: ServerResponse, model: string, text: string): void {
+  const chunk = openStream(response, model);
   response.write(chunk({ role: "assistant", content: text }, null));
   response.write(chunk({}, "stop"));
   response.write("data: [DONE]\n\n");
   response.end();
+}
+
+/** Half an answer, then the socket goes: what a rung dying mid-turn looks like from here. */
+function dieMidStream(response: ServerResponse, model: string, text: string): void {
+  const chunk = openStream(response, model);
+  response.write(chunk({ role: "assistant", content: text }, null));
+  response.socket?.destroy();
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<Record<string, unknown>> {

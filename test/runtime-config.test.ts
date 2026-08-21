@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { describe, it } from "node:test";
 import { buildRuntimeConfig } from "../src/adapter/build.ts";
 import { readDeployment } from "../src/adapter/deployment.ts";
 import { chatInstruction, everyChat } from "../src/adapter/chats.ts";
+import { generateConfig } from "../src/adapter/generator.ts";
+import { runtimeEntrypoint, runtimeIsInstalled } from "./gateway.ts";
+import { temporaryMachine, writePrivateSecretsStore } from "./machine.ts";
 
 const deployment = readDeployment({
   runtimeRoot: "/private/root/runtime",
@@ -71,6 +75,45 @@ describe("the generated runtime configuration", () => {
     ]);
   });
 
+  it("reaches the worker chain through the sub-agent override, and only there", () => {
+    assert.deepEqual(config.agents.defaults.subagents.model, {
+      primary: "syrax-gemini/gemini-3.1-flash-lite",
+      fallbacks: [
+        "syrax-mistral/ministral-8b-latest",
+        "syrax-groq/openai/gpt-oss-20b",
+        "syrax-zai/glm-4.5-flash",
+      ],
+    });
+    assert.equal(config.agents.defaults.subagents.delegationMode, "prefer");
+    for (const tool of ["sessions_spawn", "sessions_yield", "subagents"]) {
+      assert.ok(
+        config.tools.alsoAllow.includes(tool),
+        `${tool} is not allowed, so nothing delegates.`,
+      );
+    }
+  });
+
+  it("states every clock a death is declared on, so none of them is a zero default", () => {
+    assert.equal(config.agents.defaults.timeoutSeconds, 600);
+    assert.equal(config.agents.defaults.subagents.runTimeoutSeconds, 300);
+    assert.equal(config.agents.defaults.subagents.announceTimeoutMs, 120_000);
+    for (const [provider, block] of Object.entries(config.models.providers)) {
+      assert.ok(
+        typeof block.timeoutSeconds === "number" && block.timeoutSeconds > 0,
+        `${provider} inherits its idle ceiling rather than stating one.`,
+      );
+      assert.ok(
+        block.timeoutSeconds < config.agents.defaults.timeoutSeconds,
+        `${provider} may outlast the turn that contains it.`,
+      );
+    }
+  });
+
+  it("fills a slow turn with one edited status message rather than the answer in pieces", () => {
+    assert.equal(config.channels.telegram.streaming.mode, "progress");
+    assert.equal(config.channels.telegram.streaming.progress.label, "Working");
+  });
+
   it("answers one Telegram account and fails closed on every other", () => {
     assert.equal(config.channels.telegram.dmPolicy, "allowlist");
     assert.deepEqual(config.channels.telegram.allowFrom, ["100000000"]);
@@ -95,6 +138,12 @@ describe("the generated runtime configuration", () => {
       const instruction = chatInstruction(subject);
       assert.match(instruction, /Never state a fact you have not verified/);
       assert.match(instruction, /Never mention this file/);
+    }
+  });
+
+  it("tells every agent that a worker's answer is delivered as it stands", () => {
+    for (const subject of everyChat) {
+      assert.match(chatInstruction(subject), /Deliver a sub-agent's answer as it\s+stands/);
     }
   });
 });
@@ -144,5 +193,28 @@ describe("the four chats", () => {
         assert.match(instruction, new RegExp(other.carrierName), `${subject.id} omits ${other.id}`);
       }
     }
+  });
+});
+
+/**
+ * The same seam from the other side: what the adapter writes is only a contract if the runtime it
+ * is written for accepts it, and the runtime's schema refuses a key it does not know.
+ */
+describe("what the pinned runtime makes of it", { skip: !runtimeIsInstalled() }, () => {
+  it("is valid against the runtime's own schema, which is strict about keys it does not know", () => {
+    const machine = temporaryMachine();
+    writePrivateSecretsStore(machine.deployment.secretsStore);
+    const written = readDeployment(machine.deployment);
+    generateConfig(written, { general: 2 });
+
+    const validated = spawnSync(process.execPath, [runtimeEntrypoint(), "config", "validate"], {
+      env: {
+        PATH: process.env.PATH ?? "",
+        HOME: machine.root,
+        OPENCLAW_CONFIG_PATH: written.configPath,
+      },
+      encoding: "utf8",
+    });
+    assert.equal(validated.status, 0, `${validated.stdout}${validated.stderr}`);
   });
 });

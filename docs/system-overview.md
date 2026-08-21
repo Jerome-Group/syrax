@@ -49,6 +49,7 @@ this checkout; the ignore rules are only the final backstop.
 The four chats stand: one bot locked to the Owner's Telegram ID, carrying General, Academic, Media
 and System as an agent each, with a thread-less root message answered as General and a cleared
 carrier recreated by the write path — green against a local stub of each wire, so the reply path is
-proven without an external call. The worker lane, the capability tool layers and the search index
-are future project work. Each concrete choice adds a decision record when its reason
+proven without an external call. The lane that thinks is split from the lane that talks: a slow turn
+delegates to the worker chain and keeps one edited progress message up while it works. The
+capability tool layers and the search index are future project work. Each concrete choice adds a decision record when its reason
 would not be obvious from the code.
