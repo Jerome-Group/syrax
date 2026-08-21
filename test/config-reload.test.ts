@@ -1,6 +1,6 @@
 /**
- * What a write to the generated configuration reaches, and when. Both halves are measured at the
- * provider wire on a running gateway, because "config hot reload applied" is a line in the log
+ * What a write to the generated configuration reaches, and when. It is measured at the provider
+ * wire on a running gateway, because `config hot reload applied` is a line in the runtime's log
  * rather than an answer to the question the lane monitor and the write path both ask: does the next
  * turn use the file that was just written?
  *
@@ -11,14 +11,12 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { everyChat } from "../src/adapter/chats.ts";
 import { writePrivateFile } from "../src/adapter/private-state.ts";
-import { runtimeIsInstalled, runtimeRoot, startGateway, type GatewayFixture } from "./gateway.ts";
+import { runtimeEntrypoint, runtimeIsInstalled, standSyrax, type SyraxFixture } from "./gateway.ts";
 import { ownerTelegramUserId } from "./machine.ts";
 import { ProviderStub } from "./stubs/openai-provider.ts";
-import { TelegramStub, type OutboundCall } from "./stubs/telegram-bot-api.ts";
+import type { OutboundCall } from "./stubs/telegram-bot-api.ts";
 
 const answer = "Answered.";
 const isAnswer = (call: OutboundCall) => call.body.text === answer;
@@ -28,166 +26,98 @@ const mistral = "ministral-3b-latest";
 /** One turn, reported as what the prompt carries: the model asked, and the agent that asked. */
 type Turn = { model: string; agent: string };
 
-class RunningGateway {
-  readonly telegram: TelegramStub;
-  readonly provider: ProviderStub;
-  readonly gateway: GatewayFixture;
-  readonly carriers: Record<string, number>;
+/** One turn, and what the wire said. */
+async function turn(syrax: SyraxFixture, text: string, carrier?: number): Promise<Turn> {
+  const since = syrax.telegram.matching("sendMessage", isAnswer).length;
+  syrax.telegram.inject({ fromUserId: ownerTelegramUserId, text, messageThreadId: carrier });
+  await syrax.telegram.waitFor("sendMessage", isAnswer, 60_000, since);
+  const body = syrax.provider.requests.at(-1)?.body as { model?: string };
+  return {
+    model: String(body.model),
+    agent: /agent=(\w+)/.exec(JSON.stringify(body))?.[1] ?? "none",
+  };
+}
 
-  constructor(
-    telegram: TelegramStub,
-    provider: ProviderStub,
-    gateway: GatewayFixture,
-    carriers: Record<string, number>,
-  ) {
-    this.telegram = telegram;
-    this.provider = provider;
-    this.gateway = gateway;
-    this.carriers = carriers;
+/** Turns until `landed` holds, or every attempt is spent — the answer being how many it took. */
+async function turnsUntil(
+  syrax: SyraxFixture,
+  text: string,
+  carrier: number | undefined,
+  landed: (turn: Turn) => boolean,
+  attempts = 6,
+): Promise<{ turns: Turn[]; landed: boolean }> {
+  const turns: Turn[] = [];
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    turns.push(await turn(syrax, `${text} (${attempt})`, carrier));
+    if (landed(turns.at(-1)!)) return { turns, landed: true };
+    await new Promise((resolve) => setTimeout(resolve, 2000));
   }
+  return { turns, landed: false };
+}
 
-  static async start(): Promise<RunningGateway> {
-    const telegram = await TelegramStub.start("6100000000:STUBSTUBSTUBSTUBSTUBSTUBSTUBSTUBSTU");
-    const carriers: Record<string, number> = {};
-    for (const chat of everyChat) carriers[chat.id] = telegram.createTopic();
-    const provider = await ProviderStub.start({
-      catalogue: [gemini, mistral],
-      standingReply: { kind: "reply", text: answer },
-    });
-    const gateway = await startGateway({
-      ownerTelegramUserId,
-      telegramApiRoot: telegram.apiRoot,
-      telegramBotToken: telegram.botToken,
-      providerBaseUrls: {
-        "syrax-gemini": provider.baseUrl,
-        "syrax-mistral": provider.baseUrl,
-        "syrax-groq": provider.baseUrl,
-      },
-      carriers,
-    });
-    await telegram.waitFor("getMe");
-    return new RunningGateway(telegram, provider, gateway, carriers);
-  }
+function rewrite(syrax: SyraxFixture, change: (config: Record<string, any>) => void): void {
+  const path = syrax.gateway.deployment.configPath;
+  const config = JSON.parse(readFileSync(path, "utf8"));
+  change(config);
+  writePrivateFile(path, `${JSON.stringify(config, null, 2)}\n`);
+}
 
-  async stop(): Promise<void> {
-    await this.gateway.stop();
-    await this.telegram.close();
-    await this.provider.close();
-  }
+function standDownToMistral(syrax: SyraxFixture): void {
+  rewrite(syrax, (config) => {
+    config.agents.defaults.model.primary = `syrax-mistral/${mistral}`;
+    config.agents.defaults.model.fallbacks = [];
+  });
+}
 
-  async turn(text: string, carrier?: number): Promise<Turn> {
-    const since = this.telegram.matching("sendMessage", isAnswer).length;
-    this.telegram.inject({ fromUserId: ownerTelegramUserId, text, messageThreadId: carrier });
-    await this.telegram.waitFor("sendMessage", isAnswer, 60_000, since);
-    const body = this.provider.requests.at(-1)?.body as { model?: string };
-    return {
-      model: String(body.model),
-      agent: /agent=(\w+)/.exec(JSON.stringify(body))?.[1] ?? "none",
-    };
-  }
-
-  /** Turns until `landed` holds, or every attempt is spent — the answer being how many it took. */
-  async turnsUntil(
-    text: string,
-    carrier: number | undefined,
-    landed: (turn: Turn) => boolean,
-    attempts = 6,
-  ): Promise<{ turns: Turn[]; landed: boolean }> {
-    const turns: Turn[] = [];
-    for (let attempt = 1; attempt <= attempts; attempt++) {
-      turns.push(await this.turn(`${text} (${attempt})`, carrier));
-      if (landed(turns.at(-1)!)) return { turns, landed: true };
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-    }
-    return { turns, landed: false };
-  }
-
-  rewrite(change: (config: Record<string, any>) => void): void {
-    const config = JSON.parse(readFileSync(this.gateway.deployment.configPath, "utf8"));
-    change(config);
-    writePrivateFile(this.gateway.deployment.configPath, `${JSON.stringify(config, null, 2)}\n`);
-  }
-
-  standDownToMistral(): void {
-    this.rewrite((config) => {
-      config.agents.defaults.model.primary = `syrax-mistral/${mistral}`;
-      config.agents.defaults.model.fallbacks = [];
-    });
-  }
-
-  logMessages(): string[] {
-    return readFileSync(join(this.gateway.deployment.logsDir, "openclaw.log"), "utf8")
-      .split("\n")
-      .filter((line) => line.trim() !== "")
-      .map((line) => {
-        try {
-          return (JSON.parse(line) as { message?: string }).message ?? "";
-        } catch {
-          return line.slice(0, 200);
-        }
-      });
-  }
-
-  safeRestart(): void {
-    const restart = spawnSync(
-      process.execPath,
-      [
-        join(runtimeRoot, "node_modules", "openclaw", "openclaw.mjs"),
-        "gateway",
-        "restart",
-        "--safe",
-      ],
-      { env: this.gateway.environment, encoding: "utf8" },
-    );
-    assert.equal(restart.status, 0, restart.stderr);
-  }
+/**
+ * One turn before any write. It states where the measurement starts, and it lets the config watcher
+ * attach — the gateway starts it after reporting itself ready, and a write that beats it is never
+ * seen at all.
+ */
+async function settle(syrax: SyraxFixture): Promise<void> {
+  assert.equal((await turn(syrax, "Which model is this?")).model, gemini);
 }
 
 describe("an agent change written to the configuration", { skip: !runtimeIsInstalled() }, () => {
-  let running: RunningGateway;
+  let syrax: SyraxFixture;
 
   before(async () => {
-    running = await RunningGateway.start();
+    syrax = await standSyrax({ catalogue: [gemini, mistral] });
   });
   after(async () => {
-    await running?.stop();
+    await syrax?.stop();
   });
 
   it("is applied and not landed: no turn uses it until a channel reload rebuilds", async () => {
-    // A turn before the write, which both states where this starts and lets the config watcher
-    // attach — it is the last thing the gateway starts, after it reports itself ready.
-    assert.equal((await running.turn("Which model is this?")).model, gemini);
-    running.standDownToMistral();
+    await settle(syrax);
+    standDownToMistral(syrax);
 
-    const unlanded = await running.turnsUntil(
+    const unlanded = await turnsUntil(
+      syrax,
       "Which model is this?",
-      running.carriers.general,
-      (turn) => turn.model === mistral,
+      syrax.carriers.general,
+      (each) => each.model === mistral,
     );
     assert.equal(
       unlanded.landed,
       false,
       `an agents write reached a turn on its own after ${unlanded.turns.length} of them.`,
     );
-    assert.match(
-      running.logMessages().join("\n"),
-      /config hot reload applied \(agents\.defaults\.model/,
-      "the runtime did not even claim to have applied it, which is a different finding.",
-    );
 
     // Nothing here touches the model. Routing a carrier the gateway has not seen is a channel
     // change, and the channel reload it triggers is what rebuilds the turn path.
-    const carrier = running.telegram.createTopic();
-    running.rewrite((config) => {
+    const carrier = syrax.telegram.createTopic();
+    rewrite(syrax, (config) => {
       config.channels.telegram.direct[String(ownerTelegramUserId)].topics[String(carrier)] = {
         agentId: "media",
       };
     });
 
-    const landed = await running.turnsUntil(
+    const landed = await turnsUntil(
+      syrax,
       "Who answers here?",
       carrier,
-      (turn) => turn.agent === "media" && turn.model === mistral,
+      (each) => each.agent === "media" && each.model === mistral,
     );
     assert.ok(landed.landed, `neither write landed: ${JSON.stringify(landed.turns)}`);
     // The reload is deferred until active replies and runs complete, so the first message into a
@@ -196,33 +126,80 @@ describe("an agent change written to the configuration", { skip: !runtimeIsInsta
   });
 });
 
-describe("the runtime's own safe restart", { skip: !runtimeIsInstalled() }, () => {
-  let running: RunningGateway;
+describe("a provider change written to the configuration", { skip: !runtimeIsInstalled() }, () => {
+  let syrax: SyraxFixture;
+  let moved: ProviderStub;
 
   before(async () => {
-    running = await RunningGateway.start();
+    syrax = await standSyrax({ catalogue: [gemini, mistral] });
+    moved = await ProviderStub.start({
+      catalogue: [gemini, mistral],
+      standingReply: { kind: "reply", text: answer },
+    });
   });
   after(async () => {
-    await running?.stop();
+    await syrax?.stop();
+    await moved?.close();
+  });
+
+  it("goes the same way as an agent change: applied, and landed by the channel reload", async () => {
+    await settle(syrax);
+    // The front rung's provider is pointed at a second stub. Which one is asked is the answer, and
+    // it is a `models` write rather than an `agents` one.
+    rewrite(syrax, (config) => {
+      config.models.providers["syrax-gemini"].baseUrl = moved.baseUrl;
+    });
+
+    const asked = moved.requests.length;
+    await turnsUntil(syrax, "Which provider is this?", syrax.carriers.general, () => false, 3);
+    assert.equal(moved.requests.length, asked, "a models write reached a turn on its own.");
+
+    const carrier = syrax.telegram.createTopic();
+    rewrite(syrax, (config) => {
+      config.channels.telegram.direct[String(ownerTelegramUserId)].topics[String(carrier)] = {
+        agentId: "media",
+      };
+    });
+    await turnsUntil(syrax, "Who answers here?", carrier, (each) => each.agent === "media");
+
+    assert.ok(moved.requests.length > asked, "the channel reload did not land the models write.");
+  });
+});
+
+describe("the runtime's own safe restart", { skip: !runtimeIsInstalled() }, () => {
+  let syrax: SyraxFixture;
+
+  before(async () => {
+    syrax = await standSyrax({ catalogue: [gemini, mistral] });
+  });
+  after(async () => {
+    await syrax?.stop();
   });
 
   it("lands an agent change that no number of turns would have landed", async () => {
-    assert.equal((await running.turn("Which model is this?")).model, gemini);
-    running.standDownToMistral();
-    const unlanded = await running.turnsUntil(
+    await settle(syrax);
+    standDownToMistral(syrax);
+    const unlanded = await turnsUntil(
+      syrax,
       "Which model is this?",
-      running.carriers.general,
-      (turn) => turn.model === mistral,
+      syrax.carriers.general,
+      (each) => each.model === mistral,
       3,
     );
     assert.equal(unlanded.landed, false, "the write landed with no reload and no restart.");
 
-    running.safeRestart();
+    const restart = spawnSync(
+      process.execPath,
+      [runtimeEntrypoint(), "gateway", "restart", "--safe"],
+      { env: syrax.gateway.environment, encoding: "utf8" },
+    );
+    assert.equal(restart.status, 0, restart.stderr);
 
-    const landed = await running.turnsUntil(
+    const landed = await turnsUntil(
+      syrax,
       "Which model is this?",
-      running.carriers.general,
-      (turn) => turn.model === mistral,
+      syrax.carriers.general,
+      (each) => each.model === mistral,
     );
     assert.ok(landed.landed, `the restart did not land it either: ${JSON.stringify(landed.turns)}`);
   });

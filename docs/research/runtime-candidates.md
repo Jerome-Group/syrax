@@ -129,7 +129,18 @@ following turn. `agents` and `models` are hot-applying sections; only `gateway.*
 wrong, and following it is how a needless restart gets built into a stand-down path. **Stand down is
 therefore a config write, not a restart** — which contradicts ADR-0006's
 *"no API, no file, no command … takes a model out of service from outside the runtime"* and fires
-that record's own *revisit when* trigger. Resetting a **cooldown** is a separate question and closer
+that record's own *revisit when* trigger.
+
+> **Corrected on 2026-08-21 by [#137](https://github.com/Jerome-Group/syrax/issues/137).** The
+> paragraph above is right that the write is applied and wrong about when it is live. Measured at the
+> provider wire rather than in the fallback-decision log, an `agents` write — and a `models` one —
+> reaches **no turn at all** until a channel reload rebuilds the turn path, or until
+> `gateway restart --safe`. So the CLI's *"Restart the gateway to apply"* is right about the effect
+> and wrong only about the mechanism, and a stand down is a config write **plus a lander**. The
+> decision is [ADR-0021](../adr/0021-a-config-write-is-applied-when-it-is-written-and-landed-when-a-channel-reloads.md)
+> and the four arms are in [`config-hot-reload.md`](config-hot-reload.md).
+
+Resetting a **cooldown** is a separate question and closer
 to ADR-0006's claim: `models auth login` clears every lockout for a provider, but it is undocumented
 and refuses to run without an interactive TTY, while the scriptable `models auth paste-api-key` does
 not clear anything.

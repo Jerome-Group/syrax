@@ -6,7 +6,7 @@ first is the runtime's: the file is detected, validated and swapped in, and the 
 rebuilt around the new configuration — and it happens only when a **channel reloads**. A `channels`
 write lands itself, because it is that reload. Everything else waits for one, and waiting is not a
 strategy: an `agents` write sat unlanded across six turns and twenty-one seconds, and landed the
-instant an unrelated `channels` write forced the reload.
+instant an unrelated `channels` write forced the reload. A `models` write goes the same way.
 
 So **a config write is an actuator only when it is paired with a lander**, and there are exactly two:
 the channel reload a `channels` write triggers by itself, and `openclaw gateway restart --safe`.
@@ -44,13 +44,14 @@ of them is honest:
 
 | | |
 |---|---|
-| **`gateway restart --safe`** | **Chosen.** The runtime's own command, exit 0, in-process, and it *drains active work before it goes* — the deferral this record is about, used as intended rather than worked around. The stood-down rung was gone 3.4 s later |
+| **`gateway restart --safe`** | **Chosen.** The runtime's own command, exit 0, and the stood-down rung was gone 3.4 s later. It is documented as preflighting active work and restarting once it drains — read rather than measured, and not what the choice rests on |
 | a `channels` no-op written beside the real change | **Rejected.** It works, and it works by accident: it lands the `agents` write as a side effect of pretending a channel changed. Nothing about it would survive the runtime tightening its reload planning, and nothing in the code would say why the no-op was there |
 
-The restart also answers the question the nudge leaves open. ADR-0009 valued the hot apply because
-*stand down no longer drops in-flight turns* — and `--safe` keeps that: it is the drain, not a kill.
-What it costs is the sessions, which is a real cost and is smaller than serving a rung Syrax has
-already decided is spent.
+What the restart costs is the sessions, which is a real cost and a smaller one than serving a rung
+Syrax has already decided is spent. ADR-0009 valued the hot apply partly because *stand down no
+longer drops in-flight turns*, and `--safe` is documented to drain rather than kill — but that half
+is unmeasured here, so it is a reason to prefer `--safe` over a plain restart rather than a plank
+this decision stands on.
 
 ## Consequences
 
@@ -71,8 +72,8 @@ already decided is spent.
 ## Revisit when
 
 - **The pinned runtime moves.** This is a behaviour of `2026.6.34` and none of it is documented — the
-  runtime's own reference says `channels.*` and `agents` hot-apply, with no mention that one of them
-  needs the other. The Dependabot bump to `2026.7.1` is open as
+  runtime's own reference says `channels.*`, `agents` and `models` hot-apply, with no mention that
+  two of them need the third. The Dependabot bump to `2026.7.1` is open as
   [#134](https://github.com/Jerome-Group/syrax/pull/134), and re-running
   `test/config-reload.test.ts` against it is the cheapest possible check: the suite fails loudly if
   an `agents` write starts landing on its own.

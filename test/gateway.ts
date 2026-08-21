@@ -11,7 +11,10 @@ import { generateConfig } from "../src/adapter/generator.ts";
 import type { CarrierMap } from "../src/adapter/carriers.ts";
 import { writeCarrierMap } from "../src/adapter/carriers.ts";
 import type { ProviderId } from "../src/adapter/front-lane.ts";
-import { temporaryMachine, writePrivateSecretsStore } from "./machine.ts";
+import { everyChat } from "../src/adapter/chats.ts";
+import { ownerTelegramUserId, temporaryMachine, writePrivateSecretsStore } from "./machine.ts";
+import { ProviderStub } from "./stubs/openai-provider.ts";
+import { TelegramStub } from "./stubs/telegram-bot-api.ts";
 
 /** Set on the mini, where the suite runs; the gateway-backed tests skip without it. */
 export const runtimeRoot = process.env.SYRAX_RUNTIME_ROOT ?? "";
@@ -20,7 +23,7 @@ export function runtimeIsInstalled(): boolean {
   return runtimeRoot !== "" && existsSync(runtimeEntrypoint());
 }
 
-function runtimeEntrypoint(): string {
+export function runtimeEntrypoint(): string {
   return join(runtimeRoot, "node_modules", "openclaw", "openclaw.mjs");
 }
 
@@ -114,4 +117,54 @@ export async function startGateway(options: {
 
 function appendTo(path: string, chunk: Buffer): void {
   writeFileSync(path, chunk, { flag: "a" });
+}
+
+/**
+ * A gateway with the four chats provisioned and both wires local: what every suite that drives the
+ * real runtime needs before it can ask a question. The measurements each suite makes are its own.
+ */
+export type SyraxFixture = {
+  telegram: TelegramStub;
+  provider: ProviderStub;
+  gateway: GatewayFixture;
+  /** Which topic carries each chat, as the wizard would have left it. */
+  carriers: Record<string, number>;
+  stop: () => Promise<void>;
+};
+
+export async function standSyrax(
+  options: { catalogue?: string[]; standingReply?: string } = {},
+): Promise<SyraxFixture> {
+  const telegram = await TelegramStub.start("6100000000:STUBSTUBSTUBSTUBSTUBSTUBSTUBSTUBSTU");
+  const carriers: Record<string, number> = {};
+  for (const chat of everyChat) carriers[chat.id] = telegram.createTopic();
+
+  const provider = await ProviderStub.start({
+    catalogue: options.catalogue ?? ["gemini-3.5-flash-lite"],
+    standingReply: { kind: "reply", text: options.standingReply ?? "Answered." },
+  });
+  const gateway = await startGateway({
+    ownerTelegramUserId,
+    telegramApiRoot: telegram.apiRoot,
+    telegramBotToken: telegram.botToken,
+    providerBaseUrls: {
+      "syrax-gemini": provider.baseUrl,
+      "syrax-mistral": provider.baseUrl,
+      "syrax-groq": provider.baseUrl,
+    },
+    carriers,
+  });
+  await telegram.waitFor("getMe");
+
+  return {
+    telegram,
+    provider,
+    gateway,
+    carriers,
+    stop: async () => {
+      await gateway.stop();
+      await telegram.close();
+      await provider.close();
+    },
+  };
 }
