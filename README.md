@@ -9,10 +9,11 @@ the layout and [`AGENTS.md`](AGENTS.md) for the working rules.
 
 ## Status
 
-🌱 **Public design baseline.** The repository currently documents the system and its safe setup
-contract. The concrete agent runtime is not selected yet; OpenClaw and Hermes are candidates for
-evaluation, not decisions recorded here. Runtime code and exact launch commands will arrive with a
-separate project decision.
+🚶 **Walking skeleton.** One bot locked to a single Telegram account, one **General** chat, and the
+front lane answering it. The runtime is OpenClaw, pinned to an exact version and installed outside
+this checkout; the adapter that configures it, and the suite that proves the reply path against a
+local stub of each wire, are here. The four chats, the worker lane, the capability tool layers and
+the search index are still ahead.
 
 ## What is here
 
@@ -20,14 +21,16 @@ separate project decision.
 - [`docs/setup.md`](docs/setup.md) — the safe setup sequence and the checks before a runtime is launched.
 - [`docs/configuration.md`](docs/configuration.md) — the configuration contract and placeholder example.
 - [`config/syrax.example.toml`](config/syrax.example.toml) — illustrative public configuration, not a live file.
+- [`src/adapter/`](src/adapter/) — Syrax's decisions as one generated runtime configuration.
+- [`runtime/package.json`](runtime/package.json) — the runtime pin, whose lockfile is the pin itself.
 - [`docs/adr/`](docs/adr/) — decisions that cannot be recovered from the future code alone.
 
 ## Getting started
 
-There is no runnable chatbot command in this baseline because selecting the runtime is still an
-open project decision. Read the overview and setup guide first. When a runtime adapter is added,
-its install, run, test, and secret-injection commands belong in [`docs/setup.md`](docs/setup.md)
-and in the adapter's own code.
+Read the overview first, then follow [`docs/setup.md`](docs/setup.md): install the pinned runtime
+outside the checkout, write the secrets store, describe the machine, generate the runtime's
+configuration and start the gateway. `npm test` proves the reply path with no external call and no
+quota spent.
 
 ## Public boundary
 

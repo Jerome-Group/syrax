@@ -99,14 +99,46 @@ Two shapes are settled, so no repository re-argues them:
 
 ## 6. Repo-specific standards
 
-*(Each repository fills this in and owns it.)* Language and framework conventions, the seams
-where tests are written, naming or layout rules particular to this codebase, and anything the
-core leaves open. Add them here; they evolve through this repository's normal pull-request flow.
+*(Each repository fills this in and owns it.)*
 
-This section is empty because this repository is newly generated. Fill it in with the first
-change that has an opinion worth holding the next one to — the formatter and linter that run in
-CI, where the tests live, and the one or two layout rules a newcomer would otherwise guess
-wrong.
+### TypeScript, run rather than built
+
+Source is TypeScript under `src/`, executed by Node directly. There is no build step and no
+compiled output, so nothing here is ever stale against its source and the type checker is free to
+be the only thing that reads the annotations. Imports carry their `.ts` extension because that is
+the file Node opens.
+
+The toolchain is three tools and one dependency each — `prettier` to format, `oxlint` to lint,
+`tsc --noEmit` to type-check — and the `npm run check:*` scripts run all three in CI. Formatting is
+never a review topic. Prettier does not touch Markdown here: prose is wrapped by hand at the width
+every document already uses, and re-flowing it turns a one-paragraph edit into a whole-file diff.
+
+The core's *many jobs* shape (§5) is qualified here by the Organisation's gate: a job running on a
+pull request must be named in the `Required checks` ruleset or waived in the conformance manifest,
+and both live in the management hub. So the checks grow as **steps in the one required job** until
+a separate context is worth asking the hub for.
+
+### The seams the tests are written at
+
+A test observes what crossed a wire or landed in a file. There are three seams and no others, and
+none of them reaches inside the runtime:
+
+| Seam | What stands there | Where |
+|------|-------------------|-------|
+| The Telegram wire | A local Bot API stub the gateway long-polls | `test/stubs/telegram-bot-api.ts` |
+| The provider wire | A local OpenAI-compatible stub, scripted with the measured failure shapes | `test/stubs/openai-provider.ts` |
+| The generated configuration | The file the adapter writes, read back as data | `test/runtime-config.test.ts` |
+
+Tests that drive the pinned gateway need it installed and **skip** without `SYRAX_RUNTIME_ROOT`.
+That is deliberate: the suite that matters runs on the mini, and CI proves the artefact rather
+than the deployment.
+
+### Layout
+
+`src/adapter/` is the runtime adapter — one file per decision it carries, named for the decision
+rather than for the config key. `src/cli/` is what a person or a wizard runs. A module that names
+an ADR in a comment is stating a *why* the code cannot carry; a module that restates what its own
+code says is wrong and gets shortened.
 
 ## 7. Evolution — what is rigid, what moves
 

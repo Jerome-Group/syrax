@@ -11,7 +11,7 @@ on:
   # GitHub disables a schedule after 60 days without repository activity, and emails the Owner
   # when it does.
   schedule:
-    - cron: '17 4 * * 1'
+    - cron: "17 4 * * 1"
 
 permissions:
   contents: read
@@ -52,3 +52,38 @@ jobs:
       #
       # Renaming this job renames the check context, which the `Required checks` ruleset names by
       # hand. Rename both, or every merge blocks on a check that will never report.
+      #
+      # Everything below is in this job rather than in siblings beside it, and that is the
+      # Organisation's gate rather than a preference: a job running on a pull request must be
+      # either named in the `Required checks` ruleset or waived in the conformance manifest, and
+      # both of those live in the management hub. A new job here is a new context nothing
+      # requires, so the checks grow as steps until a context is worth asking the hub for.
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+          cache: npm
+
+      - run: npm ci
+
+      # The artefact is a configuration contract expressed as TypeScript, run by Node without a
+      # build step, so there is nothing to compile and the type check is the whole of it.
+      - run: npm run check:format
+      - run: npm run check:lint
+      - run: npm run check:types
+
+      # The gateway-backed tests skip without SYRAX_RUNTIME_ROOT. Installing the pinned runtime
+      # here would be a 300-package download on every pull request to exercise a wire that only
+      # exists on the mini, and the suite that matters runs there.
+      - run: npm test
+
+      # The pin is the lockfile, so what is checked is that it still resolves to the version the
+      # tracked `package.json` names — a hand-edit to either that the other did not follow.
+      - name: The lockfile pins the version runtime/package.json names
+        run: |
+          declared=$(node -p "require('./runtime/package.json').dependencies.openclaw")
+          locked=$(node -p "require('./runtime/package-lock.json').packages['node_modules/openclaw'].version")
+          [ "$declared" = "$locked" ] || {
+            echo "runtime/package.json names openclaw@$declared; the lockfile installs $locked." >&2
+            exit 1
+          }

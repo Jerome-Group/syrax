@@ -2,12 +2,20 @@
 # Keep secrets in the runtime environment or a private secret store.
 
 [runtime]
-adapter = "not-selected"
-entrypoint = "not-configured"
+# The adapter is OpenClaw, pinned to an exact version by `runtime/package-lock.json` and installed
+# outside the checkout (ADR-0003). The entrypoint is that install's own, never a global one.
+adapter = "openclaw"
+entrypoint = "<runtime root>/node_modules/openclaw/openclaw.mjs"
+# What one machine supplies. `config/deployment.example.json` is its public shape; the live copy
+# lives outside the repository with the roots it names, and generates the file below.
+deployment = "/absolute/path/outside/this/repository/deployment.json"
+generated_config = "/absolute/path/outside/this/repository/openclaw.json"
 
 [model]
-provider = "choose-a-provider"
-name = "choose-a-model"
+# Names only, and the chains themselves are `src/adapter/front-lane.ts` rather than this file:
+# a rung is a provider and a model together, ordered, which a single pair cannot say (ADR-0016).
+provider = "syrax-gemini"
+name = "gemini-3.5-flash-lite"
 
 [paths]
 # Keep these roots outside the Syrax repository.
@@ -39,7 +47,11 @@ empty_floor = -0.23
 idle_evict_after = "30m"
 
 [security]
-secrets_from = "environment-or-private-secret-store"
+# One JSON store, reached by file-backed SecretRefs, and refused rather than used when the machine
+# has left it readable (ADR-0010). Nothing resolved is written down: the runtime's generated
+# `models.json` carries the credential marker `secretref-managed` and no key.
+secrets_from = "one-json-store-by-file-backed-ref"
+secrets_store = "/absolute/path/outside/this/repository/secrets/syrax.json"
 tool_policy = "explicit-allowlist"
 
 [observability]

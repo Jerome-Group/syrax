@@ -1,0 +1,7 @@
+# Prose is wrapped by hand here, at the width `.editorconfig` and every document already use.
+# A formatter re-flowing it turns a one-paragraph edit into a whole-file diff.
+*.md
+**/*.md
+
+package-lock.json
+runtime/package-lock.json

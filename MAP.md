@@ -15,6 +15,9 @@ Start here: `README.md`, then `AGENTS.md`.
 | System | Architecture, data flow, and public/private boundary | `docs/system-overview.md` |
 | Setup | Safe installation and runtime-injection sequence | `docs/setup.md` |
 | Configuration | Public contract and placeholder values | `config/syrax.example.toml` |
+| Runtime adapter | Syrax's decisions as one generated runtime configuration | `src/adapter/build.ts` |
+| Runtime pin | The exact runtime version, installed outside the checkout | `runtime/package.json` |
+| Tests | The suite and the two local wires it drives the gateway through | `test/` |
 | Agent skills | The routines an agent follows here, one file per skill | `docs/agents/` |
 | Automation | The workflows that run on a pull request or on a new issue, and dependency updates | `.github/` |
 

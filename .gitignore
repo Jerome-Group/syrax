@@ -25,3 +25,9 @@ logs/
 *.db
 config/*.local.*
 config/*.secret.*
+
+# Node
+node_modules/
+
+# Agent scratch
+.scratch/

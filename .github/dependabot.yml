@@ -50,3 +50,29 @@ updates:
     # update is never held back by it.
     cooldown:
       default-days: 7
+
+  # The toolchain the checks run: a formatter, a linter and a type checker, and nothing the
+  # artefact ships. A bump here goes red in `ci.yml` when it misbehaves, which is what makes it
+  # readable at a glance.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: daily
+    labels: []
+    rebase-strategy: auto
+    cooldown:
+      default-days: 7
+
+  # The runtime pin, and the one entry here whose bump is a deployment change rather than a
+  # toolchain one. `docs/configuration.md` carries the three steps that land it; this opens the
+  # first of them, which is the reviewable diff ADR-0003 asked the pin to produce. It is never an
+  # auto-merge candidate: this repository's checks do not install the runtime, so a green tick
+  # says nothing about the version being bumped.
+  - package-ecosystem: npm
+    directory: /runtime
+    schedule:
+      interval: daily
+    labels: []
+    rebase-strategy: auto
+    cooldown:
+      default-days: 7

@@ -15,9 +15,11 @@ flowchart LR
     context -. "private runtime state" .- boundary["Private boundary"]
 ~~~
 
-The concrete runtime behind orchestration is intentionally undecided. An adapter may connect this
-contract to an open-source runtime such as OpenClaw or Hermes, but naming a candidate is not the
-same as choosing it.
+The runtime behind orchestration is OpenClaw, pinned to an exact version
+([ADR-0003](adr/0003-the-runtime-adapter-wraps-openclaw.md)). The adapter connecting this contract
+to it is configuration rather than a layer of code on the request path: `src/adapter/` generates the
+runtime's own configuration file, and exits
+([ADR-0019](adr/0019-the-configuration-contract-is-generated-and-the-generator-runs-before-the-gateway.md)).
 
 ## Components
 
@@ -39,6 +41,8 @@ this checkout; the ignore rules are only the final backstop.
 
 ## Current state
 
-This first baseline contains the system contract and setup documentation. The runtime adapter,
-tool implementations, provider integration, and executable tests are future project work. Each
-concrete choice should add a decision record when its reason would not be obvious from the code.
+The walking skeleton stands: one bot locked to the Owner's Telegram ID, one **General** chat, and
+the front lane answering it — green against a local stub of each wire, so the reply path is proven
+without an external call. The four chats, the worker lane, the capability tool layers and the
+search index are future project work. Each concrete choice adds a decision record when its reason
+would not be obvious from the code.
