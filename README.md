@@ -22,6 +22,7 @@ the search index are still ahead.
 - [`docs/configuration.md`](docs/configuration.md) — the configuration contract and placeholder example.
 - [`config/syrax.example.toml`](config/syrax.example.toml) — illustrative public configuration, not a live file.
 - [`src/adapter/`](src/adapter/) — Syrax's decisions as one generated runtime configuration.
+- [`src/supervision/`](src/supervision/) — the LaunchAgent and the wrapper's pre-flight, generated the same way.
 - [`runtime/package.json`](runtime/package.json) — the runtime pin, whose lockfile is the pin itself.
 - [`docs/adr/`](docs/adr/) — decisions that cannot be recovered from the future code alone.
 
@@ -29,8 +30,8 @@ the search index are still ahead.
 
 Read the overview first, then follow [`docs/setup.md`](docs/setup.md): install the pinned runtime
 outside the checkout, write the secrets store, describe the machine, generate the runtime's
-configuration and start the gateway. `npm test` proves the reply path with no external call and no
-quota spent.
+configuration, then install the LaunchAgent that supervises it. `npm test` proves the reply path
+with no external call and no quota spent.
 
 ## Public boundary
 

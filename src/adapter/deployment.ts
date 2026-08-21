@@ -16,6 +16,12 @@ export type Deployment = {
   workspace: string;
   /** The one JSON secrets store (ADR-0010). */
   secretsStore: string;
+  /** Where both log surfaces land: the runtime's own file, and the capture beside it (ADR-0020). */
+  logsDir: string;
+  /** The wrapper the LaunchAgent runs instead of the binary, and never the binary (ADR-0005). */
+  wrapperPath: string;
+  /** The one loopback port a gateway listens on; the suite moves its own off the supervised one. */
+  gatewayPort: number;
   /** The only Telegram account that is answered. Everything else gets nothing. */
   ownerTelegramUserId: number;
   /** Bot API root. The suite stands a local stub here to drive the Telegram wire. */
@@ -25,6 +31,9 @@ export type Deployment = {
 };
 
 export const telegramApiRoot = "https://api.telegram.org";
+
+/** The runtime's own default, stated so two gateways on one machine collide visibly (ADR-0017). */
+export const gatewayPort = 18789;
 
 export const providerBaseUrls: Record<ProviderId, string> = {
   "syrax-gemini": "https://generativelanguage.googleapis.com/v1beta/openai",
@@ -40,6 +49,8 @@ const requiredPaths = [
   "stateDir",
   "workspace",
   "secretsStore",
+  "logsDir",
+  "wrapperPath",
 ] as const;
 
 export function readDeployment(source: unknown): Deployment {
@@ -66,10 +77,21 @@ export function readDeployment(source: unknown): Deployment {
     stateDir: input.stateDir as string,
     workspace: input.workspace as string,
     secretsStore: input.secretsStore as string,
+    logsDir: input.logsDir as string,
+    gatewayPort: readPort(input.gatewayPort),
+    wrapperPath: input.wrapperPath as string,
     ownerTelegramUserId: ownerTelegramUserId as number,
     telegramApiRoot: readUrl(input.telegramApiRoot, "telegramApiRoot") ?? telegramApiRoot,
     providerBaseUrls: readProviderBaseUrls(input.providerBaseUrls),
   };
+}
+
+function readPort(value: unknown): number {
+  if (value === undefined) return gatewayPort;
+  if (!Number.isSafeInteger(value) || (value as number) < 1 || (value as number) > 65535) {
+    throw new InvalidDeployment("gatewayPort must be a port number.");
+  }
+  return value as number;
 }
 
 function readUrl(value: unknown, key: string): string | undefined {

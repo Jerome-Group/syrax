@@ -3,7 +3,10 @@
 > **Amended in part by [ADR-0015](0015-the-scratch-root-stays-in-tmp-and-the-preflight-asserts-its-mode.md)**
 > — the scratch root's contents are narrower than the section *This moves the log, and not the
 > scratch root* states. The voice-waveform scratch it names is Discord's, not the generic
-> message-send path, and the browser and Codex writers beside it are extension-gated too.
+> message-send path, and the browser and Codex writers beside it are extension-gated too. **Amended
+> in part by
+> [ADR-0020](0020-the-wrapper-opens-the-gateways-capture-and-keeps-only-stderr.md)** — there are no
+> launchd captures, so the rotation ownership split below has one side and not two.
 
 The gateway's own log is placed by the runtime's `logging.file` key, at
 `/Volumes/RAID0/104 Syrax/logs/openclaw.log` — a **fixed** basename — and the runtime rotates it.
@@ -54,6 +57,7 @@ truncating.
 
 The runtime rotates its own file — `maxFileBytes`, five numbered archives. **`newsyslog` covers only
 launchd's `StandardOutPath` / `StandardErrorPath`.**
+*(Spent — [ADR-0020](0020-the-wrapper-opens-the-gateways-capture-and-keeps-only-stderr.md).)*
 
 Two rotators over one file is how a reader loses the window it is mid-way through, and
 [ADR-0012](0012-a-rotted-rung-is-reported-and-never-repaired.md) made that a real cost rather than a
@@ -62,7 +66,10 @@ So the `newsyslog.d` entry is **per-file, not a `logs/*` glob** — a glob is ho
 the next time a file appears in that directory.
 
 The launchd captures are named `gateway.out.log` / `gateway.err.log`, which keeps them outside the
-`openclaw-*` prune pattern. That costs nothing today and forgives a later switch into rolling mode.
+`openclaw-*` prune pattern.
+*(Spent, on there being two —
+[ADR-0020](0020-the-wrapper-opens-the-gateways-capture-and-keeps-only-stderr.md).)* That costs
+nothing today and forgives a later switch into rolling mode.
 
 ## Two settings are stated rather than inherited
 

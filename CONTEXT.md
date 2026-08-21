@@ -50,6 +50,24 @@ _Avoid_: router — that is the provider side, and keeping the two apart is the 
 entry exists; proxy — which names something standing *between* two parties, where this is one of
 the parties
 
+**Pre-flight**:
+What the wrapper does before it hands the process to the runtime: assert the directories the runtime
+creates but does not enforce, resolve every credential ref, and say what it found. Its gating is
+**asymmetric on purpose** — it refuses to start where the fault would otherwise be a gateway that
+comes up and fails every turn, and it warns and proceeds where the fault costs the Owner nothing
+today. A check that always refuses is a check somebody removes.
+_Avoid_: health check — that runs against a process already up and is somebody else's word for
+watching; bootstrap, which is launchd's verb for loading the job and not for anything inside it
+
+**Capture**:
+The gateway's second log surface: what the process writes outside the runtime's own log file, which
+is the pre-flight's lines and whatever kills it. It is a different file with a different writer and
+its own rotation, and keeping the two apart is what lets the lane monitor read the first one keyed
+on inode and size.
+_Avoid_: stdout, StandardOutPath — launchd's key for this, and launchd is precisely what does not
+open it here; log — the unqualified word means the runtime's own file everywhere else in this
+repository
+
 **Router**:
 How a lane's chain is walked and when a provider is stood down. It is a **behaviour, not a
 component**: no process in this system is the router. The runtime walks the chains it is configured

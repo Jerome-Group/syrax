@@ -103,6 +103,12 @@ describe("the walking skeleton", { skip: !runtimeIsInstalled() }, () => {
     }
   });
 
+  it("writes its own log where it was told, under the basename that does not roll", () => {
+    const logged = readdirSync(gateway.deployment.logsDir);
+    assert.deepEqual(logged, ["openclaw.log"], "the runtime logged somewhere else, or rolled.");
+    assert.equal(statSync(gateway.deployment.logsDir).mode & 0o777, 0o700);
+  });
+
   it("keeps the secrets store private, which is what the runtime checks at the moment of use", () => {
     assert.equal(statSync(gateway.deployment.secretsStore).mode & 0o777, 0o600);
   });

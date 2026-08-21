@@ -6,7 +6,10 @@
 > workspace path — and by
 > [ADR-0014](0014-the-runtime-logs-to-a-fixed-basename-and-rotates-itself.md), which places the
 > runtime's own log and splits rotation ownership, so the **Logs** section below names one of two
-> log surfaces.
+> log surfaces — and by
+> [ADR-0020](0020-the-wrapper-opens-the-gateways-capture-and-keeps-only-stderr.md), which answers
+> that section's rotation mechanism, launchd being unable to open a capture file on the volume this
+> record placed the logs on.
 
 Syrax runs on the mini under **launchd**, as **two LaunchAgents** — not containerised, and not one
 process. `com.jerome-group.syrax.gateway` runs OpenClaw; `com.jerome-group.syrax.search` runs the
@@ -205,9 +208,10 @@ internal disk, and the house habit of `~/Library/Logs/` is drift rather than a r
 
 Two consequences taken deliberately. Gateway logs will contain **chat content**, which is private
 runtime state by `CONTEXT.md`'s definition, so rotation is a `newsyslog.d` entry rather than
-optimism — launchd's `StandardOutPath` appends without bound. And if RAID0 does not mount, the job
-cannot open its log and fails loudly, which is the correct failure: the state directory is on that
-volume anyway.
+optimism — launchd's `StandardOutPath` appends without bound. *(Spent, on the mechanism —
+[ADR-0020](0020-the-wrapper-opens-the-gateways-capture-and-keeps-only-stderr.md).)* And if RAID0
+does not mount, the job cannot open its log and fails loudly, which is the correct failure: the
+state directory is on that volume anyway.
 
 ## Consequences
 
