@@ -113,6 +113,11 @@ The toolchain is three tools and one dependency each — `prettier` to format, `
 never a review topic. Prettier does not touch Markdown here: prose is wrapped by hand at the width
 every document already uses, and re-flowing it turns a one-paragraph edit into a whole-file diff.
 
+The core's *many jobs* shape (§5) is qualified here by the Organisation's gate: a job running on a
+pull request must be named in the `Required checks` ruleset or waived in the conformance manifest,
+and both live in the management hub. So the checks grow as **steps in the one required job** until
+a separate context is worth asking the hub for.
+
 ### The seams the tests are written at
 
 A test observes what crossed a wire or landed in a file. There are three seams and no others, and

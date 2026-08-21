@@ -52,13 +52,12 @@ jobs:
       #
       # Renaming this job renames the check context, which the `Required checks` ruleset names by
       # hand. Rename both, or every merge blocks on a check that will never report.
-
-  # The repository's own artefact is a configuration contract expressed as TypeScript, run by Node
-  # without a build step, so there is nothing to compile and the type check is the whole of it.
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      #
+      # Everything below is in this job rather than in siblings beside it, and that is the
+      # Organisation's gate rather than a preference: a job running on a pull request must be
+      # either named in the `Required checks` ruleset or waived in the conformance manifest, and
+      # both of those live in the management hub. A new job here is a new context nothing
+      # requires, so the checks grow as steps until a context is worth asking the hub for.
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -67,6 +66,8 @@ jobs:
 
       - run: npm ci
 
+      # The artefact is a configuration contract expressed as TypeScript, run by Node without a
+      # build step, so there is nothing to compile and the type check is the whole of it.
       - run: npm run check:format
       - run: npm run check:lint
       - run: npm run check:types
@@ -76,13 +77,8 @@ jobs:
       # exists on the mini, and the suite that matters runs there.
       - run: npm test
 
-  # The pin is the lockfile, so what is checked is that it still resolves to the version the
-  # tracked `package.json` names — a hand-edit to either that the other did not follow is the
-  # failure this catches, and it costs no network.
-  runtime-pin:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The pin is the lockfile, so what is checked is that it still resolves to the version the
+      # tracked `package.json` names — a hand-edit to either that the other did not follow.
       - name: The lockfile pins the version runtime/package.json names
         run: |
           declared=$(node -p "require('./runtime/package.json').dependencies.openclaw")
