@@ -10,8 +10,9 @@ keep the boundary intact.
 Two files, and only the second is the runtime's. A **deployment** describes one machine — the roots
 the runtime must be told about rather than left to choose, the single Telegram account that is
 answered, the provisioning map that records which topic carries which chat, and the two base URLs;
-[`config/deployment.example.json`](../config/deployment.example.json) is its public shape. `src/cli/generate-config.ts` reads it and writes the runtime's own
-configuration, which is where every decision this repository's records argue actually lands.
+[`config/deployment.example.json`](../config/deployment.example.json) is its public shape.
+`src/cli/generate-config.ts` reads it and writes the runtime's own configuration, which is where
+every decision this repository's records argue actually lands.
 
 Neither live file is tracked. The deployment names machine-local paths and the Owner's Telegram ID;
 the generated configuration carries both plus the shape of the secrets store. What is tracked is

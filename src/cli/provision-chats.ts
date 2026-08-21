@@ -18,5 +18,5 @@ if (source === undefined) {
 const deployment = readDeployment(JSON.parse(readFileSync(source, "utf8")));
 const provisioned = await ChatSurface.open(deployment).provision();
 
-for (const { chat, carrier } of provisioned) console.log(`${chat.carrierName}\t${carrier}`);
+for (const { chat, id } of provisioned) console.log(`${chat.carrierName}\t${id}`);
 if (provisioned.length === 0) console.log("Every chat already has a carrier.");

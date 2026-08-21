@@ -7,7 +7,7 @@
 
 import { join } from "node:path";
 import type { Deployment } from "./deployment.ts";
-import { chats, defaultChatId, type Chat } from "./chats.ts";
+import { defaultChat, everyChat, type Chat } from "./chats.ts";
 import { frontLane, modelRef } from "./front-lane.ts";
 
 export function agentDefaults(deployment: Deployment) {
@@ -32,14 +32,14 @@ export function agentDefaults(deployment: Deployment) {
  * context rather than a channel setting, so the agent carries it wherever it is reached from — the
  * root included, which no topic configuration can name.
  */
-export function agentWorkspace(deployment: Deployment, subject: Chat): string {
-  return join(deployment.workspace, subject.id);
+export function agentWorkspace(deployment: Deployment, chat: Chat): string {
+  return join(deployment.workspace, chat.id);
 }
 
 export function agentList(deployment: Deployment) {
-  return chats.map((subject) => ({
-    id: subject.id,
-    workspace: agentWorkspace(deployment, subject),
-    ...(subject.id === defaultChatId ? { default: true } : {}),
+  return everyChat.map((chat) => ({
+    id: chat.id,
+    workspace: agentWorkspace(deployment, chat),
+    ...(chat.id === defaultChat.id ? { default: true } : {}),
   }));
 }

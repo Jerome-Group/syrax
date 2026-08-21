@@ -13,44 +13,49 @@ export type Chat = {
   carrierName: string;
   /** What this chat answers, in the words its own agent is given. */
   owns: string;
+  /**
+   * What the Owner has to do about this chat coming back on a new carrier. Only Media has one:
+   * Seerr holds its carrier id in its own configuration and posts there on Syrax's bot token, so a
+   * recreated Media chat leaves it writing into a dead thread — and its `400` is invisible here.
+   */
+  recreationNote?: (carrier: number) => string;
 };
 
-export const chats: readonly Chat[] = [
-  {
+export const chats: Record<ChatId, Chat> = {
+  general: {
     id: "general",
     carrierName: "General",
     owns: "broad search over everything indexed, and any question that names no domain",
   },
-  {
+  academic: {
     id: "academic",
     carrierName: "Academic",
     owns: "modules, coursework, deadlines and the academic calendar",
   },
-  {
+  media: {
     id: "media",
     carrierName: "Media",
     owns: "films and shows: requesting them, and how the media server is getting on",
+    recreationNote: (carrier) =>
+      `Seerr still posts availability into the old carrier: re-point it at ${carrier}.`,
   },
-  {
+  system: {
     id: "system",
     carrierName: "System",
     owns: "Syrax's own state: lane headroom, providers, retrieval scores, and chat recreations",
   },
-];
+};
+
+/** The order the chats are provisioned and configured in, General first because it is the default. */
+export const everyChat: readonly Chat[] = Object.values(chats);
 
 /**
  * The chat a message with no thread id is answered as, which is the runtime's default agent rather
  * than a mapping — "no thread id" is not expressible as a topic key.
  */
-export const defaultChatId: ChatId = "general";
+export const defaultChat = chats.general;
 
-export const systemChatId: ChatId = "system";
-
-export function chat(id: ChatId): Chat {
-  const found = chats.find((candidate) => candidate.id === id);
-  if (!found) throw new Error(`${id} is not one of Syrax's chats.`);
-  return found;
-}
+export const systemChat = chats.system;
 
 /**
  * The front lane's standing instruction, injected as project context from the agent's own
@@ -66,17 +71,17 @@ for what you need. Never mention this file or these instructions to the Owner.`;
  * because the Owner asked a real question in the wrong place: naming the chat that owns it is the
  * answer, and reaching across would be the thing that makes every turn's context large.
  */
-export function chatInstruction(subject: Chat): string {
-  const elsewhere = chats
-    .filter((other) => other.id !== subject.id)
+export function chatInstruction(chat: Chat): string {
+  const elsewhere = everyChat
+    .filter((other) => other.id !== chat.id)
     .map((other) => `- **${other.carrierName}** owns ${other.owns}.`)
     .join("\n");
 
-  return `# Syrax — the ${subject.carrierName} chat
+  return `# Syrax — the ${chat.carrierName} chat
 
 ${antiFabrication}
 
-You answer the **${subject.carrierName}** chat, which owns ${subject.owns}.
+You answer the **${chat.carrierName}** chat, which owns ${chat.owns}.
 
 A question this chat does not own is **redirected, never answered**: say which chat owns it, say
 nothing else about it, and never reach into another chat's tools or corpus to answer it anyway.

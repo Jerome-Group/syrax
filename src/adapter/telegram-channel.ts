@@ -5,7 +5,7 @@
  */
 
 import type { CarrierMap } from "./carriers.ts";
-import { chats } from "./chats.ts";
+import { everyChat } from "./chats.ts";
 import type { Deployment } from "./deployment.ts";
 import { secretPaths, secretRef } from "./secrets-store.ts";
 
@@ -34,9 +34,9 @@ export function telegramChannel(deployment: Deployment, carriers: CarrierMap) {
  * recreates the carrier and this map is written again.
  */
 function topicRouting(carriers: CarrierMap): Record<string, { agentId: string }> {
-  const routed = chats
-    .filter((subject) => carriers[subject.id] !== undefined)
-    .map((subject) => [String(carriers[subject.id]), { agentId: subject.id }] as const);
+  const routed = everyChat
+    .filter((chat) => carriers[chat.id] !== undefined)
+    .map((chat) => [String(carriers[chat.id]), { agentId: chat.id }] as const);
   return Object.fromEntries(routed);
 }
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildRuntimeConfig } from "../src/adapter/build.ts";
 import { readDeployment } from "../src/adapter/deployment.ts";
-import { chatInstruction, chats } from "../src/adapter/chats.ts";
+import { chatInstruction, everyChat } from "../src/adapter/chats.ts";
 
 const deployment = readDeployment({
   runtimeRoot: "/private/root/runtime",
@@ -91,7 +91,7 @@ describe("the generated runtime configuration", () => {
   });
 
   it("tells every agent not to guess, without naming the file that says so", () => {
-    for (const subject of chats) {
+    for (const subject of everyChat) {
       const instruction = chatInstruction(subject);
       assert.match(instruction, /Never state a fact you have not verified/);
       assert.match(instruction, /Never mention this file/);
@@ -136,11 +136,11 @@ describe("the four chats", () => {
   });
 
   it("tells each agent to redirect rather than reach across, and names who owns what", () => {
-    for (const subject of chats) {
+    for (const subject of everyChat) {
       const instruction = chatInstruction(subject);
       assert.match(instruction, /redirected, never answered/);
       assert.match(instruction, /never reach into another chat's tools or corpus/);
-      for (const other of chats) {
+      for (const other of everyChat) {
         assert.match(instruction, new RegExp(other.carrierName), `${subject.id} omits ${other.id}`);
       }
     }

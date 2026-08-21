@@ -82,7 +82,7 @@ describe("the write path", () => {
     const recreations = await surface().post("media", "The film is downloading.");
 
     assert.equal(recreations.length, 1);
-    const recreated = recreations[0]!.carrier;
+    const recreated = recreations[0]!.id;
     assert.notEqual(recreated, carriers.media);
 
     const crossed = telegram.calls.slice(before);
@@ -120,7 +120,7 @@ describe("the write path", () => {
 
     assert.deepEqual(readCarrierMap(deployment.carrierMap), {
       ...carriers,
-      academic: recreation!.carrier,
+      academic: recreation!.id,
     });
   });
 
@@ -132,7 +132,7 @@ describe("the write path", () => {
       channels: { telegram: { direct: Record<string, { topics: Record<string, unknown> }> } };
     };
     const topics = routed.channels.telegram.direct[String(ownerTelegramUserId)]!.topics;
-    assert.deepEqual(topics[String(recreation!.carrier)], { agentId: "academic" });
+    assert.deepEqual(topics[String(recreation!.id)], { agentId: "academic" });
     assert.equal(topics[String(carriers.academic)], undefined);
   });
 
@@ -159,7 +159,7 @@ describe("the write path", () => {
       ["system"],
     );
     const announcement = sends().at(-1)!;
-    assert.equal(announcement.message_thread_id, recreations[0]!.carrier);
+    assert.equal(announcement.message_thread_id, recreations[0]!.id);
     assert.match(String(announcement.text), /System came back empty/);
   });
 

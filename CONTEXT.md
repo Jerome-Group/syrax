@@ -103,6 +103,16 @@ _Avoid_: General topic as a special case — it is an ordinary created topic, an
 to make it something else (adopting thread id 1, binding it to the root) both failed on
 measurement; root as a fourth carrier — it carries nothing and answers what the carriers miss
 
+**Provisioning map**:
+Which topic currently carries each chat, kept as private runtime state and keyed by the chat's own
+name. It is the only thing that connects a chat to its carrier: **nothing ever matches a chat to a
+topic by the topic's name**, because a recreation reuses the name and it is the id that routes. Its
+loss is not a failure to detect — there is no read that would find the carriers again, so the write
+path recreates what the map does not name, one chat at a time as each is written to.
+_Avoid_: topic map — it names the mechanism rather than the chats it is keyed by; registry, which
+suggests something a lookup goes through at run time, where this is read when the configuration is
+generated and written when a carrier changes
+
 **Public configuration**:
 A tracked example or interface contract containing placeholders and no live secrets or private
 state.

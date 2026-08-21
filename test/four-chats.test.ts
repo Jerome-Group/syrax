@@ -6,7 +6,7 @@
 
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { chat, chats } from "../src/adapter/chats.ts";
+import { chats, everyChat } from "../src/adapter/chats.ts";
 import { runtimeIsInstalled, startGateway, type GatewayFixture } from "./gateway.ts";
 import { ownerTelegramUserId } from "./machine.ts";
 import { ProviderStub } from "./stubs/openai-provider.ts";
@@ -22,7 +22,7 @@ describe("the four chats", { skip: !runtimeIsInstalled() }, () => {
 
   before(async () => {
     telegram = await TelegramStub.start("6100000000:STUBSTUBSTUBSTUBSTUBSTUBSTUBSTUBSTU");
-    for (const subject of chats) carriers[subject.id] = telegram.createTopic();
+    for (const subject of everyChat) carriers[subject.id] = telegram.createTopic();
     provider = await ProviderStub.start({
       catalogue: ["gemini-3.5-flash-lite"],
       standingReply: { kind: "reply", text: answer },
@@ -70,7 +70,7 @@ describe("the four chats", { skip: !runtimeIsInstalled() }, () => {
     assert.equal(sent.body.message_thread_id, undefined, "the answer left the root.");
   });
 
-  for (const subject of chats) {
+  for (const subject of everyChat) {
     it(`answers the ${subject.carrierName} carrier as the ${subject.id} agent`, async () => {
       const { sent, prompt } = await ask("What is the state of things?", carriers[subject.id]);
 
@@ -88,7 +88,7 @@ describe("the four chats", { skip: !runtimeIsInstalled() }, () => {
 
     assert.equal(answeringAgent(prompt), "academic");
     assert.match(prompt, /redirected, never answered/);
-    assert.match(prompt, new RegExp(`\\*\\*Media\\*\\* owns ${chat("media").owns}`));
+    assert.match(prompt, new RegExp(`\\*\\*Media\\*\\* owns ${chats.media.owns}`));
     assert.equal(sent.body.message_thread_id, carriers.academic);
     assert.equal(
       telegram.matching("sendMessage", intoMedia).length,
@@ -99,10 +99,10 @@ describe("the four chats", { skip: !runtimeIsInstalled() }, () => {
 
   it("gives each chat its own session, so one chat's context is never another's", async () => {
     const sessions = new Set<string>();
-    for (const subject of chats) {
+    for (const subject of everyChat) {
       const { prompt } = await ask("What is the state of things?", carriers[subject.id]);
       sessions.add(/session=(\S+)/.exec(prompt)?.[1] ?? subject.id);
     }
-    assert.equal(sessions.size, chats.length);
+    assert.equal(sessions.size, everyChat.length);
   });
 });

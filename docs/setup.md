@@ -76,14 +76,26 @@ own agent, and sends what it was sending. A **resurrection** — the topic retur
 and its id intact — is invisible to Syrax and is not announced. A **recreation** is: it arrives in
 the System chat, naming the new carrier id.
 
+The new carrier routes to its own agent from the gateway's **next configuration load**, and not
+before it: the running gateway was measured not to pick the rewritten file up. Until it does, a
+message typed in the recreated chat is an unrecognised thread id, which is answered as General —
+ADR-0013's standing rule, and what the announcement warns about. Put the chat back on its own agent
+by restarting the gateway:
+
+```sh
+launchctl kickstart -k gui/$(id -u)/com.jerome-group.syrax.gateway
+```
+
+
 One recreation has a stage of its own, because two systems hold the Media chat's carrier id and only
 one of them knows it changed:
 
-- **Re-point Seerr after a Media recreation.** Seerr posts availability into the Media topic on
-  Syrax's own bot token, from an id in Seerr's own configuration. A recreated Media chat leaves it
-  writing into a dead thread, and its `400` is invisible here. Take the new carrier id from the
-  System announcement and set it in Seerr. Syrax does not push it: the capability's own product owns
-  its configuration.
+- **Re-point Seerr after a Media recreation.** This is a stage of the provisioning wizard, which is
+  to say it is yours and never a push from Syrax: the capability's own product owns its
+  configuration. Seerr posts availability into the Media topic on Syrax's own bot token, from an id
+  in Seerr's own configuration, so a recreated Media chat leaves it writing into a dead thread — and
+  its `400` is invisible here. Take the new carrier id from the System announcement and set it in
+  Seerr.
 
 Running it in the foreground is still the way to watch a start closely:
 

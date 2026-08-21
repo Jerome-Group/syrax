@@ -4,17 +4,14 @@
  * path runs it again wherever a carrier is recreated, so the new carrier routes to its own agent.
  */
 
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { agentWorkspace } from "./agent-defaults.ts";
 import { buildRuntimeConfig } from "./build.ts";
 import type { CarrierMap } from "./carriers.ts";
-import { chats, chatInstruction } from "./chats.ts";
+import { chatInstruction, everyChat } from "./chats.ts";
 import type { Deployment } from "./deployment.ts";
+import { ensurePrivateDirectory, writePrivateFile } from "./private-state.ts";
 import { assertSecretsStoreIsPrivate } from "./secrets-store.ts";
-
-const privateDirectoryMode = 0o700;
-const privateFileMode = 0o600;
 
 const checkout = resolve(import.meta.dirname, "..", "..");
 
@@ -35,30 +32,21 @@ export function generateConfig(deployment: Deployment, carriers: CarrierMap): vo
 
   for (const directory of [
     deployment.workspace,
-    ...chats.map((subject) => agentWorkspace(deployment, subject)),
+    ...everyChat.map((chat) => agentWorkspace(deployment, chat)),
     deployment.stateDir,
     deployment.logsDir,
     dirname(deployment.configPath),
   ]) {
-    // `mode` applies only to a directory this call creates, and every one of these may already
-    // exist at whatever the umask left it — so the mode is set rather than requested.
-    mkdirSync(directory, { recursive: true, mode: privateDirectoryMode });
-    chmodSync(directory, privateDirectoryMode);
+    ensurePrivateDirectory(directory);
   }
 
-  for (const subject of chats) {
-    writeFileSync(
-      join(agentWorkspace(deployment, subject), "AGENTS.md"),
-      chatInstruction(subject),
-      { mode: privateFileMode },
-    );
+  for (const chat of everyChat) {
+    writePrivateFile(join(agentWorkspace(deployment, chat), "AGENTS.md"), chatInstruction(chat));
   }
   // The generated file names the Owner's Telegram account, the secrets store and every private
   // root. It is private runtime state by this repository's own definition, so it is written like it.
-  writeFileSync(
+  writePrivateFile(
     deployment.configPath,
     `${JSON.stringify(buildRuntimeConfig(deployment, carriers), null, 2)}\n`,
-    { mode: privateFileMode },
   );
-  chmodSync(deployment.configPath, privateFileMode);
 }

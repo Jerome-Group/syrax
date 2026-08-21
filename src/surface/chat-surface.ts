@@ -9,13 +9,14 @@
  */
 
 import { readCarrierMap, writeCarrierMap, type CarrierMap } from "../adapter/carriers.ts";
-import { chat, chats, systemChatId, type Chat, type ChatId } from "../adapter/chats.ts";
+import { chats, everyChat, systemChat, type Chat, type ChatId } from "../adapter/chats.ts";
 import type { Deployment } from "../adapter/deployment.ts";
 import { generateConfig } from "../adapter/generator.ts";
 import { readSecret, secretPaths } from "../adapter/secrets-store.ts";
 import { BotApi, isMissingCarrier } from "./bot-api.ts";
 
-export type Recreation = { chat: Chat; carrier: number };
+/** One chat and the topic now carrying it, as this run either created it or found it missing. */
+export type Carrier = { chat: Chat; id: number };
 
 export class ChatSurface {
   readonly #deployment: Deployment;
@@ -38,37 +39,35 @@ export class ChatSurface {
   }
 
   /**
-   * Posts into a chat, recreating its carrier if the send finds it gone, and announcing every
-   * genuine recreation in System with its new id. A chat is recreated at most once per post, so an
-   * announcement that recreates System in turn is itself announced and nothing recurses further.
-   */
-  async post(id: ChatId, text: string): Promise<Recreation[]> {
-    const recreations = await this.#deliver(chat(id), text);
-    const announced: Recreation[] = [];
-    while (announced.length < recreations.length) {
-      const next = recreations[announced.length]!;
-      announced.push(next);
-      recreations.push(...(await this.#deliver(chat(systemChatId), announcement(next))));
-    }
-    return recreations;
-  }
-
-  /**
    * Creates a carrier for every chat the map does not name, which is what the wizard does on a
    * fresh machine. Nothing is posted and nothing is announced: the Owner is present, and an
    * announcement is for a recreation they did not ask for.
    */
-  async provision(): Promise<Recreation[]> {
-    const missing = chats.filter((subject) => this.#carriers[subject.id] === undefined);
-    const provisioned: Recreation[] = [];
-    for (const subject of missing) {
-      provisioned.push({ chat: subject, carrier: await this.#recreate(subject) });
-    }
+  async provision(): Promise<Carrier[]> {
+    const missing = everyChat.filter((chat) => this.#carriers[chat.id] === undefined);
+    const provisioned: Carrier[] = [];
+    for (const chat of missing) provisioned.push(await this.#recreate(chat));
     return provisioned;
   }
 
-  async #deliver(subject: Chat, text: string): Promise<Recreation[]> {
-    const carrier = this.#carriers[subject.id];
+  /**
+   * Posts into a chat, recreating its carrier if the send finds it gone, and announcing every
+   * recreation in System with its new id. Announcing can itself recreate System, so announcements
+   * are drained from a queue rather than sent in one pass — and the queue empties, because a chat
+   * that has just been recreated is there to be written into.
+   */
+  async post(id: ChatId, text: string): Promise<Carrier[]> {
+    const recreated = await this.#deliver(chats[id], text);
+    const announced: Carrier[] = [];
+    for (const carrier of recreated) {
+      announced.push(carrier);
+      recreated.push(...(await this.#deliver(systemChat, announcement(carrier))));
+    }
+    return announced;
+  }
+
+  async #deliver(chat: Chat, text: string): Promise<Carrier[]> {
+    const carrier = this.#carriers[chat.id];
     if (carrier !== undefined) {
       try {
         await this.#api.sendMessage(this.#deployment.ownerTelegramUserId, text, carrier);
@@ -78,36 +77,41 @@ export class ChatSurface {
       }
     }
 
-    const recreated = await this.#recreate(subject);
-    await this.#api.sendMessage(this.#deployment.ownerTelegramUserId, text, recreated);
-    return [{ chat: subject, carrier: recreated }];
+    const recreated = await this.#recreate(chat);
+    await this.#api.sendMessage(this.#deployment.ownerTelegramUserId, text, recreated.id);
+    return [recreated];
   }
 
   /**
-   * The map is rewritten and the configuration regenerated before the retry, because a carrier the
-   * runtime does not know about routes to the default agent — General answering a chat it does not
-   * own is the failure this closes.
+   * The map and the configuration are rewritten before the retry, so the new carrier routes to its
+   * own agent from the gateway's next configuration load. It does not route before then: the
+   * running gateway was measured not to pick the rewritten file up, and until it does a message in
+   * the new carrier is an unrecognised thread id — answered as General and noted in System, which
+   * is ADR-0013's standing rule rather than a gap this could close by writing a file.
    */
-  async #recreate(subject: Chat): Promise<number> {
-    const carrier = await this.#api.createForumTopic(
+  async #recreate(chat: Chat): Promise<Carrier> {
+    const id = await this.#api.createForumTopic(
       this.#deployment.ownerTelegramUserId,
-      subject.carrierName,
+      chat.carrierName,
     );
-    this.#carriers = { ...this.#carriers, [subject.id]: carrier };
+    this.#carriers = { ...this.#carriers, [chat.id]: id };
     writeCarrierMap(this.#deployment.carrierMap, this.#carriers);
     generateConfig(this.#deployment, this.#carriers);
-    return carrier;
+    return { chat, id };
   }
 }
 
 /**
- * The line names the consequence rather than the event. Media's is the one worth naming: Seerr
- * holds the old carrier in its own configuration and posts there on Syrax's bot token, so a
- * recreated Media chat leaves it writing into a dead thread — and its `400` is invisible here.
+ * The line names the consequences rather than the event. Two of them always apply — the chat is
+ * empty, and it is answered as General until the gateway loads its configuration again — and the
+ * chat may carry a third that only it knows about.
  */
-function announcement(recreated: Recreation): string {
-  const opening = `${recreated.chat.carrierName} came back empty on carrier ${recreated.carrier}. Everything that was in it is gone.`;
-  return recreated.chat.id === "media"
-    ? `${opening} Seerr still posts availability into the old carrier: re-point it at ${recreated.carrier}, which is a stage of the provisioning wizard.`
-    : opening;
+function announcement(recreated: Carrier): string {
+  return [
+    `${recreated.chat.carrierName} came back empty on carrier ${recreated.id}. Everything that was in it is gone.`,
+    "Until the gateway loads its configuration again, messages there are answered as General.",
+    recreated.chat.recreationNote?.(recreated.id),
+  ]
+    .filter((line) => line !== undefined)
+    .join(" ");
 }

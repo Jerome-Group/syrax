@@ -7,16 +7,13 @@
  * platform offers no read that does not itself resurrect what it was asked about.
  */
 
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { readFileSync } from "node:fs";
+import { writePrivateFile } from "./private-state.ts";
 import type { ChatId } from "./chats.ts";
-import { chats } from "./chats.ts";
+import { everyChat } from "./chats.ts";
 
 /** A chat with no entry has no carrier Syrax knows of, which the next write to it settles. */
 export type CarrierMap = Partial<Record<ChatId, number>>;
-
-const privateDirectoryMode = 0o700;
-const privateFileMode = 0o600;
 
 export function readCarrierMap(path: string): CarrierMap {
   let contents: string;
@@ -30,10 +27,7 @@ export function readCarrierMap(path: string): CarrierMap {
 }
 
 export function writeCarrierMap(path: string, map: CarrierMap): void {
-  mkdirSync(dirname(path), { recursive: true, mode: privateDirectoryMode });
-  chmodSync(dirname(path), privateDirectoryMode);
-  writeFileSync(path, `${JSON.stringify(map, null, 2)}\n`, { mode: privateFileMode });
-  chmodSync(path, privateFileMode);
+  writePrivateFile(path, `${JSON.stringify(map, null, 2)}\n`);
 }
 
 /**
@@ -46,7 +40,7 @@ function carrierMap(source: unknown): CarrierMap {
   if (typeof source !== "object" || source === null || Array.isArray(source)) {
     throw new InvalidCarrierMap("A carrier map is a JSON object keyed by chat.");
   }
-  const known = new Set<string>(chats.map((each) => each.id));
+  const known = new Set<string>(everyChat.map((chat) => chat.id));
   const entries = Object.entries(source).map(([id, carrier]) => {
     if (!known.has(id)) {
       throw new InvalidCarrierMap(`${id} is not one of Syrax's chats: ${[...known].join(", ")}.`);
