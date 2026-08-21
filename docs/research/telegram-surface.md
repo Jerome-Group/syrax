@@ -370,14 +370,59 @@ probes, so each result below is a before/after pair rather than a single reading
   therefore useless as a liveness probe, and worth knowing because
   [#50](https://github.com/Jerome-Group/syrax/issues/50) found the runtime's `typingMode: "instant"`
   raises a typing indicator before the reply: the indicator will succeed against a deleted topic and
-  the reply behind it will not. *(One candidate probe is left untested — `editForumTopic` with no
-  fields changed, which does validate the thread id per the `TOPIC_ID_INVALID` result above.
-  [#95](https://github.com/Jerome-Group/syrax/issues/95) measures it, so that "no read-only probe
-  exists" becomes a fact about the platform rather than about how far this ticket looked.)*
+  the reply behind it will not. *(The one candidate left untested — `editForumTopic` with no fields
+  changed, ~~which does validate the thread id per the `TOPIC_ID_INVALID` result above~~ — was
+  measured by [#95](https://github.com/Jerome-Group/syrax/issues/95), and that premise was exactly
+  backwards: the no-field call validates nothing. "No read-only probe exists" is now a fact about
+  the platform. See the #95 block below.)*
 - **A topic created while the update filter was narrowed is invisible forever.** One of the two
   before-toggle topics was created while `allowed_updates` was still `["callback_query"]`; it exists
   in the client and Syrax received nothing, and no re-poll replays it. Reconciliation verifies
   stored ids — it does not discover unknown ones.
+
+Observed on 2026-08-21 for [#95](https://github.com/Jerome-Group/syrax/issues/95), against a live
+bot in Threaded mode. #63 dismissed `sendChatAction` and left one candidate standing; this measured
+that candidate and the rest of the forum family, against a **live** topic, a **never-existed** thread
+id, and a bot-created topic the **Owner deleted in the client**.
+
+- **There is no read-only liveness probe, and the shape of the negative is mechanical.** Validation
+  and the service message are the *same event*: `editForumTopic` resolves the thread only when it
+  actually performs an edit, and an edit always emits `forum_topic_edited`.
+
+  | call | live topic | never existed | Owner-deleted |
+  | --- | --- | --- | --- |
+  | `editForumTopic`, no fields | `ok: true` | `ok: true` | `ok: true`, no resurrection |
+  | `editForumTopic` + `name` or `icon_custom_emoji_id` | `ok: true` | `TOPIC_ID_INVALID` | `ok: true`, **resurrects** |
+  | `unpinAllForumTopicMessages` | `ok: true` | `ok: true` | `ok: true`, no resurrection |
+  | `closeForumTopic` / `reopenForumTopic` | `the chat is not a supergroup forum` | same | same |
+
+- **#28's `TOPIC_ID_INVALID` on thread 1 was the `name`, not thread 1.** A no-field
+  `editForumTopic` returns `ok: true` for every id ≥ 1 — measured at 1, 2, 3, 99999 and
+  2,000,000,000 — and rejects only `0`, as *"invalid forum topic identifier specified"*. The same
+  call carrying a `name` rejects 1, 2 and 99999 and accepts only a live topic. So the surface has no
+  getter and no validating read: every forum method is a mutation, and they either reject the chat
+  type or accept any id.
+- **`close`/`reopen` are not on this surface at all.** They reject the *chat type* identically for a
+  live topic and a never-existed thread — a property of the private threaded chat, not of the id.
+  The **General** variants were already known absent (`editGeneralForumTopic` → `TOPIC_ID_INVALID`,
+  #28); this is the per-topic pair going the same way.
+- **Resurrection is caused by the message, not by the call.** Three deleted topics, one method each,
+  Owner-confirmed in the client afterwards: only the one that emitted `forum_topic_edited` came
+  back. The no-op edit and `unpinAllForumTopicMessages` both returned `ok: true`, emitted nothing,
+  and left the topic gone from the client. This sharpens #63's *"the next bot write resurrects it"*
+  — it is a **message landing in the topic** that resurrects, and an API call that touches the topic
+  without writing one does not.
+- **The reason no probe can exist is that the deletion is client-side.** The validating variant
+  returns `ok: true` on the Owner-deleted topic, byte-identical to the live control; only a
+  never-existed id errors. The server still holds a topic the Owner deleted, so no server-side call
+  can report a state the server does not have. What any of these can distinguish is *exists* from
+  *never existed* — which is not the question. Combined with the row above, the two halves are a
+  closed door: **a call that does not resurrect does not validate, and a call that validates emits a
+  message and therefore resurrects.**
+
+So [#79](https://github.com/Jerome-Group/syrax/issues/79)'s verification cost stands as priced.
+There is no silent liveness check to give the recreate-and-retry branch, `sendMessage` remains the
+only probe that validates, and it remains a write.
 
 ## What the runtime does with the root — [#81](https://github.com/Jerome-Group/syrax/issues/81)
 
