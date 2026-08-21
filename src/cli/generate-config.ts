@@ -5,7 +5,7 @@
  *   node src/cli/generate-config.ts <deployment.json>
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { buildRuntimeConfig } from "../adapter/build.ts";
 import { type Deployment, readDeployment } from "../adapter/deployment.ts";
@@ -13,6 +13,7 @@ import { standingInstruction } from "../adapter/general-agent.ts";
 import { assertSecretsStoreIsPrivate } from "../adapter/secrets-store.ts";
 
 const privateDirectoryMode = 0o700;
+const privateFileMode = 0o600;
 
 const checkout = resolve(import.meta.dirname, "..", "..");
 
@@ -31,15 +32,26 @@ export function generateConfig(deployment: Deployment): void {
   assertOutsideCheckout(deployment);
   assertSecretsStoreIsPrivate(deployment.secretsStore);
 
-  mkdirSync(deployment.workspace, { recursive: true, mode: privateDirectoryMode });
-  mkdirSync(deployment.stateDir, { recursive: true, mode: privateDirectoryMode });
-  mkdirSync(dirname(deployment.configPath), { recursive: true, mode: privateDirectoryMode });
+  for (const directory of [
+    deployment.workspace,
+    deployment.stateDir,
+    dirname(deployment.configPath),
+  ]) {
+    // `mode` applies only to a directory this call creates, and every one of these may already
+    // exist at whatever the umask left it — so the mode is set rather than requested.
+    mkdirSync(directory, { recursive: true, mode: privateDirectoryMode });
+    chmodSync(directory, privateDirectoryMode);
+  }
 
   writeFileSync(join(deployment.workspace, "AGENTS.md"), standingInstruction);
+  // The generated file names the Owner's Telegram account, the secrets store and every private
+  // root. It is private runtime state by this repository's own definition, so it is written like it.
   writeFileSync(
     deployment.configPath,
     `${JSON.stringify(buildRuntimeConfig(deployment), null, 2)}\n`,
+    { mode: privateFileMode },
   );
+  chmodSync(deployment.configPath, privateFileMode);
 }
 
 if (import.meta.filename === process.argv[1]) {

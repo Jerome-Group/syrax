@@ -32,9 +32,6 @@ export const providerBaseUrls: Record<ProviderId, string> = {
   "syrax-groq": "https://api.groq.com/openai/v1",
 };
 
-export type DeploymentInput = Omit<Deployment, "telegramApiRoot" | "providerBaseUrls"> &
-  Partial<Pick<Deployment, "telegramApiRoot" | "providerBaseUrls">>;
-
 export class InvalidDeployment extends Error {}
 
 const requiredPaths = [
@@ -64,11 +61,41 @@ export function readDeployment(source: unknown): Deployment {
   }
 
   return {
-    ...(input as unknown as DeploymentInput),
-    telegramApiRoot: (input.telegramApiRoot as string | undefined) ?? telegramApiRoot,
-    providerBaseUrls: {
-      ...providerBaseUrls,
-      ...(input.providerBaseUrls as Partial<Record<ProviderId, string>> | undefined),
-    },
+    runtimeRoot: input.runtimeRoot as string,
+    configPath: input.configPath as string,
+    stateDir: input.stateDir as string,
+    workspace: input.workspace as string,
+    secretsStore: input.secretsStore as string,
+    ownerTelegramUserId: ownerTelegramUserId as number,
+    telegramApiRoot: readUrl(input.telegramApiRoot, "telegramApiRoot") ?? telegramApiRoot,
+    providerBaseUrls: readProviderBaseUrls(input.providerBaseUrls),
   };
+}
+
+function readUrl(value: unknown, key: string): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !URL.canParse(value)) {
+    throw new InvalidDeployment(`${key} must be a URL.`);
+  }
+  return value;
+}
+
+/**
+ * A misspelt provider silently leaves the production URL in place, which is a test that passes
+ * having spent real quota — so an unknown key is refused rather than merged over.
+ */
+function readProviderBaseUrls(value: unknown): Record<ProviderId, string> {
+  if (value === undefined) return { ...providerBaseUrls };
+  if (typeof value !== "object" || value === null) {
+    throw new InvalidDeployment("providerBaseUrls must be an object keyed by provider.");
+  }
+  const overrides = Object.entries(value).map(([provider, url]) => {
+    if (!(provider in providerBaseUrls)) {
+      throw new InvalidDeployment(
+        `providerBaseUrls names ${provider}, which is not a provider: ${Object.keys(providerBaseUrls).join(", ")}.`,
+      );
+    }
+    return [provider, readUrl(url, `providerBaseUrls.${provider}`)] as const;
+  });
+  return { ...providerBaseUrls, ...Object.fromEntries(overrides) };
 }

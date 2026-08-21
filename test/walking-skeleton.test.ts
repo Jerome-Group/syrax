@@ -64,12 +64,23 @@ describe("the walking skeleton", { skip: !runtimeIsInstalled() }, () => {
     assert.ok(await telegram.stayedSilent("sendMessage", 15_000, answered));
   });
 
-  it("spends no quota: every call crossed a local wire", () => {
-    for (const request of provider.requests) {
-      assert.ok(request.path.startsWith("/"), `an external provider call escaped: ${request.path}`);
+  it("spends no quota: every wire the gateway was given is loopback", () => {
+    const generated = JSON.parse(readFileSync(gateway.deployment.configPath, "utf8")) as {
+      models: { providers: Record<string, { baseUrl: string }> };
+      channels: { telegram: { apiRoot: string } };
+    };
+    const wires = [
+      ...Object.values(generated.models.providers).map((block) => block.baseUrl),
+      generated.channels.telegram.apiRoot,
+    ];
+    assert.equal(wires.length, 4);
+    for (const wire of wires) {
+      assert.equal(new URL(wire).hostname, "127.0.0.1", `the gateway was given ${wire}`);
     }
-    assert.ok(telegram.apiRoot.startsWith("http://127.0.0.1:"));
-    assert.ok(provider.baseUrl.startsWith("http://127.0.0.1:"));
+    assert.ok(
+      provider.requests.some((request) => request.path.endsWith("/chat/completions")),
+      "the turn was answered without the local provider being asked.",
+    );
   });
 
   it("stands the credential marker where a key would be, and exports no key at all", () => {

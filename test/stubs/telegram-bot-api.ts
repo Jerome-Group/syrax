@@ -30,7 +30,7 @@ const botIdentity = {
 export class TelegramStub {
   readonly calls: OutboundCall[] = [];
   #pending: unknown[] = [];
-  #waitingPoll: ((updates: unknown[]) => void) | null = null;
+  #waitingPolls = new Set<(updates: unknown[]) => void>();
   #nextUpdateId = 1;
   #nextMessageId = 1000;
 
@@ -94,24 +94,32 @@ export class TelegramStub {
   }
 
   async close(): Promise<void> {
-    this.#waitingPoll?.([]);
+    this.#releaseWaitingPolls();
     await new Promise<void>((resolve, reject) =>
       this.#server.close((error) => (error ? reject(error) : resolve())),
     );
   }
 
   #deliver(update: unknown): void {
-    const waiting = this.#waitingPoll;
+    // Exactly one poll takes the update; the rest keep waiting, so no request is ever orphaned.
+    const [waiting] = this.#waitingPolls;
     if (waiting) {
-      this.#waitingPoll = null;
+      this.#waitingPolls.delete(waiting);
       waiting([update]);
       return;
     }
     this.#pending.push(update);
   }
 
+  #releaseWaitingPolls(): void {
+    for (const waiting of this.#waitingPolls) waiting([]);
+    this.#waitingPolls.clear();
+  }
+
   async #handle(request: IncomingMessage, response: import("node:http").ServerResponse) {
-    const method = (request.url ?? "").split("/").pop() ?? "";
+    // The path alone: Telegram's own long-polling form carries a query string, and a method read
+    // off the raw URL would neither route nor be recorded under its own name.
+    const method = new URL(request.url ?? "/", "http://stub").pathname.split("/").pop() ?? "";
     const body = await readJsonBody(request);
 
     if (method === "getUpdates") {
@@ -141,12 +149,9 @@ export class TelegramStub {
       return updates;
     }
     return new Promise<unknown[]>((resolve) => {
-      this.#waitingPoll = resolve;
+      this.#waitingPolls.add(resolve);
       setTimeout(() => {
-        if (this.#waitingPoll === resolve) {
-          this.#waitingPoll = null;
-          resolve([]);
-        }
+        if (this.#waitingPolls.delete(resolve)) resolve([]);
       }, 1_000);
     });
   }
