@@ -76,15 +76,12 @@ own agent, and sends what it was sending. A **resurrection** — the topic retur
 and its id intact — is invisible to Syrax and is not announced. A **recreation** is: it arrives in
 the System chat, naming the new carrier id.
 
-The new carrier routes to its own agent from the gateway's **next configuration load**, and not
-before it: the running gateway was measured not to pick the rewritten file up. Until it does, a
-message typed in the recreated chat is an unrecognised thread id, which is answered as General —
-ADR-0013's standing rule, and what the announcement warns about. Put the chat back on its own agent
-by restarting the gateway:
-
-```sh
-launchctl kickstart -k gui/$(id -u)/com.jerome-group.syrax.gateway
-```
+The running gateway picks the new carrier up by itself, and no restart is part of this: a `channels`
+write is landed by a channel reload, which the runtime defers only until the turns in flight drain
+([ADR-0021](adr/0021-a-config-write-is-applied-when-it-is-written-and-landed-when-a-channel-reloads.md)).
+The **first** message typed in the recreated chat can still meet the old routing and be answered as
+General — ADR-0013's standing rule for an unrecognised thread id — and the one after it lands on the
+chat's own agent. That is what the announcement says, and it is the whole of the delay.
 
 
 One recreation has a stage of its own, because two systems hold the Media chat's carrier id and only

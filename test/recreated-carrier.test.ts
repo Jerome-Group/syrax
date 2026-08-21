@@ -1,8 +1,9 @@
 /**
  * What the gateway does with a carrier the write path recreated under it. The answer is measured
- * rather than assumed: the running gateway does not pick the rewritten configuration up, so until
- * it loads that file again the new carrier is an unrecognised thread id — answered as General and
- * noted in System, which is ADR-0013's standing rule.
+ * rather than assumed: the rewritten `channels` block is landed by a channel reload the runtime
+ * defers until the turns in flight drain (ADR-0021), so the first message can still meet the old
+ * routing — answered as General, ADR-0013's standing rule for an unrecognised thread id — and the
+ * next one reaches the chat's own agent.
  */
 
 import assert from "node:assert/strict";
@@ -53,7 +54,13 @@ describe("a recreated carrier", { skip: !runtimeIsInstalled() }, () => {
     await provider?.close();
   });
 
-  it("routes to its own agent from the next configuration load, and to General before it", async () => {
+  it("reaches its own agent without a restart, once the turns in flight have drained", async () => {
+    // One turn first: the config watcher is the last thing the gateway starts, after it reports
+    // itself ready, and a rewrite that beats it is never seen at all (ADR-0021).
+    const opening = telegram.matching("sendMessage", isAnswer).length;
+    telegram.inject({ fromUserId: ownerTelegramUserId, text: "Are you there?" });
+    await telegram.waitFor("sendMessage", isAnswer, 60_000, opening);
+
     telegram.clearTopic(carriers.media!);
     const surface = new ChatSurface(
       gateway.deployment,
@@ -73,18 +80,21 @@ describe("a recreated carrier", { skip: !runtimeIsInstalled() }, () => {
       "the file the next load reads does not route the new carrier.",
     );
 
-    const since = telegram.matching("sendMessage", isAnswer).length;
-    telegram.inject({
-      fromUserId: ownerTelegramUserId,
-      text: "What is downloading?",
-      messageThreadId: recreated!.id,
-    });
-    await telegram.waitFor("sendMessage", isAnswer, 60_000, since);
-    assert.equal(
-      /agent=(\w+)/.exec(JSON.stringify(provider.requests.at(-1)?.body))?.[1],
-      "general",
-      "the running gateway picked the rewritten configuration up; the announcement now over-warns.",
-    );
+    const answering: string[] = [];
+    for (let attempt = 1; attempt <= 4 && answering.at(-1) !== "media"; attempt++) {
+      const since = telegram.matching("sendMessage", isAnswer).length;
+      telegram.inject({
+        fromUserId: ownerTelegramUserId,
+        text: `What is downloading? (${attempt})`,
+        messageThreadId: recreated!.id,
+      });
+      await telegram.waitFor("sendMessage", isAnswer, 60_000, since);
+      answering.push(/agent=(\w+)/.exec(JSON.stringify(provider.requests.at(-1)?.body))?.[1] ?? "");
+      if (answering.at(-1) !== "media") await new Promise((wait) => setTimeout(wait, 2000));
+    }
+
+    assert.equal(answering.at(-1), "media", `the new carrier never reached Media: ${answering}`);
+    assert.ok(answering.length <= 3, `it took ${answering.length} turns: ${answering}`);
   });
 
   it("is announced in System, naming what the Owner has to do about it", async () => {
@@ -95,7 +105,7 @@ describe("a recreated carrier", { skip: !runtimeIsInstalled() }, () => {
     );
 
     assert.match(announcement, /Media came back empty on carrier \d+/);
-    assert.match(announcement, /answered as General/);
+    assert.match(announcement, /may be answered as General/);
     assert.match(announcement, /Seerr/);
   });
 });

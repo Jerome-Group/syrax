@@ -83,11 +83,11 @@ export class ChatSurface {
   }
 
   /**
-   * The map and the configuration are rewritten before the retry, so the new carrier routes to its
-   * own agent from the gateway's next configuration load. It does not route before then: the
-   * running gateway was measured not to pick the rewritten file up, and until it does a message in
-   * the new carrier is an unrecognised thread id — answered as General and noted in System, which
-   * is ADR-0013's standing rule rather than a gap this could close by writing a file.
+   * The map and the configuration are rewritten before the retry, and the running gateway picks the
+   * new carrier up by itself — a `channels` write is landed by a channel reload, which is deferred
+   * only until the turns in flight drain (ADR-0021). So the first message the Owner types in the
+   * recreated chat can still meet the old routing and be answered as General, which is ADR-0013's
+   * standing rule for an unrecognised thread id, and the one after it lands on the right agent.
    */
   async #recreate(chat: Chat): Promise<Carrier> {
     const id = await this.#api.createForumTopic(
@@ -103,13 +103,13 @@ export class ChatSurface {
 
 /**
  * The line names the consequences rather than the event. Two of them always apply — the chat is
- * empty, and it is answered as General until the gateway loads its configuration again — and the
- * chat may carry a third that only it knows about.
+ * empty, and the first message typed there may still meet the old routing — and the chat may carry
+ * a third that only it knows about.
  */
 function announcement(recreated: Carrier): string {
   return [
     `${recreated.chat.carrierName} came back empty on carrier ${recreated.id}. Everything that was in it is gone.`,
-    "Until the gateway loads its configuration again, messages there are answered as General.",
+    "The first message you type there may be answered as General; the next one lands.",
     recreated.chat.recreationNote?.(recreated.id),
   ]
     .filter((line) => line !== undefined)
