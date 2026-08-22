@@ -16,7 +16,7 @@ import json
 import os
 from dataclasses import dataclass
 
-from .lists import Lists, is_within
+from .lists import Lists, is_within, literal_prefix
 
 DEFAULT_PORT = 18790
 DEFAULT_IDLE_EVICT_SECONDS = 1800
@@ -58,11 +58,13 @@ def read_deployment(path: str) -> SearchConfig:
     index_root = _absolute(source, "searchIndex")
     allowlist = _roots(source, "indexAllowlist")
     scope = _roots(source, "extractionScope")
-    outside = [root for root in scope if not any(is_within(root, a) for a in allowlist)]
+    outside = [
+        entry for entry in scope if not any(is_within(literal_prefix(entry), a) for a in allowlist)
+    ]
     if outside:
         raise InvalidDeployment(
             f"extractionScope names {outside[0]}, which no indexAllowlist root contains: "
-            "the scope is a subset of the allowlist, not a second list of roots."
+            "the scope is a subset of the allowlist, not a second list of its own."
         )
 
     return SearchConfig(

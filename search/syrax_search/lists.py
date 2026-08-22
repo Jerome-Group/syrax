@@ -62,6 +62,7 @@ class Lists:
     """One machine's three lists, each already resolved to absolute paths."""
 
     index_allowlist: tuple[str, ...]
+    """A root, or a pattern. Still one list — see `extracts` for why it is not a fourth."""
     extraction_scope: tuple[str, ...]
     blocked_roots: tuple[str, ...]
 
@@ -90,8 +91,28 @@ class Lists:
         return any(is_within(path, root) for root in self.index_allowlist)
 
     def extracts(self, path: str) -> bool:
-        """Inside the extraction scope a document is read; outside it, only its name is indexed."""
-        return any(is_within(path, root) for root in self.extraction_scope)
+        """Inside the extraction scope a document is read; outside it, only its name is indexed.
+
+        An entry is a root or a glob, and a glob is what stops this becoming a fourth list. A whole
+        root is all-or-nothing, and one root here holds a faculty's worth of exam papers where only
+        one department's are wanted — so the scope says which *documents* are read rather than only
+        which trees they sit in. `*` matches separators too, so `…/pyps/*/MH*.pdf` reaches every
+        depth beneath that root.
+        """
+        return any(
+            fnmatch(path, entry) if is_pattern(entry) else is_within(path, entry)
+            for entry in self.extraction_scope
+        )
+
+
+def is_pattern(entry: str) -> bool:
+    return any(character in entry for character in "*?[")
+
+
+def literal_prefix(entry: str) -> str:
+    """What a pattern says before it starts guessing — the part that must be inside a root."""
+    cut = min((entry.index(one) for one in "*?[" if one in entry), default=len(entry))
+    return entry[:cut].rsplit(os.sep, 1)[0] if cut < len(entry) else entry
 
 
 def is_within(path: str, root: str) -> bool:

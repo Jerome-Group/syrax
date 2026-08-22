@@ -62,3 +62,37 @@ def test_an_extraction_scope_outside_the_allowlist_is_refused(tmp_path):
     )
     with pytest.raises(InvalidDeployment, match="subset"):
         read_deployment(str(deployment))
+
+
+def test_a_scope_entry_may_be_a_pattern(machine, tmp_path):
+    """One root holds a faculty's papers where only one department's are wanted."""
+    from syrax_search.lists import Lists
+
+    papers = "/Volumes/RAID0/100 GRENADE/001 Projects/pyps"
+    lists = Lists(
+        index_allowlist=("/Volumes/RAID0/100 GRENADE",),
+        extraction_scope=(f"{papers}/*/MH*.pdf",),
+        blocked_roots=(),
+    )
+    assert lists.extracts(f"{papers}/2025-2026 Semester 2/MH1101 2025-2026 Semester 2.pdf")
+    assert not lists.extracts(f"{papers}/2025-2026 Semester 2/EE2001 2025-2026 Semester 2.pdf")
+    assert not lists.extracts(f"{papers}/2025-2026 Semester 2/MH1101 notes.txt")
+
+
+def test_a_pattern_is_still_a_subset_of_the_allowlist(tmp_path):
+    deployment = tmp_path / "deployment.json"
+    deployment.write_text(
+        '{"searchIndex": "/tmp/i", "indexAllowlist": ["/a"], '
+        '"extractionScope": ["/b/*/MH*.pdf"], "blocklist": ["/c"]}'
+    )
+    with pytest.raises(InvalidDeployment, match="subset"):
+        read_deployment(str(deployment))
+
+
+def test_a_pattern_inside_the_allowlist_is_accepted(tmp_path):
+    deployment = tmp_path / "deployment.json"
+    deployment.write_text(
+        '{"searchIndex": "/tmp/i", "indexAllowlist": ["/a"], '
+        '"extractionScope": ["/a/papers/*/MH*.pdf"], "blocklist": ["/c"]}'
+    )
+    assert read_deployment(str(deployment)).lists.extracts("/a/papers/2025/MH1101 final.pdf")

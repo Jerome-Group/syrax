@@ -4,6 +4,10 @@
 > in one part — the quantity the two floors below are read against is `1 - distance` under
 > `sqlite-vec`'s default metric, which is L2 and not the cosine this record calls it. The numbers
 > stand; the word is marked where it appears.
+>
+> **Amended by [ADR-0024](0024-a-watermark-is-not-a-text-layer-and-the-scope-is-a-pattern.md)** in
+> two: a text layer that is one line repeated per page is treated as no text layer, and an
+> extraction scope entry may be a glob as well as a root.
 
 Natural-language file search is built here: one SQLite database carrying a keyword arm and a vector
 arm over the same extracted text, indexed by a small Python process and served to the runtime as a
@@ -277,7 +281,9 @@ before spending it would hold up the thing the number is meant to inform.
 - `config/syrax.example.toml` carries `search_index` and `benchmark` as placeholder paths beside
   the existing private roots, and `docs/configuration.md` carries the rebuild and reset procedure.
 - The glossary gains four terms, because one word was carrying four meanings.
-- Adding a root to the extraction scope is a configuration change, not a build.
+- Adding a ~~root~~ root or pattern to the extraction scope is a configuration change, not a build.
+  *(A glob is an entry too, and the change costs a reset —
+  [ADR-0024](0024-a-watermark-is-not-a-text-layer-and-the-scope-is-a-pattern.md).)*
 
 ## Revisit when
 
