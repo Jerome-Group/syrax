@@ -108,9 +108,10 @@ keeping: **a provider's catalogue is evidence a model exists and is not evidence
   against an 8,000-token ceiling and a 5,239-token call. Raise that reservation past 2,761 and the
   rung stops working — with a `413` that reads exactly like the provider's fault, which is the trap
   ADR-0016 spent half a record undoing.
-- **Nothing in the store answers for Z.AI.** The secrets store carries gemini, mistral and groq; the
-  worker lane's floor refers to `/providers/zai/apiKey`, and a deployment that has not provisioned
-  one has a three-rung worker lane and no signal saying so.
+- **A deployment that has not provisioned Z.AI has a three-rung worker lane and no signal saying
+  so.** The floor refers to `/providers/zai/apiKey`, and a key that exists on the machine somewhere
+  other than the store is a key the gateway cannot reach: the mini's own had been sitting in the
+  provisioning-era `providers.env` since the providers were first keyed in, and nothing read it.
 - **`delegationMode: "prefer"` is a prompt, not a rule.** It adds guidance telling the front lane to
   delegate anything more involved than a direct reply; it enforces nothing. A front lane that
   answers a research question itself is behaving within its configuration.
