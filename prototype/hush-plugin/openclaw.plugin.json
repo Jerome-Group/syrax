@@ -1,0 +1,7 @@
+{
+  "id": "syrax-hush",
+  "name": "Syrax hush spike",
+  "description": "Cancels the runtime's model-fallback notice before it reaches the chat.",
+  "activation": { "onStartup": true },
+  "configSchema": { "type": "object", "additionalProperties": false }
+}
