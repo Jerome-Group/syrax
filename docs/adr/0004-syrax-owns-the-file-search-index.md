@@ -1,5 +1,10 @@
 # Syrax owns the file-search index
 
+> **Amended by [ADR-0023](0023-the-verdict-floors-are-read-against-the-distance-the-trial-measured.md)**
+> in one part — the quantity the two floors below are read against is `1 - distance` under
+> `sqlite-vec`'s default metric, which is L2 and not the cosine this record calls it. The numbers
+> stand; the word is marked where it appears.
+
 Natural-language file search is built here: one SQLite database carrying a keyword arm and a vector
 arm over the same extracted text, indexed by a small Python process and served to the runtime as a
 long-lived MCP server. [ck](https://github.com/BeaconBay/ck) and
@@ -124,8 +129,10 @@ each one measuring something other than what it was asked to:
 - **The absolute floor cannot separate a right answer from a wrong one.** The two distributions
   overlap almost entirely — for the pinned model, correct answers score −0.172 to 0.157 and wrong
   ones 0.002 to 0.118 — so any floor high enough to reject a wrong answer rejects correct ones
-  first. `Dummit and Foote` is *right* at a cosine of −0.17, because it wins on the keyword arm
-  entirely. A floor on cosine would return `empty` for every query that names its target.
+  first. `Dummit and Foote` is *right* at ~~a cosine~~ a score of −0.17, because it wins on the
+  keyword arm entirely. A floor on ~~cosine~~ that score would return `empty` for every query that
+  names its target. *(The metric is L2 rather than cosine —
+  [ADR-0023](0023-the-verdict-floors-are-read-against-the-distance-the-trial-measured.md).)*
 - **The margin separates nothing.** Correct answers were found at a gap of 0.00000 and wrong ones
   at 0.00239.
 - **Both arms agreeing** was a perfect precision filter for the two rejected models and **fires

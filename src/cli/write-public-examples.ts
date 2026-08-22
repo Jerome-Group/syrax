@@ -9,16 +9,38 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { readDeployment, type Deployment } from "../adapter/deployment.ts";
 import { gatewayWrapperScript } from "../supervision/gateway-wrapper.ts";
-import { gatewayLabel, gatewayLaunchAgentPlist } from "../supervision/launch-agent.ts";
+import {
+  gatewayLabel,
+  gatewayLaunchAgentPlist,
+  indexSchedulePlists,
+  searchLabel,
+  searchLaunchAgentPlist,
+} from "../supervision/launch-agent.ts";
+import { searchWrapperScript } from "../supervision/search-wrapper.ts";
 
 const configDirectory = resolve(import.meta.dirname, "..", "..", "config");
 
 export const exampleDeploymentPath = join(configDirectory, "deployment.example.json");
 
+/**
+ * The example deployment names its own path the way a live one does, so the search wrapper's
+ * example is the text the mini gets rather than a copy carrying this checkout's location.
+ */
+const exampleDeploymentLocation = "/absolute/path/outside/this/repository/deployment.json";
+
 export function publicExamples(deployment: Deployment): Record<string, string> {
+  const schedules = Object.entries(indexSchedulePlists(deployment)).map(
+    ([label, contents]) => [join(configDirectory, `${label}.example.plist`), contents] as const,
+  );
   return {
     [join(configDirectory, "start-gateway.example.sh")]: gatewayWrapperScript(deployment),
     [join(configDirectory, `${gatewayLabel}.example.plist`)]: gatewayLaunchAgentPlist(deployment),
+    [join(configDirectory, "start-search.example.sh")]: searchWrapperScript(
+      deployment,
+      exampleDeploymentLocation,
+    ),
+    [join(configDirectory, `${searchLabel}.example.plist`)]: searchLaunchAgentPlist(deployment),
+    ...Object.fromEntries(schedules),
   };
 }
 

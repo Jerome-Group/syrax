@@ -11,7 +11,11 @@ import { homedir } from "node:os";
 import { dirname } from "node:path";
 import { type Deployment, readDeployment } from "../adapter/deployment.ts";
 import { gatewayWrapperScript } from "../supervision/gateway-wrapper.ts";
-import { gatewayLaunchAgentPlist, launchAgentPath } from "../supervision/launch-agent.ts";
+import {
+  gatewayLabel,
+  gatewayLaunchAgentPlist,
+  launchAgentPath,
+} from "../supervision/launch-agent.ts";
 
 const executableMode = 0o700;
 
@@ -22,7 +26,7 @@ export function installGatewayAgent(deployment: Deployment, home: string): Insta
   writeFileSync(deployment.wrapperPath, gatewayWrapperScript(deployment), { mode: executableMode });
   chmodSync(deployment.wrapperPath, executableMode);
 
-  const plistPath = launchAgentPath(home);
+  const plistPath = launchAgentPath(home, gatewayLabel);
   mkdirSync(dirname(plistPath), { recursive: true });
   writeFileSync(plistPath, gatewayLaunchAgentPlist(deployment));
 

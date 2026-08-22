@@ -33,6 +33,11 @@ logs = "/absolute/path/outside/this/repository/logs"
 usage_report = "/absolute/path/outside/this/repository/usage-report"
 
 [search]
+# The unit is Python and resident, reached by the four agents over loopback rather than spawned per
+# agent — one embedder in memory regardless of how many connect. Its roots, and the three lists
+# that decide what is crawled, what is read and what is never touched, are machine-local and live
+# in the deployment file above rather than here.
+port = 18790
 # Pinned by measurement in ADR-0004, not by preference. The quantisation is part of the pin:
 # the int8 export of the same model holds twice the memory at two thirds of the speed.
 embedder = "onnx-community/embeddinggemma-300m-ONNX"

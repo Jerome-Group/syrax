@@ -106,11 +106,12 @@ For this the unit reads the gateway's own log, so it keeps a byte offset and rep
 actually covered** rather than only when it last ran — a log it cannot open, or a gap it can prove it
 missed, is *unknown* rather than a quiet day.
 
-Both units are launched through a wrapper script rather than the binary, and the gateway's is
-generated from the deployment by `src/cli/install-gateway-agent.ts`. The wrapper sets the `PATH` a
-supervisor does not provide, opens the capture, and runs the **pre-flight**; credentials reach the
-runtime through the secrets store rather than through it, and putting them in the unit definition
-would leave live keys in plaintext in a file that is otherwise a tracked example.
+Each unit is launched through a wrapper script rather than the binary, generated from the
+deployment by `src/cli/install-gateway-agent.ts` and `src/cli/install-search-agent.ts`. A wrapper
+sets the `PATH` a supervisor does not provide, opens the capture, and runs the **pre-flight**;
+credentials reach the runtime through the secrets store rather than through it, and putting them in
+the unit definition would leave live keys in plaintext in a file that is otherwise a tracked
+example.
 
 The pre-flight's gating is asymmetric and the asymmetry is the design. It **refuses to start**,
 exiting `2`, on a credential ref the runtime cannot resolve, on a scratch root the machine has left
@@ -119,9 +120,53 @@ that would otherwise come up and be wrong. It **warns and proceeds** on a postur
 secrets audit and on automatic restart after power loss being switched off, neither of which costs
 the Owner their chatbot today. A check that always refuses is a check somebody removes.
 
+The search unit's pre-flight is the same shape with its own three checks. It **refuses to start**
+when its Python environment is missing or cannot import the package, and when the pinned embedder
+export is not in place — every query is embedded before it is answered, so a missing export is not
+a narrower search but no search at all, and fetching one here would make an unattended start reach
+a network. It **warns and proceeds** when there is no index yet, because the unit has to be up
+before a pass can be poked into it.
+
 Every wall-clock schedule — the index passes and the morning brief — is a launchd calendar job that
 pokes a loopback endpoint, rather than being split between launchd and the runtime's own scheduler.
 That keeps one auditable answer to *what can message me unprompted*.
+
+## The search unit
+
+Its roots are in the deployment beside the runtime's, and three of them are lists that do three
+different jobs. Naming them as one list is the mistake this section exists to prevent.
+
+| Key | What it is |
+|-----|------------|
+| `searchRoot` | The Python environment, created outside the checkout and installed from `search/requirements.txt` |
+| `searchIndex` | The index, the failure ledger and the pinned export — private runtime state, and never inside the checkout |
+| `searchPort` | The loopback port the agents reach it on; `18790` unless the deployment says otherwise |
+| `indexAllowlist` | The roots that are crawled. A **compute scope**: it is sized by what is worth indexing here, not by what is safe to reach |
+| `extractionScope` | The subset whose documents are opened and read. Outside it, a document is indexed by name alone and a search says so rather than returning silence |
+| `blocklist` | What is never indexed, never extracted and never read, **anywhere on the machine** — the only one of the three that is a boundary |
+| `searchScopes` | Named roots a chat's connection can be bound to, so scope is configuration rather than something a model passes |
+
+The index root and `~/Library` are blocked whether a deployment names them or not: without the
+first the index would index its own extracted text, and the second is where the machine keeps its
+credential and session stores. Everything else — dotfiles, key and certificate shapes, build and
+vendor trees, media-library internals, sparsebundles — is in the code, and a deployment adds the
+roots that are this machine's. The blocklist **fails open** where an allowlist fails closed, which
+is the price of letting `read` reach outside the allowlist at all: a new private tree becomes
+readable the moment it exists unless a pattern already covers it. Revisit it when the machine
+changes rather than setting it once.
+
+**The export is fetched once, deliberately.** Nothing in the index or query path reaches a network,
+so the pinned model is placed by hand before the unit is first started:
+
+```
+node src/cli/install-search-agent.ts <deployment.json>
+<searchRoot>/bin/python -m syrax_search fetch-embedder <deployment.json>
+```
+
+**Scope is bound per connection, never per call.** An agent whose reach is one root carries the
+`X-Syrax-Scope` header naming a `searchScopes` entry; General carries none and reaches the whole
+allowlist. Were scope a tool argument, the capability boundary would be model-settable and a chat
+could widen its own reach in one confused turn.
 
 ## Logs
 
@@ -197,6 +242,20 @@ Three operations, and which one to reach for depends on what went wrong.
 | Incremental pass | Re-reads documents whose size or modification time changed | Hourly, unattended |
 | Full pass | Re-reads every document in the extraction scope, re-embedding only where the extracted text changed | Every third day, unattended; by hand after a document is known to have broken |
 | Reset | Deletes the index and rebuilds from nothing | After changing the embedder, the chunking, or the extraction scope — each invalidates every stored vector |
+
+The unattended passes are launchd calendar jobs that poke the running unit, so each one uses the
+embedder already in memory rather than loading a second copy of it. `com.jerome-group.syrax.index-incremental`
+runs at seventeen past the hour; `com.jerome-group.syrax.index-full` runs at 04:30 on the days a
+three-day rhythm lands on. launchd counts days of the month rather than intervals, so the one place
+that rhythm stretches is the month boundary. By hand, either is:
+
+```
+curl --fail -X POST http://127.0.0.1:18790/index/full
+<searchRoot>/bin/python -m syrax_search reset <deployment.json>
+```
+
+A reindex is HTTP rather than a tool for the same reason scope is not a parameter: it is launchd's
+to trigger and no agent's to call.
 
 A reset is safe to run at any time: the index is derived state, and nothing else reads from it. It
 costs a full re-embedding of the corpus, which is the only expensive part of any of this.

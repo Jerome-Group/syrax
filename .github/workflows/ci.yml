@@ -77,6 +77,24 @@ jobs:
       # exists on the mini, and the suite that matters runs there.
       - run: npm test
 
+      # The search unit is Python (ADR-0004), so the same three checks run again in its own
+      # toolchain. It installs from `requirements-dev.txt` rather than from `pyproject.toml`: the
+      # first is the transitive pin, the second is what it was resolved from.
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: search/pyproject.toml
+
+      - run: pip install -r search/requirements-dev.txt
+      - run: pip install --no-deps -e ./search
+
+      - run: ruff format --check search
+      - run: ruff check search
+
+      # The suite runs against a stand-in embedder rather than the pinned export. Fetching 698 MB
+      # of weights on every pull request to exercise a model that is not what these tests are
+      # about would put the run past the ten-minute bound for nothing.
+      - run: python -m pytest search/tests
+
       # The pin is the lockfile, so what is checked is that it still resolves to the version the
       # tracked `package.json` names — a hand-edit to either that the other did not follow.
       - name: The lockfile pins the version runtime/package.json names

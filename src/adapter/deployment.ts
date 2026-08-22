@@ -22,6 +22,14 @@ export type Deployment = {
   logsDir: string;
   /** The wrapper the LaunchAgent runs instead of the binary, and never the binary (ADR-0005). */
   wrapperPath: string;
+  /** Where the search unit's Python environment was created, outside the checkout. */
+  searchRoot: string;
+  /** The index, the failure ledger and the pinned export: private runtime state (ADR-0004). */
+  searchIndex: string;
+  /** The search unit's own wrapper, in the gateway's shape. */
+  searchWrapperPath: string;
+  /** The loopback port the four agents reach the search unit on. */
+  searchPort: number;
   /** The one loopback port a gateway listens on; the suite moves its own off the supervised one. */
   gatewayPort: number;
   /** The only Telegram account that is answered. Everything else gets nothing. */
@@ -36,6 +44,9 @@ export const telegramApiRoot = "https://api.telegram.org";
 
 /** The runtime's own default, stated so two gateways on one machine collide visibly (ADR-0017). */
 export const gatewayPort = 18789;
+
+/** One above the gateway's, so a `lsof` on either reads as the unit it belongs to. */
+export const searchPort = 18790;
 
 export const providerBaseUrls: Record<ProviderId, string> = {
   "syrax-gemini": "https://generativelanguage.googleapis.com/v1beta/openai",
@@ -57,6 +68,9 @@ const requiredPaths = [
   "carrierMap",
   "logsDir",
   "wrapperPath",
+  "searchRoot",
+  "searchIndex",
+  "searchWrapperPath",
 ] as const;
 
 export function readDeployment(source: unknown): Deployment {
@@ -85,18 +99,22 @@ export function readDeployment(source: unknown): Deployment {
     secretsStore: input.secretsStore as string,
     carrierMap: input.carrierMap as string,
     logsDir: input.logsDir as string,
-    gatewayPort: readPort(input.gatewayPort),
+    gatewayPort: readPort(input.gatewayPort, gatewayPort),
     wrapperPath: input.wrapperPath as string,
+    searchRoot: input.searchRoot as string,
+    searchIndex: input.searchIndex as string,
+    searchWrapperPath: input.searchWrapperPath as string,
+    searchPort: readPort(input.searchPort, searchPort),
     ownerTelegramUserId: ownerTelegramUserId as number,
     telegramApiRoot: readUrl(input.telegramApiRoot, "telegramApiRoot") ?? telegramApiRoot,
     providerBaseUrls: readProviderBaseUrls(input.providerBaseUrls),
   };
 }
 
-function readPort(value: unknown): number {
-  if (value === undefined) return gatewayPort;
+function readPort(value: unknown, fallback: number): number {
+  if (value === undefined) return fallback;
   if (!Number.isSafeInteger(value) || (value as number) < 1 || (value as number) > 65535) {
-    throw new InvalidDeployment("gatewayPort must be a port number.");
+    throw new InvalidDeployment("a port must be a port number.");
   }
   return value as number;
 }

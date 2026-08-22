@@ -1,0 +1,53 @@
+# The pin. `pyproject.toml` names what this unit depends on; this file is what a machine
+# installs, transitively, the way the runtime is pinned by its lockfile rather than by the
+# version its manifest names. Regenerate it from a clean environment:
+#
+#   python3.14 -m venv /tmp/pin && /tmp/pin/bin/pip install "search[embedder]"
+#   /tmp/pin/bin/pip freeze --exclude-editable | grep -v '^syrax-search'
+annotated-types==0.8.0
+anyio==4.14.2
+attrs==26.1.0
+certifi==2026.7.22
+cffi==2.1.1
+charset-normalizer==3.5.1
+click==8.4.2
+cryptography==50.0.0
+filelock==3.32.3
+flatbuffers==25.12.19
+fsspec==2026.7.0
+h11==0.16.0
+hf-xet==1.6.0
+httpcore2==2.12.0
+httpx2==2.12.0
+huggingface-hub==0.36.0
+idna==3.19
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+mcp==2.0.0
+mcp-types==2.0.0
+mpmath==1.3.0
+numpy==2.3.4
+onnxruntime==1.24.1
+opentelemetry-api==1.44.0
+packaging==26.3
+protobuf==7.36.0
+pycparser==3.0
+pydantic==2.13.4
+pydantic_core==2.46.4
+PyJWT==2.13.0
+python-multipart==0.0.32
+PyYAML==6.0.3
+referencing==0.37.0
+requests==2.34.2
+rpds-py==2026.6.3
+sqlite-vec==0.1.6
+sse-starlette==3.4.8
+starlette==1.6.0
+sympy==1.14.0
+tokenizers==0.22.1
+tqdm==4.70.0
+truststore==0.10.4
+typing-inspection==0.4.4
+typing_extensions==4.16.0
+urllib3==2.7.0
+uvicorn==0.40.0
