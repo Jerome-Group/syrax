@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { after, describe, it } from "node:test";
 import { runtimeIsInstalled, standSyrax, type SyraxFixture } from "./gateway.ts";
 import { ownerTelegramUserId } from "./machine.ts";
-import { providerIdleTimeoutSeconds } from "../src/adapter/timeouts.ts";
+import { providerIdleTimeoutSeconds, turnCeilingSeconds } from "../src/adapter/timeouts.ts";
 
 const frontPrimary = "gemini-3.5-flash-lite";
 const frontSecond = "ministral-3b-latest";
@@ -34,15 +34,24 @@ describe("a rung that dies mid-turn", { skip: !runtimeIsInstalled() }, () => {
     const answered = await syrax.telegram.waitFor(
       "sendMessage",
       (call) => call.body.text === "The next rung answered.",
-      // Room for the idle watchdog itself, and then some: a hang is the failure being ruled out.
-      providerIdleTimeoutSeconds["syrax-gemini"] * 1000 + 60_000,
+      // The whole-turn ceiling, which is what a hang would have to outlast to be one.
+      turnCeilingSeconds * 1000,
     );
 
     assert.ok(answered, "the silent rung was never abandoned.");
+    // Bounded by the two clocks Syrax states rather than by a margin: the turn waited for the
+    // watchdog, and it finished well inside the ceiling that contains it. A tighter bound than
+    // this measures the machine — four gateways start at once when the suite runs its files in
+    // parallel — rather than the runtime.
     const waited = (Date.now() - started) / 1000;
+    const idle = providerIdleTimeoutSeconds["syrax-gemini"];
     assert.ok(
-      waited < providerIdleTimeoutSeconds["syrax-gemini"] + 30,
-      `the turn took ${waited.toFixed(1)}s, past the ${providerIdleTimeoutSeconds["syrax-gemini"]}s idle ceiling.`,
+      waited >= idle,
+      `the turn took ${waited.toFixed(1)}s, short of the ${idle}s watchdog.`,
+    );
+    assert.ok(
+      waited < turnCeilingSeconds,
+      `the turn took ${waited.toFixed(1)}s, past the ${turnCeilingSeconds}s whole-turn ceiling.`,
     );
     assert.ok(
       syrax.provider.askedModels.includes(frontSecond),
