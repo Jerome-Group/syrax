@@ -51,13 +51,27 @@ The other half of the same shape. Measured twice:
   answer. That notice is built unconditionally in the reply runner; no configuration suppresses it.
   So the two deaths differ in what the Owner sees, and which one a rung dies is not Syrax's choice.
 
-**The notice is reachable by a plugin, and that is a different question from whether it should be.**
-A `reply_payload_sending` hook sees it as a payload carrying `isFallbackNotice: true`, and returning
-`{ cancel: true }` stops it while the chain still advances and the answer still lands — measured on
-the branch `prototype/hush-fallback-notice`. What it costs is the thing this record opens with:
-loading a plugin is in-process code on the reply path, which is what ADR-0003 forswore. So this is
-not *"the runtime cannot"* but *"Syrax may not, on the boundary it chose"*, and the two should not be
-confused by a later reader looking for a knob.
+**The notice is reachable by a plugin, and the notice stays anyway.** A `reply_payload_sending` hook
+sees it as a payload carrying `isFallbackNotice: true`, and returning `{ cancel: true }` stops it
+while the chain still advances and the answer still lands — measured on the branch
+`prototype/hush-fallback-notice`, which is why this is *"Syrax may not, on the boundary it chose"*
+rather than *"the runtime cannot"*. The choice was made rather than deferred, and against
+suppressing it, for three reasons in the order that decided it:
+
+1. **The notice is currently the only thing that says a lane is degraded.** ADR-0012's answer to a
+   rotted rung is a report, and the System chat is where a report belongs — but that report is not
+   built. Cancelling the notice today does not move the signal to System; it deletes it, and the
+   Owner learns their front lane has been answering from its second rung by noticing the replies got
+   worse.
+2. **A cancel hook sits on every reply, not on one.** The handler decides `cancel` for each payload
+   the gateway is about to deliver, so a wrong predicate does not produce a visible bug — it produces
+   a chat that goes quiet. That is a worse failure than the noise it removes.
+3. **The first plugin is the one that costs.** ADR-0003's boundary is why this system has no request
+   path to debug; the second plugin is an easy argument once the first exists, and each is another
+   thing pinned against a hook API that moves with the runtime.
+
+So #123's *a fast-path death restarts silently* is **declined rather than blocked**, and the trade is
+noise on a degraded lane against knowing the lane is degraded at all.
 
 The two together retire the part of #123 that asked for a partial to be continued below: **the
 runtime never persists a partial in the first place.** ADR-0008 leaves the front lane unstreamed
@@ -135,10 +149,11 @@ keeping: **a provider's catalogue is evidence a model exists and is not evidence
   `test/delegating-turn.test.ts` is the cheapest check against a new pin — it fails loudly if the
   draft stops being deleted, and `test/runtime-config.test.ts` fails if a stated key stops being
   one the runtime knows.
-- **ADR-0003's boundary is re-argued.** A hook plugin is the one route to a silent fallback and to
-  anything else the reply path decides, and `prototype/hush-fallback-notice` is the working proof
-  rather than a guess. The question reopens the moment the Owner wants that surface more than the
-  boundary.
+- **The System chat learns to report a fallback.** That is the condition this record's decision was
+  made against: once a degraded lane is visible where it belongs, cancelling the notice in the
+  conversation stops being a loss and becomes a straight improvement — and
+  `prototype/hush-fallback-notice` is the working proof, not a guess. Reopening it means amending
+  ADR-0003, which is the decision that was declined here rather than the one that was never asked.
 - **A partial ever becomes visible.** If the runtime gains a token-level path to Telegram, ADR-0008
   reopens and so does this: a visible partial is the thing that would make continuing below one a
   real question rather than a described one.
