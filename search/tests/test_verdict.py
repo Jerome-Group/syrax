@@ -63,3 +63,12 @@ def test_a_name_match_does_lift_one(machine, embedder):
     verdict = answer(machine, embedder, "rowing zzzz yyyy xxxx wwww vvvv")
     assert verdict.state == "ambiguous"
     assert verdict.candidates[0].name == "rowing.md"
+
+
+def test_a_year_written_in_two_digits_survives_the_query(machine, embedder):
+    """`25/26` is the whole of what distinguishes one paper from four hundred siblings."""
+    from syrax_search.terms import terms_of
+
+    assert terms_of("MH1101 Final 25/26") == ["mh1101", "final", "25", "26"]
+    assert terms_of("the AY2425 paper for S2") == ["ay2425", "paper", "s2"]
+    assert terms_of("what and for the") == [], "the rule it replaces still does its own job"
