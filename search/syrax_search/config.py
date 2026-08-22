@@ -16,7 +16,7 @@ import json
 import os
 from dataclasses import dataclass
 
-from .lists import Lists, is_within
+from .lists import Lists, is_within, literal_prefix
 
 DEFAULT_PORT = 18790
 DEFAULT_IDLE_EVICT_SECONDS = 1800
@@ -57,12 +57,14 @@ def read_deployment(path: str) -> SearchConfig:
 
     index_root = _absolute(source, "searchIndex")
     allowlist = _roots(source, "indexAllowlist")
-    scope = _roots(source, "extractionScope")
-    outside = [root for root in scope if not any(is_within(root, a) for a in allowlist)]
+    scope = _entries(source, "extractionScope")
+    outside = [
+        entry for entry in scope if not any(is_within(literal_prefix(entry), a) for a in allowlist)
+    ]
     if outside:
         raise InvalidDeployment(
             f"extractionScope names {outside[0]}, which no indexAllowlist root contains: "
-            "the scope is a subset of the allowlist, not a second list of roots."
+            "the scope is a subset of the allowlist, not a second list of its own."
         )
 
     return SearchConfig(
@@ -107,13 +109,17 @@ def _scopes(value: object, allowlist: tuple[str, ...]) -> dict[str, str]:
 
 
 def _roots(source: dict, key: str) -> tuple[str, ...]:
+    return _entries(source, key, "an absolute path")
+
+
+def _entries(source: dict, key: str, shape: str = "an absolute path or pattern") -> tuple[str, ...]:
     value = source.get(key)
     if not isinstance(value, list) or not value:
-        raise InvalidDeployment(f"{key} must be a non-empty list of absolute paths.")
-    for root in value:
-        if not isinstance(root, str) or not root.startswith("/"):
-            raise InvalidDeployment(f"{key} names {root!r}, which is not an absolute path.")
-    return tuple(root.rstrip("/") for root in value)
+        raise InvalidDeployment(f"{key} must be a non-empty list of {shape}s.")
+    for entry in value:
+        if not isinstance(entry, str) or not entry.startswith("/"):
+            raise InvalidDeployment(f"{key} names {entry!r}, which is not {shape}.")
+    return tuple(entry.rstrip("/") for entry in value)
 
 
 def _absolute(source: dict, key: str) -> str:

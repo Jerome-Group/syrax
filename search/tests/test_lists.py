@@ -7,6 +7,7 @@ import os
 import pytest
 
 from syrax_search.config import InvalidDeployment, read_deployment
+from syrax_search.lists import Lists, literal_prefix
 from syrax_search.walk import crawl
 
 
@@ -62,3 +63,41 @@ def test_an_extraction_scope_outside_the_allowlist_is_refused(tmp_path):
     )
     with pytest.raises(InvalidDeployment, match="subset"):
         read_deployment(str(deployment))
+
+
+def test_a_scope_entry_may_be_a_pattern():
+    """One root holds a faculty's papers where only one department's are wanted."""
+    papers = "/allowed/papers"
+    lists = Lists(
+        index_allowlist=("/allowed",),
+        extraction_scope=(f"{papers}/*/AB*.pdf",),
+        blocked_roots=(),
+    )
+    assert lists.extracts(f"{papers}/2025-2026 Semester 2/AB1234 2025-2026 Semester 2.pdf")
+    assert not lists.extracts(f"{papers}/2025-2026 Semester 2/CD5678 2025-2026 Semester 2.pdf")
+    assert not lists.extracts(f"{papers}/2025-2026 Semester 2/AB1234 notes.txt")
+
+
+def test_a_pattern_is_anchored_at_the_directory_it_names(tmp_path):
+    assert literal_prefix("/allowed/papers/*/AB*.pdf") == "/allowed/papers"
+    assert literal_prefix("/allowed/papers") == "/allowed/papers"
+    assert literal_prefix("/*.pdf") == "/", "a pattern with no anchor is not inside any root"
+
+
+def test_a_pattern_is_still_a_subset_of_the_allowlist(tmp_path):
+    deployment = tmp_path / "deployment.json"
+    deployment.write_text(
+        '{"searchIndex": "/tmp/i", "indexAllowlist": ["/a"], '
+        '"extractionScope": ["/b/*/AB*.pdf"], "blocklist": ["/c"]}'
+    )
+    with pytest.raises(InvalidDeployment, match="subset"):
+        read_deployment(str(deployment))
+
+
+def test_a_pattern_inside_the_allowlist_is_accepted(tmp_path):
+    deployment = tmp_path / "deployment.json"
+    deployment.write_text(
+        '{"searchIndex": "/tmp/i", "indexAllowlist": ["/a"], '
+        '"extractionScope": ["/a/papers/*/AB*.pdf"], "blocklist": ["/c"]}'
+    )
+    assert read_deployment(str(deployment)).lists.extracts("/a/papers/2025/AB1234 final.pdf")

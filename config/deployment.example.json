@@ -12,7 +12,10 @@
   "searchIndex": "/absolute/path/outside/this/repository/search-index",
   "searchWrapperPath": "/absolute/path/outside/this/repository/bin/start-search.sh",
   "indexAllowlist": ["/absolute/path/to/a/root/worth/indexing"],
-  "extractionScope": ["/absolute/path/to/a/root/worth/indexing"],
+  "extractionScope": [
+    "/absolute/path/to/a/root/worth/indexing",
+    "/absolute/path/to/a/root/worth/indexing/papers/*/MH*.pdf"
+  ],
   "blocklist": ["/absolute/path/that/is/never/touched"],
   "searchScopes": { "academic": "/absolute/path/to/a/root/worth/indexing" },
   "ownerTelegramUserId": 100000000

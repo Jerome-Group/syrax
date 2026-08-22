@@ -63,6 +63,7 @@ class Lists:
 
     index_allowlist: tuple[str, ...]
     extraction_scope: tuple[str, ...]
+    """Each entry a root or a pattern — see `extracts` for why that is not a fourth list."""
     blocked_roots: tuple[str, ...]
 
     def blocks(self, path: str) -> str | None:
@@ -90,8 +91,40 @@ class Lists:
         return any(is_within(path, root) for root in self.index_allowlist)
 
     def extracts(self, path: str) -> bool:
-        """Inside the extraction scope a document is read; outside it, only its name is indexed."""
-        return any(is_within(path, root) for root in self.extraction_scope)
+        """Inside the extraction scope a document is read; outside it, only its name is indexed.
+
+        An entry is a root or a glob, and a glob is what stops this becoming a fourth list. A whole
+        root is all-or-nothing, and one root here holds a faculty's worth of exam papers where only
+        one department's are wanted — so the scope says which *documents* are read rather than only
+        which trees they sit in. `*` matches separators too, so `…/pyps/*/MH*.pdf` reaches every
+        depth beneath that root.
+        """
+        return any(
+            fnmatch(path, entry) if is_pattern(entry) else is_within(path, entry)
+            for entry in self.extraction_scope
+        )
+
+
+# What `fnmatch` treats as a wildcard, which is what tells a pattern from a plain root.
+WILDCARDS = "*?["
+
+
+def is_pattern(entry: str) -> bool:
+    return any(character in entry for character in WILDCARDS)
+
+
+def literal_prefix(entry: str) -> str:
+    """The directory a pattern is anchored to, which is what has to sit inside an allowlist root.
+
+    A plain root is its own anchor. `/papers/*/MH*.pdf` is anchored at `/papers`; a pattern with a
+    wildcard in its first segment is anchored at the filesystem root and is refused there rather
+    than here, since nothing in the allowlist contains it.
+    """
+    if not is_pattern(entry):
+        return entry
+    first = min(entry.index(one) for one in WILDCARDS if one in entry)
+    anchor = entry[:first].rsplit(os.sep, 1)[0]
+    return anchor or os.sep
 
 
 def is_within(path: str, root: str) -> bool:

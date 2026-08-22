@@ -142,7 +142,7 @@ different jobs. Naming them as one list is the mistake this section exists to pr
 | `searchIndex` | The index, the failure ledger and the pinned export — private runtime state, and never inside the checkout |
 | `searchPort` | The loopback port the agents reach it on; `18790` unless the deployment says otherwise |
 | `indexAllowlist` | The roots that are crawled. A **compute scope**: it is sized by what is worth indexing here, not by what is safe to reach |
-| `extractionScope` | The subset whose documents are opened and read. Outside it, a document is indexed by name alone and a search says so rather than returning silence |
+| `extractionScope` | Which documents are opened and read — each entry a root **or a glob**, so one root's papers can be scoped to the modules that matter. Outside it, a document is indexed by name alone and a search says so rather than returning silence |
 | `blocklist` | What is never indexed, never extracted and never read, **anywhere on the machine** — the only one of the three that is a boundary |
 | `searchScopes` | Named roots a chat's connection can be bound to, so scope is configuration rather than something a model passes |
 
@@ -241,7 +241,7 @@ Three operations, and which one to reach for depends on what went wrong.
 |-----------|--------------|------|
 | Incremental pass | Re-reads documents whose size or modification time changed | Hourly, unattended |
 | Full pass | Re-reads every document in the extraction scope, re-embedding only where the extracted text changed | Every third day, unattended; by hand after a document is known to have broken |
-| Reset | Deletes the index and rebuilds from nothing | After changing the embedder, the chunking, or the extraction scope — each invalidates every stored vector |
+| Reset | Deletes the index and rebuilds from nothing | After changing the embedder, the chunking, or the extraction scope — each invalidates every stored vector, and an incremental pass compares size and modification time, neither of which moves when a list does |
 
 The unattended passes are launchd calendar jobs that poke the running unit, so each one uses the
 embedder already in memory rather than loading a second copy of it. `com.jerome-group.syrax.index-incremental`

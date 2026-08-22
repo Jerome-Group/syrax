@@ -29,8 +29,21 @@ OCR_TIMEOUT_SECONDS = 900
 # A text layer this short is a page of ligature noise rather than a document.
 USABLE_CHARACTERS = 32
 
-# OCR is the only unbounded cost in the pipeline — a 500-page scan is minutes per document — and
-# what a search needs from a scanned handout is enough text to find it by.
+# A scanned document stamped by a library returns one line per page and nothing else — 952
+# characters of copyright notice across sixteen pages, which clears the length test above and is
+# then filed as read. What gives it away is not length but *repetition*: almost none of the text
+# is distinct. Measured on the real corpus, this rule reclassifies 1,199 documents that had all
+# been recorded as read, none of which reached OCR because none of them looked empty (ADR-0024).
+#
+# A share rather than a count, because a count condemns the short documents that are real: a
+# one-paragraph note is entirely distinct, and a page of exam questions under the same stamp is a
+# third distinct. The stamped scans measured here sit at 0.06 to 0.12.
+MINIMUM_DISTINCT_SHARE = 0.15
+
+# OCR is the only unbounded cost in the pipeline — 75.6 s per document measured, against fractions
+# of a second for everything else — and a cap is what makes an unattended pass a schedule rather
+# than a hope. 40 truncates no exam paper and does truncate a scanned textbook, which ADR-0024
+# argues is the right way round; lowering it to 10 was considered there and rejected.
 OCR_PAGE_LIMIT = 40
 
 
@@ -84,11 +97,20 @@ def _extract_pdf(path: str, *, ocr: bool) -> Extraction:
     if isinstance(completed, str):
         return Extraction(None, completed)
     text = completed.stdout.decode("utf-8", "replace")
-    if len(text.strip()) >= USABLE_CHARACTERS:
+    if has_text_layer(text):
         return Extraction(text, "ok")
     if not ocr:
         return Extraction(None, "no-text-layer")
     return _ocr_pdf(path)
+
+
+def has_text_layer(text: str) -> bool:
+    """Whether this is a document's own text, rather than nothing or a stamp repeated per page."""
+    stripped = text.strip()
+    if len(stripped) < USABLE_CHARACTERS:
+        return False
+    distinct = {line.strip() for line in text.splitlines() if line.strip()}
+    return sum(len(line) for line in distinct) / len(stripped) >= MINIMUM_DISTINCT_SHARE
 
 
 def _ocr_pdf(path: str) -> Extraction:
@@ -112,7 +134,7 @@ def _ocr_pdf(path: str) -> Extraction:
                 return Extraction(None, page)
             recognised.append(page.stdout.decode("utf-8", "replace"))
     text = "\n".join(recognised)
-    if len(text.strip()) < USABLE_CHARACTERS:
+    if not has_text_layer(text):
         return Extraction(None, "ocr-empty")
     return Extraction(text, "ok")
 
