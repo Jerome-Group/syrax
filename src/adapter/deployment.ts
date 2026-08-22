@@ -3,7 +3,7 @@
  * about rather than left to choose, the single account the bot answers, and the two wires.
  */
 
-import type { ProviderId } from "./front-lane.ts";
+import type { ProviderId } from "./lane.ts";
 
 export type Deployment = {
   /** Where `npm ci --prefix` installed the pinned runtime, outside the checkout. */
@@ -41,6 +41,9 @@ export const providerBaseUrls: Record<ProviderId, string> = {
   "syrax-gemini": "https://generativelanguage.googleapis.com/v1beta/openai",
   "syrax-mistral": "https://api.mistral.ai/v1",
   "syrax-groq": "https://api.groq.com/openai/v1",
+  // The general API rather than the Coding Plan endpoint: the worker's floor is a free general
+  // model, and the Coding Plan URL answers only a Coding Plan key.
+  "syrax-zai": "https://api.z.ai/api/paas/v4",
 };
 
 export class InvalidDeployment extends Error {}

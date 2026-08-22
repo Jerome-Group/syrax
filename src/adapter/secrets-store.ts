@@ -20,6 +20,7 @@ export const secretPaths = {
   gemini: "/providers/gemini/apiKey",
   mistral: "/providers/mistral/apiKey",
   groq: "/providers/groq/apiKey",
+  zai: "/providers/zai/apiKey",
   telegramBotToken: "/channels/telegram/botToken",
   gatewayAuthToken: "/gateway/authToken",
 } as const;

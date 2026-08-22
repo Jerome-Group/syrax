@@ -8,15 +8,20 @@
 import { join } from "node:path";
 import type { Deployment } from "./deployment.ts";
 import { defaultChat, everyChat, type Chat } from "./chats.ts";
-import { frontLane, modelRef } from "./front-lane.ts";
+import { frontLane } from "./front-lane.ts";
+import { laneChain } from "./lane.ts";
+import {
+  subagentAnnounceTimeoutMs,
+  subagentRunTimeoutSeconds,
+  turnCeilingSeconds,
+} from "./timeouts.ts";
+import { workerLane } from "./worker-lane.ts";
 
 export function agentDefaults(deployment: Deployment) {
-  const [primary, ...fallbacks] = frontLane;
   return {
-    model: {
-      primary: modelRef(primary!),
-      fallbacks: fallbacks.map(modelRef),
-    },
+    model: laneChain(frontLane),
+    subagents: subagentDefaults(),
+    timeoutSeconds: turnCeilingSeconds,
     // Both catalogues off: the third-party allowlist ADR-0003 emptied, and the runtime's own
     // bundled 31 that ADR-0011 widened it to reach.
     skills: [],
@@ -24,6 +29,24 @@ export function agentDefaults(deployment: Deployment) {
     skipBootstrap: true,
     blockStreamingDefault: "off",
     typingMode: "instant",
+  };
+}
+
+/**
+ * The worker lane, which is a lane only because it is reached here: the sub-agent override is the
+ * one place a chain other than `model` is expressed, so this is what keeps the lane that thinks off
+ * the lane that talks — and keeps ADR-0016's promise that no model serves both.
+ */
+function subagentDefaults() {
+  return {
+    model: laneChain(workerLane),
+    // The front lane stays responsive by delegating anything more involved than a direct reply.
+    delegationMode: "prefer",
+    // One user, one worker at a time: two concurrent workers would be two calls into one per-model
+    // allowance, which is the arrangement ADR-0016 split the lanes to avoid.
+    maxConcurrent: 1,
+    runTimeoutSeconds: subagentRunTimeoutSeconds,
+    announceTimeoutMs: subagentAnnounceTimeoutMs,
   };
 }
 

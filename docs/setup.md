@@ -1,8 +1,9 @@
 # Setup
 
 One bot carrying the four chats — **General**, **Academic**, **Media** and **System** — with the
-front lane answering each of them. The worker lane and the capability tool layers are later work,
-so what follows stops where the system does rather than describing one that is not standing yet.
+front lane answering each of them and delegating the slow work to the worker lane. The capability
+tool layers are later work, so what follows stops where the system does rather than describing one
+that is not standing yet.
 
 Everything Syrax stores lives outside this checkout. The repository holds the pin, the adapter that
 generates the runtime's configuration, and the tests — nothing a `git add` could turn into a public

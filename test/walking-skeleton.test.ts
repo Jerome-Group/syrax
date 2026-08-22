@@ -8,7 +8,13 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { runtimeIsInstalled, sentinelKeys, startGateway, type GatewayFixture } from "./gateway.ts";
+import {
+  everyProviderAt,
+  runtimeIsInstalled,
+  sentinelKeys,
+  startGateway,
+  type GatewayFixture,
+} from "./gateway.ts";
 import { ProviderStub } from "./stubs/openai-provider.ts";
 import { TelegramStub } from "./stubs/telegram-bot-api.ts";
 
@@ -31,11 +37,7 @@ describe("the walking skeleton", { skip: !runtimeIsInstalled() }, () => {
       ownerTelegramUserId,
       telegramApiRoot: telegram.apiRoot,
       telegramBotToken: telegram.botToken,
-      providerBaseUrls: {
-        "syrax-gemini": provider.baseUrl,
-        "syrax-mistral": provider.baseUrl,
-        "syrax-groq": provider.baseUrl,
-      },
+      providerBaseUrls: everyProviderAt(provider.baseUrl),
     });
     await telegram.waitFor("getMe");
   });
@@ -49,7 +51,9 @@ describe("the walking skeleton", { skip: !runtimeIsInstalled() }, () => {
   it("answers a message from the Owner's ID from the front lane", async () => {
     telegram.inject({ fromUserId: ownerTelegramUserId, text: "Are you there?" });
     const sent = await telegram.waitFor("sendMessage");
-    assert.equal(sent.body.chat_id, ownerTelegramUserId);
+    // The id, whichever way the delivery path renders it: the streaming path sends it as a string
+    // and the plain one as a number, and which path a turn takes is not what this test is about.
+    assert.equal(String(sent.body.chat_id), String(ownerTelegramUserId));
     assert.equal(sent.body.text, frontLaneReply);
     assert.equal(provider.requests.at(-1)?.path, "/chat/completions");
   });
@@ -73,7 +77,7 @@ describe("the walking skeleton", { skip: !runtimeIsInstalled() }, () => {
       ...Object.values(generated.models.providers).map((block) => block.baseUrl),
       generated.channels.telegram.apiRoot,
     ];
-    assert.equal(wires.length, 4);
+    assert.equal(wires.length, 5);
     for (const wire of wires) {
       assert.equal(new URL(wire).hostname, "127.0.0.1", `the gateway was given ${wire}`);
     }
