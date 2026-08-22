@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import shutil
 
+import pytest
 from conftest import path_of
 
 from syrax_search.building import FULL, INCREMENTAL, run_pass
@@ -69,8 +71,22 @@ def test_the_hourly_pass_does_not_pay_for_ocr(monkeypatch):
         )
 
     monkeypatch.setattr(building, "extract", scanned)
-    hourly = building._read_one((0, "/a/scan.pdf", False))
+    hourly = building._read_one(("/a/scan.pdf", False))
     assert hourly.status == "no-text-layer", "an hourly pass leaves a scan in the ledger"
 
-    every_third_day = building._read_one((0, "/a/scan.pdf", True))
+    every_third_day = building._read_one(("/a/scan.pdf", True))
     assert every_third_day.status == "ok-ocr", "the three-day pass is where a scan is read"
+
+
+@pytest.mark.skipif(shutil.which("pandoc") is None, reason="pandoc is not on this machine")
+def test_a_drive_export_is_read_rather_than_only_named(machine, embedder, tmp_path):
+    """Without `pandoc` a Drive export inside the extraction scope is only findable by name."""
+    export = tmp_path / "documents" / "notes" / "minutes.html"
+    export.write_text("<h1>Minutes</h1><p>the minutes of a meeting that happened</p>")
+    run_pass(machine, embedder, INCREMENTAL)
+
+    database = open_index(machine.database_path)
+    status, extracted = database.execute(
+        "SELECT status, extracted FROM documents WHERE path = ?", (str(export),)
+    ).fetchone()
+    assert (status, extracted) == ("ok", 1)

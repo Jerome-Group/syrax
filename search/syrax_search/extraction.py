@@ -19,6 +19,10 @@ TEXT_SUFFIXES = frozenset(
 )
 PDF_SUFFIX = ".pdf"
 
+# Drive exports are a large share of this corpus, and `pandoc` is already on the machine — without
+# it a `.docx` inside the extraction scope silently degrades to being findable by name.
+PANDOC_SUFFIXES = frozenset({".docx", ".odt", ".rtf", ".epub", ".html", ".htm", ".pptx"})
+
 EXTRACTION_TIMEOUT_SECONDS = 180
 OCR_TIMEOUT_SECONDS = 900
 
@@ -47,7 +51,21 @@ def extract(path: str, *, ocr: bool = False) -> Extraction:
         return _extract_pdf(path, ocr=ocr)
     if suffix in TEXT_SUFFIXES:
         return _extract_text_file(path)
+    if suffix in PANDOC_SUFFIXES:
+        return _extract_with_pandoc(path)
     return Extraction(None, "filename-only")
+
+
+def _extract_with_pandoc(path: str) -> Extraction:
+    completed = _run(
+        ["pandoc", "--quiet", "-t", "plain", "-o", "-", path], EXTRACTION_TIMEOUT_SECONDS
+    )
+    if isinstance(completed, str):
+        return Extraction(None, completed)
+    text = completed.stdout.decode("utf-8", "replace")
+    if len(text.strip()) < USABLE_CHARACTERS:
+        return Extraction(None, "empty")
+    return Extraction(text, "ok")
 
 
 def _extract_text_file(path: str) -> Extraction:

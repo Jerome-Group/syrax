@@ -8,14 +8,8 @@ set -uo pipefail
 umask 077
 
 export PATH='/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'
-# The extractors are subprocesses, and forking after the tokenizer has run makes it print a
-# deadlock warning per document. Answering the question once here keeps the capture readable.
-export TOKENIZERS_PARALLELISM=false
 
-interpreter='/absolute/path/outside/this/repository/search-env/bin/python'
-deployment='/absolute/path/outside/this/repository/deployment.json'
-index_root='/absolute/path/outside/this/repository/search-index'
-export_dir="$index_root/models/embeddinggemma-300m-onnx"
+preflight_name='syrax search pre-flight'
 logs_dir='/absolute/path/outside/this/repository/logs'
 capture='/absolute/path/outside/this/repository/logs/search.err.log'
 capture_max_bytes=5242880
@@ -32,13 +26,22 @@ start_capture() {
 }
 
 refuse() {
-  echo "syrax search pre-flight: $1" >&2
+  echo "$preflight_name: $1" >&2
   exit 2
 }
 
 warn() {
-  echo "syrax search pre-flight: $1" >&2
+  echo "$preflight_name: $1" >&2
 }
+
+# The extractors are subprocesses, and forking after the tokenizer has run makes it print a
+# deadlock warning per document. Answering the question once here keeps the capture readable.
+export TOKENIZERS_PARALLELISM=false
+
+interpreter='/absolute/path/outside/this/repository/search-env/bin/python'
+deployment='/absolute/path/outside/this/repository/deployment.json'
+index_root='/absolute/path/outside/this/repository/search-index'
+export_dir="$index_root/models/embeddinggemma-300m-onnx"
 
 ensure_private() {
   local directory=$1

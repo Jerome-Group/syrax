@@ -28,6 +28,7 @@ import time
 from collections.abc import Iterator
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
+from typing import Literal
 
 import numpy as np
 
@@ -36,6 +37,7 @@ from .config import SearchConfig
 from .embedder import Embedder
 from .extraction import Extraction, extract
 from .index import (
+    StoredDocument,
     clear_chunks,
     document_text,
     forget_document,
@@ -44,7 +46,7 @@ from .index import (
     replace_chunks,
     stored_documents,
 )
-from .walk import Candidate, crawl
+from .walk import Crawled, crawl
 
 EMBED_BATCH = 32
 
@@ -52,8 +54,10 @@ EMBED_BATCH = 32
 EXTRACT_BATCH = 64
 EXTRACT_WORKERS = 8
 
-INCREMENTAL = "incremental"
-FULL = "full"
+Pass = Literal["incremental", "full"]
+
+INCREMENTAL: Pass = "incremental"
+FULL: Pass = "full"
 
 # Never a status a stored row carries: it is this pass declining to re-read, which is the whole of
 # what the hourly one does with a document whose size and modification time have not moved.
@@ -65,7 +69,7 @@ READ = ("ok", "ok-ocr", "filename-only")
 
 @dataclass
 class PassReport:
-    kind: str
+    kind: Pass
     seen: int = 0
     unchanged: int = 0
     extracted: int = 0
@@ -99,7 +103,7 @@ def progress(report: PassReport) -> None:
 def run_pass(
     config: SearchConfig,
     embedder: Embedder,
-    kind: str,
+    kind: Pass,
     database: sqlite3.Connection | None = None,
 ) -> PassReport:
     started = time.perf_counter()
@@ -111,16 +115,11 @@ def run_pass(
         seen: set[str] = set()
         with ProcessPoolExecutor(max_workers=EXTRACT_WORKERS) as readers:
             for batch in _batched(crawl(config.lists), EXTRACT_BATCH):
-                for candidate in batch:
-                    seen.add(candidate.path)
-                for candidate, extraction in _read(batch, stored, kind, database, readers):
+                for crawled in batch:
+                    seen.add(crawled.path)
+                for crawled, extraction in _read(batch, stored, kind, database, readers):
                     _absorb(
-                        database,
-                        embedder,
-                        candidate,
-                        stored.get(candidate.path),
-                        extraction,
-                        report,
+                        database, embedder, crawled, stored.get(crawled.path), extraction, report
                     )
                 # A batch at a time, because a full pass is hours: a machine that goes down halfway
                 # through one keeps what it had read, and the next pass starts from there.
@@ -147,42 +146,44 @@ def reset(config: SearchConfig) -> None:
             os.remove(path)
 
 
-def _batched(candidates: Iterator[Candidate], size: int) -> Iterator[list[Candidate]]:
+def _batched(candidates: Iterator[Crawled], size: int) -> Iterator[list[Crawled]]:
     while batch := list(itertools.islice(candidates, size)):
         yield batch
 
 
 def _read(
-    batch: list[Candidate],
-    stored: dict,
-    kind: str,
+    batch: list[Crawled],
+    stored: dict[str, StoredDocument],
+    kind: Pass,
     database: sqlite3.Connection,
     readers: ProcessPoolExecutor,
-) -> list[tuple[Candidate, Extraction | None]]:
+) -> list[tuple[Crawled, Extraction | None]]:
     """One batch's text, decided here and read in the pool.
 
     Every decision that needs the index — is this unchanged, was it OCR'd before — is made in this
     process, so what crosses to a worker is a path and whether it may run OCR, and nothing else.
     """
-    decided: list[tuple[Candidate, Extraction | None]] = []
-    to_read: list[tuple[int, str, bool]] = []
-    for position, candidate in enumerate(batch):
-        already = stored.get(candidate.path)
-        unchanged = _unchanged(already, candidate)
-        decided.append((candidate, _without_reading(candidate, already, unchanged, kind, database)))
+    decided: list[tuple[Crawled, Extraction | None]] = []
+    positions: list[int] = []
+    to_read: list[tuple[str, bool]] = []
+    for position, crawled in enumerate(batch):
+        already = stored.get(crawled.path)
+        unchanged = _unchanged(already, crawled)
+        decided.append((crawled, _without_reading(crawled, already, unchanged, kind, database)))
         if decided[position][1] is None:
-            to_read.append((position, candidate.path, kind == FULL))
+            positions.append(position)
+            to_read.append((crawled.path, kind == FULL))
 
-    for (position, _, _), extraction in zip(
-        to_read, readers.map(_read_one, to_read, chunksize=1), strict=True
+    for position, extraction in zip(
+        positions, readers.map(_read_one, to_read, chunksize=1), strict=True
     ):
         decided[position] = (batch[position], extraction)
     return decided
 
 
-def _read_one(work: tuple[int, str, bool]) -> Extraction:
+def _read_one(work: tuple[str, bool]) -> Extraction:
     """The one function that runs in a worker: a path in, its text or its failure out."""
-    _, path, ocr = work
+    path, ocr = work
     first = extract(path)
     if first.status != "no-text-layer" or not ocr:
         return first
@@ -193,20 +194,24 @@ def _read_one(work: tuple[int, str, bool]) -> Extraction:
     return Extraction(recognised.text, "ok-ocr")
 
 
-def _unchanged(stored, candidate: Candidate) -> bool:
-    return stored is not None and stored.size == candidate.size and stored.mtime == candidate.mtime
+def _unchanged(stored: StoredDocument | None, crawled: Crawled) -> bool:
+    return stored is not None and stored.size == crawled.size and stored.mtime == crawled.mtime
 
 
 def _without_reading(
-    candidate: Candidate, stored, unchanged: bool, kind: str, database: sqlite3.Connection
+    crawled: Crawled,
+    stored: StoredDocument | None,
+    unchanged: bool,
+    kind: Pass,
+    database: sqlite3.Connection,
 ) -> Extraction | None:
     """What this document contributes when nothing has to be opened to know it."""
     if kind == INCREMENTAL and unchanged:
         return Extraction(None, UNCHANGED)
-    if not candidate.extracted:
+    if not crawled.extracted:
         return Extraction(None, "filename-only")
     if stored is not None and stored.status == "ok-ocr" and unchanged:
-        recognised = document_text(database, candidate.path)
+        recognised = document_text(database, crawled.path)
         if recognised:
             return Extraction(recognised, "ok-ocr")
     return None
@@ -215,8 +220,8 @@ def _without_reading(
 def _absorb(
     database: sqlite3.Connection,
     embedder: Embedder,
-    candidate: Candidate,
-    stored,
+    crawled: Crawled,
+    stored: StoredDocument | None,
     extraction: Extraction,
     report: PassReport,
 ) -> None:
@@ -228,16 +233,16 @@ def _absorb(
     if extraction.text is not None:
         report.extracted += 1
     if extraction.failed:
-        report.failures.append({"path": candidate.path, "status": extraction.status})
+        report.failures.append({"path": crawled.path, "status": extraction.status})
 
     text_sha = _digest(extraction.text)
     document_id = put_document(
         database,
-        path=candidate.path,
-        name=os.path.basename(candidate.path),
-        size=candidate.size,
-        mtime=candidate.mtime,
-        extracted=candidate.extracted and extraction.text is not None,
+        path=crawled.path,
+        name=os.path.basename(crawled.path),
+        size=crawled.size,
+        mtime=crawled.mtime,
+        extracted=crawled.extracted and extraction.text is not None,
         status=extraction.status,
         text=extraction.text,
         text_sha=text_sha,
@@ -273,7 +278,7 @@ def _digest(text: str | None) -> str | None:
     return hashlib.sha256(text.encode("utf-8")).hexdigest() if text is not None else None
 
 
-def _write_ledger(path: str, database: sqlite3.Connection, kind: str) -> None:
+def _write_ledger(path: str, database: sqlite3.Connection, kind: Pass) -> None:
     """Every document the index currently cannot read, replacing the last pass's list.
 
     Written from the index rather than from the pass, because the hourly one skips what has not

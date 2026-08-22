@@ -18,6 +18,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .terms import terms_of
+
 # Fitted rather than tuned: 0.12 sits 0.003 above the best wrong answer on a fifteen-query
 # benchmark, which is a number chosen by that benchmark's smallest gap. It is safe in the direction
 # that matters — being too cautious costs a shortlist, being too eager sends the wrong file — and
@@ -38,68 +40,13 @@ CANDIDATE_POOL = 40
 NAME_POOL = 10
 SHORTLIST = 3
 
-# "and" and "for" survive a bare length filter and appear in every chunk, which is how
-# "Dummit and Foote" ranked a poster's bibliography above the book itself.
-STOP_WORDS = frozenset(
-    [
-        "the",
-        "and",
-        "for",
-        "was",
-        "what",
-        "that",
-        "with",
-        "from",
-        "this",
-        "you",
-        "your",
-        "are",
-        "how",
-        "does",
-        "did",
-        "where",
-        "which",
-        "about",
-        "into",
-        "out",
-        "who",
-        "why",
-        "when",
-        "they",
-        "them",
-        "its",
-        "has",
-        "have",
-        "had",
-        "can",
-        "could",
-        "would",
-        "should",
-        "will",
-        "shall",
-        "may",
-        "might",
-        "must",
-        "one",
-        "two",
-        "not",
-        "but",
-        "all",
-        "any",
-        "our",
-        "his",
-        "her",
-        "their",
-    ]
-)
-
 
 @dataclass(frozen=True)
 class Candidate:
     path: str
     name: str
-    """False where only the name is indexed: the document exists and was never read."""
     extracted: bool
+    """False where only the name is indexed: the document exists and was never read."""
 
 
 @dataclass(frozen=True)
@@ -125,30 +72,30 @@ class Verdict:
 def search(
     database: sqlite3.Connection, query: str, query_vector: np.ndarray, scope: str | None
 ) -> Verdict:
-    keyword = _keyword_arm(database, query, scope)
+    keyword, named = _keyword_arm(database, query, scope)
     vector, scores = _vector_arm(database, query_vector, scope)
     ranked = _fuse(vector, keyword)
     if not ranked:
         return Verdict("empty", (), EMPTY_FLOOR)
 
     # The floor is a statement about the vector arm's judgement, so it decides `empty` only where
-    # that judgement is all there was. A document held by name alone has no vector at all, and
-    # *Dummit and Foote* is a correct answer at -0.17 because it wins on the keyword arm entirely —
-    # a floor applied over a literal name match returns silence for exactly the queries that name
-    # what they want (ADR-0004).
+    # that judgement is all there was. *Dummit and Foote* is a correct answer at -0.17 because the
+    # book's own filename matched, and a document held by name alone has no vector to score at all
+    # — a floor applied over those returns silence for exactly the queries that name what they
+    # want (ADR-0004). A body-text hit is not the same evidence: one common word shared with a long
+    # document is what the floor is there to reject, so it does not lift a query off it.
     best = max(scores.values(), default=EMPTY_FLOOR - 1)
-    if best < EMPTY_FLOOR and not keyword:
+    if best < EMPTY_FLOOR and not named:
         return Verdict("empty", (), EMPTY_FLOOR)
 
+    # A document held by name alone has no vector, so it cannot clear the floor and is never
+    # `confident`. That is the right way round: `confident` sends a file without asking, and a
+    # filename the query happened to share words with is not grounds for sending a document the
+    # index has never read inside.
     top = ranked[0]
     if scores.get(top, EMPTY_FLOOR - 1) >= CONFIDENT_FLOOR:
         return Verdict("confident", _describe(database, ranked[:1]), CONFIDENT_FLOOR)
     return Verdict("ambiguous", _describe(database, ranked[:SHORTLIST]), CONFIDENT_FLOOR)
-
-
-def terms_of(query: str) -> list[str]:
-    words = "".join(c if c.isalnum() else " " for c in query).lower().split()
-    return [word for word in words if len(word) > 2 and word not in STOP_WORDS]
 
 
 def _match_expression(query: str) -> str | None:
@@ -157,11 +104,13 @@ def _match_expression(query: str) -> str | None:
     return " OR ".join(f'"{term}"' for term in terms) if terms else None
 
 
-def _keyword_arm(database: sqlite3.Connection, query: str, scope: str | None) -> list[int]:
-    """Chunk text and document name, fused into the one arm they are two halves of."""
+def _keyword_arm(
+    database: sqlite3.Connection, query: str, scope: str | None
+) -> tuple[list[int], list[int]]:
+    """The arm, and its name half on its own — the only half that can lift a query off the floor."""
     expression = _match_expression(query)
     if expression is None:
-        return []
+        return [], []
     text_hits = database.execute(
         """
         SELECT chunks.document_id FROM chunk_fts
@@ -181,7 +130,8 @@ def _keyword_arm(database: sqlite3.Connection, query: str, scope: str | None) ->
         """,
         (expression, scope, scope, NAME_POOL),
     ).fetchall()
-    return _fuse(_first_seen(text_hits), _first_seen(name_hits))
+    named = _first_seen(name_hits)
+    return _fuse(_first_seen(text_hits), named), named
 
 
 def _vector_arm(

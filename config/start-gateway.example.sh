@@ -8,19 +8,12 @@ set -uo pipefail
 umask 077
 
 export PATH='/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'
-export OPENCLAW_CONFIG_PATH='/absolute/path/outside/this/repository/openclaw.json'
-export OPENCLAW_STATE_DIR='/absolute/path/outside/this/repository/runtime-state'
 
-runtime='/absolute/path/outside/this/repository/runtime/node_modules/openclaw/openclaw.mjs'
+preflight_name='syrax pre-flight'
 logs_dir='/absolute/path/outside/this/repository/logs'
 capture='/absolute/path/outside/this/repository/logs/gateway.err.log'
 capture_max_bytes=5242880
-scratch_root='/tmp/openclaw'
-lock_dir="${TMPDIR:-/tmp}/openclaw-$(id -u)"
 
-# launchd cannot open a capture file on the external volume the logs live on — it exits EX_CONFIG
-# before the job runs — so the wrapper opens it, being the process that already writes there.
-# Only stderr is kept: the runtime's own log is a superset of its stdout, and ADR-0014 rotates that.
 start_capture() {
   mkdir -p "$logs_dir" || exit 2
   chmod 700 "$logs_dir" || exit 2
@@ -33,13 +26,20 @@ start_capture() {
 }
 
 refuse() {
-  echo "syrax pre-flight: $1" >&2
+  echo "$preflight_name: $1" >&2
   exit 2
 }
 
 warn() {
-  echo "syrax pre-flight: $1" >&2
+  echo "$preflight_name: $1" >&2
 }
+
+export OPENCLAW_CONFIG_PATH='/absolute/path/outside/this/repository/openclaw.json'
+export OPENCLAW_STATE_DIR='/absolute/path/outside/this/repository/runtime-state'
+
+runtime='/absolute/path/outside/this/repository/runtime/node_modules/openclaw/openclaw.mjs'
+scratch_root='/tmp/openclaw'
+lock_dir="${TMPDIR:-/tmp}/openclaw-$(id -u)"
 
 # ADR-0015: the runtime creates this at 0700 and then enforces only that nobody else can write it,
 # so a world-readable scratch root passes its own check. Absent is fine — it creates it.

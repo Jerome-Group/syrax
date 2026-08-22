@@ -16,7 +16,7 @@ import json
 import os
 from dataclasses import dataclass
 
-from .lists import Lists
+from .lists import Lists, is_within
 
 DEFAULT_PORT = 18790
 DEFAULT_IDLE_EVICT_SECONDS = 1800
@@ -37,8 +37,8 @@ class SearchConfig:
     port: int
     idle_evict_seconds: int
     lists: Lists
-    """Named scopes an agent's MCP client is pointed at, never an argument the model supplies."""
     scopes: dict[str, str]
+    """Named scopes an agent's MCP client is pointed at, never an argument the model supplies."""
 
     @property
     def database_path(self) -> str:
@@ -58,7 +58,7 @@ def read_deployment(path: str) -> SearchConfig:
     index_root = _absolute(source, "searchIndex")
     allowlist = _roots(source, "indexAllowlist")
     scope = _roots(source, "extractionScope")
-    outside = [root for root in scope if not any(_within(root, a) for a in allowlist)]
+    outside = [root for root in scope if not any(is_within(root, a) for a in allowlist)]
     if outside:
         raise InvalidDeployment(
             f"extractionScope names {outside[0]}, which no indexAllowlist root contains: "
@@ -98,7 +98,7 @@ def _scopes(value: object, allowlist: tuple[str, ...]) -> dict[str, str]:
     for name, root in value.items():
         if not isinstance(root, str) or not root.startswith("/"):
             raise InvalidDeployment(f"searchScopes.{name} must be an absolute path.")
-        if not any(_within(root, a) for a in allowlist):
+        if not any(is_within(root, a) for a in allowlist):
             raise InvalidDeployment(
                 f"searchScopes.{name} is outside the index allowlist, so it would scope to nothing."
             )
@@ -129,7 +129,3 @@ def _port(value: object) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= 65535:
         raise InvalidDeployment("searchPort must be a port number.")
     return value
-
-
-def _within(path: str, root: str) -> bool:
-    return path == root or path.startswith(root.rstrip("/") + "/")

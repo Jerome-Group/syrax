@@ -10,6 +10,7 @@
 
 import { join } from "node:path";
 import type { Deployment } from "../adapter/deployment.ts";
+import { quoteForShell, wrapperPreamble } from "./wrapper.ts";
 
 /**
  * What the gateway writes outside the runtime's own log — the pre-flight's lines, and whatever
@@ -19,17 +20,6 @@ export const captureBasename = "gateway.err.log";
 
 /** Hardcoded in the pinned runtime, which takes no setting for it (ADR-0015). */
 export const scratchRoot = "/tmp/openclaw";
-
-/** One previous copy is kept beside it, which is what a crash loop needs and no more. */
-const captureMaxBytes = 5242880;
-
-/** launchd hands a job almost no PATH, which is the failure `boot-watchdog` names by comment. */
-const path = "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
-
-/** Every path here is machine-local, and two of them contain a space on the mini. */
-function quoteForShell(value: string): string {
-  return `'${value.replaceAll("'", `'\\''`)}'`;
-}
 
 export function gatewayWrapperScript(deployment: Deployment): string {
   const runtime = join(deployment.runtimeRoot, "node_modules", "openclaw", "openclaw.mjs");
@@ -42,39 +32,14 @@ set -uo pipefail
 # directories with no mode at all (ADR-0014), so the mask is the floor rather than each caller.
 umask 077
 
-export PATH=${quoteForShell(path)}
+${wrapperPreamble("syrax pre-flight", deployment.logsDir, join(deployment.logsDir, captureBasename))}
+
 export OPENCLAW_CONFIG_PATH=${quoteForShell(deployment.configPath)}
 export OPENCLAW_STATE_DIR=${quoteForShell(deployment.stateDir)}
 
 runtime=${quoteForShell(runtime)}
-logs_dir=${quoteForShell(deployment.logsDir)}
-capture=${quoteForShell(join(deployment.logsDir, captureBasename))}
-capture_max_bytes=${captureMaxBytes}
 scratch_root=${quoteForShell(scratchRoot)}
 lock_dir="\${TMPDIR:-/tmp}/openclaw-$(id -u)"
-
-# launchd cannot open a capture file on the external volume the logs live on — it exits EX_CONFIG
-# before the job runs — so the wrapper opens it, being the process that already writes there.
-# Only stderr is kept: the runtime's own log is a superset of its stdout, and ADR-0014 rotates that.
-start_capture() {
-  mkdir -p "$logs_dir" || exit 2
-  chmod 700 "$logs_dir" || exit 2
-  if [ -f "$capture" ] && [ "$(stat -f %z "$capture")" -ge "$capture_max_bytes" ]; then
-    mv -f "$capture" "\${capture%.log}.1.log"
-  fi
-  : >>"$capture" || exit 2
-  chmod 600 "$capture" || exit 2
-  exec >/dev/null 2>>"$capture"
-}
-
-refuse() {
-  echo "syrax pre-flight: $1" >&2
-  exit 2
-}
-
-warn() {
-  echo "syrax pre-flight: $1" >&2
-}
 
 # ADR-0015: the runtime creates this at 0700 and then enforces only that nobody else can write it,
 # so a world-readable scratch root passes its own check. Absent is fine — it creates it.

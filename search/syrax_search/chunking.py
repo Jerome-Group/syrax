@@ -20,7 +20,7 @@ WINDOW_TOKENS = 480
 OVERLAP_TOKENS = 72
 
 # Below this a window is whitespace and page furniture, and it dilutes the arm it lands in.
-USABLE_CHARACTERS = 32
+USABLE_WINDOW_CHARACTERS = 32
 
 
 class Tokenizer(Protocol):
@@ -45,7 +45,7 @@ def chunk(text: str, tokenizer: Tokenizer) -> Iterator[Chunk]:
         if not window:
             return
         piece = tokenizer.decode(window)
-        if len(piece.strip()) >= USABLE_CHARACTERS:
+        if len(piece.strip()) >= USABLE_WINDOW_CHARACTERS:
             yield Chunk(ordinal=ordinal, text=piece, tokens=len(window))
             ordinal += 1
         if start + WINDOW_TOKENS >= len(ids):

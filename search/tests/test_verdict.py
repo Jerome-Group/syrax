@@ -50,3 +50,16 @@ def test_a_scope_is_a_restriction_on_the_same_retrieval(machine, embedder):
     notes = machine.scopes["notes"]
     verdict = answer(machine, embedder, "receipt", scope=notes)
     assert all(one.path.startswith(notes + "/") for one in verdict.candidates)
+
+
+def test_a_body_word_alone_does_not_lift_a_query_off_the_empty_floor(machine, embedder):
+    """One common word shared with a long document is what the floor exists to reject."""
+    verdict = answer(machine, embedder, "erg zzzz yyyy xxxx wwww vvvv")
+    assert verdict.state == "empty"
+
+
+def test_a_name_match_does_lift_one(machine, embedder):
+    """The book's own filename is why *Dummit and Foote* is right at a score below the floor."""
+    verdict = answer(machine, embedder, "rowing zzzz yyyy xxxx wwww vvvv")
+    assert verdict.state == "ambiguous"
+    assert verdict.candidates[0].name == "rowing.md"

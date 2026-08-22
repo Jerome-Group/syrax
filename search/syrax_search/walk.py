@@ -16,16 +16,16 @@ from .lists import Lists
 
 
 @dataclass(frozen=True)
-class Candidate:
+class Crawled:
     path: str
     name: str
     size: int
     mtime: float
-    """False where the document is indexed by its name alone: outside the extraction scope."""
     extracted: bool
+    """False where the document is indexed by its name alone: outside the extraction scope."""
 
 
-def crawl(lists: Lists) -> Iterator[Candidate]:
+def crawl(lists: Lists) -> Iterator[Crawled]:
     """Every file the index allowlist reaches that the blocklist does not forbid."""
     for root in lists.index_allowlist:
         if lists.blocks(root) or os.path.islink(root) or not os.path.isdir(root):
@@ -33,7 +33,7 @@ def crawl(lists: Lists) -> Iterator[Candidate]:
         yield from _crawl_root(root, lists)
 
 
-def _crawl_root(root: str, lists: Lists) -> Iterator[Candidate]:
+def _crawl_root(root: str, lists: Lists) -> Iterator[Crawled]:
     for directory, subdirectories, filenames in os.walk(root, followlinks=False):
         subdirectories[:] = [
             name
@@ -49,7 +49,7 @@ def _crawl_root(root: str, lists: Lists) -> Iterator[Candidate]:
                 stat = os.stat(path, follow_symlinks=False)
             except OSError:
                 continue
-            yield Candidate(
+            yield Crawled(
                 path=path,
                 name=name,
                 size=stat.st_size,

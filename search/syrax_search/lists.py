@@ -68,7 +68,7 @@ class Lists:
     def blocks(self, path: str) -> str | None:
         """Why this path may never be touched, or `None` if nothing forbids it."""
         for root in self.blocked_roots:
-            if _is_within(path, root):
+            if is_within(path, root):
                 return f"blocklist: under {root}"
         parts = path.split(os.sep)
         for part in parts[:-1]:
@@ -87,13 +87,13 @@ class Lists:
         return None
 
     def indexes(self, path: str) -> bool:
-        return any(_is_within(path, root) for root in self.index_allowlist)
+        return any(is_within(path, root) for root in self.index_allowlist)
 
     def extracts(self, path: str) -> bool:
         """Inside the extraction scope a document is read; outside it, only its name is indexed."""
-        return any(_is_within(path, root) for root in self.extraction_scope)
+        return any(is_within(path, root) for root in self.extraction_scope)
 
 
-def _is_within(path: str, root: str) -> bool:
+def is_within(path: str, root: str) -> bool:
     """Prefix containment on path components, so `/a/bc` is not inside `/a/b`."""
     return path == root or path.startswith(root.rstrip(os.sep) + os.sep)

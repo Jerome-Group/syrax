@@ -21,6 +21,7 @@ import numpy as np
 import sqlite_vec
 
 from .embedder import DIMENSIONS
+from .terms import words_of
 
 SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS documents(
@@ -116,7 +117,9 @@ def put_document(
     )
     document_id = database.execute("SELECT id FROM documents WHERE path = ?", (path,)).fetchone()[0]
     database.execute("DELETE FROM name_fts WHERE rowid = ?", (document_id,))
-    database.execute("INSERT INTO name_fts(rowid, name) VALUES(?,?)", (document_id, _words(path)))
+    database.execute(
+        "INSERT INTO name_fts(rowid, name) VALUES(?,?)", (document_id, " ".join(words_of(path)))
+    )
     return document_id
 
 
@@ -161,8 +164,3 @@ def forget_document(database: sqlite3.Connection, document_id: int) -> None:
     clear_chunks(database, document_id)
     database.execute("DELETE FROM name_fts WHERE rowid = ?", (document_id,))
     database.execute("DELETE FROM documents WHERE id = ?", (document_id,))
-
-
-def _words(path: str) -> str:
-    """The path as terms: separators and punctuation are not what a person types."""
-    return "".join(character if character.isalnum() else " " for character in path)

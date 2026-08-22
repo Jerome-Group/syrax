@@ -1,7 +1,8 @@
 /**
- * The search unit's wrapper, in the same shape as the gateway's (ADR-0005): a script rather than a
- * binary as the program, the `PATH` launchd does not provide, the capture launchd cannot open on
- * the external volume, and a pre-flight that refuses rather than starts wrong.
+ * The search unit's wrapper, in the same shape as the gateway's (ADR-0005) and built from the same
+ * preamble: a script rather than a binary as the program, and a pre-flight that refuses rather than
+ * starts wrong. `pdftotext`, `pdftoppm` and `tesseract` are Homebrew's, which is one of the two
+ * reasons that preamble sets a `PATH` at all.
  *
  * What it refuses on is this unit's own. A missing export is not a degraded search but a search
  * that fails every query, since the query itself has to be embedded — so it is the gateway's
@@ -10,18 +11,10 @@
 
 import { join } from "node:path";
 import type { Deployment } from "../adapter/deployment.ts";
+import { quoteForShell, wrapperPreamble } from "./wrapper.ts";
 
 /** Named so it neither collides with the gateway's capture nor matches the runtime's prune. */
 export const searchCaptureBasename = "search.err.log";
-
-const captureMaxBytes = 5242880;
-
-/** `pdftotext`, `pdftoppm` and `tesseract` are Homebrew's, which launchd's `PATH` does not carry. */
-const path = "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
-
-function quoteForShell(value: string): string {
-  return `'${value.replaceAll("'", `'\\''`)}'`;
-}
 
 export function searchWrapperScript(deployment: Deployment, deploymentPath: string): string {
   const interpreter = join(deployment.searchRoot, "bin", "python");
@@ -34,7 +27,8 @@ set -uo pipefail
 # directories it writes. The mask is the floor rather than each caller (ADR-0014's argument).
 umask 077
 
-export PATH=${quoteForShell(path)}
+${wrapperPreamble("syrax search pre-flight", deployment.logsDir, join(deployment.logsDir, searchCaptureBasename))}
+
 # The extractors are subprocesses, and forking after the tokenizer has run makes it print a
 # deadlock warning per document. Answering the question once here keeps the capture readable.
 export TOKENIZERS_PARALLELISM=false
@@ -43,29 +37,6 @@ interpreter=${quoteForShell(interpreter)}
 deployment=${quoteForShell(deploymentPath)}
 index_root=${quoteForShell(deployment.searchIndex)}
 export_dir="$index_root/models/embeddinggemma-300m-onnx"
-logs_dir=${quoteForShell(deployment.logsDir)}
-capture=${quoteForShell(join(deployment.logsDir, searchCaptureBasename))}
-capture_max_bytes=${captureMaxBytes}
-
-start_capture() {
-  mkdir -p "$logs_dir" || exit 2
-  chmod 700 "$logs_dir" || exit 2
-  if [ -f "$capture" ] && [ "$(stat -f %z "$capture")" -ge "$capture_max_bytes" ]; then
-    mv -f "$capture" "\${capture%.log}.1.log"
-  fi
-  : >>"$capture" || exit 2
-  chmod 600 "$capture" || exit 2
-  exec >/dev/null 2>>"$capture"
-}
-
-refuse() {
-  echo "syrax search pre-flight: $1" >&2
-  exit 2
-}
-
-warn() {
-  echo "syrax search pre-flight: $1" >&2
-}
 
 ensure_private() {
   local directory=$1
