@@ -25,7 +25,10 @@ What was asked for is a draft that ends as a finished line with the answer benea
 | The answer beneath it, never replacing it | A fresh `sendMessage` — the draft is never edited into the answer |
 | Reduced to a finished line | **`deleteMessage`** — the draft is removed after the answer lands |
 
-The deletion is not a setting. `ChannelStreamingProgressSchema` is strict and carries `label`,
+The deletion is not a setting, and it is not a hook either. On a delegating turn the draft's whole
+life — one `sendMessage`, two `editMessageText`, one `deleteMessage` — crosses **no plugin hook at
+all**; only the final answer passes through `message_sending`. `ChannelStreamingProgressSchema` is
+strict and carries `label`,
 `labels`, `maxLines`, `maxLineChars`, `render`, `toolProgress`, `commandText` and `commentary` —
 there is no knob for what happens to the draft at completion, and a tool-progress-only draft is
 cleared by construction. The only way to keep a finished line would be for Syrax to post its own,
@@ -47,6 +50,14 @@ The other half of the same shape. Measured twice:
   the runtime posts `↪️ Model Fallback: <rung> (selected <rung>; timeout)` into the chat before the
   answer. That notice is built unconditionally in the reply runner; no configuration suppresses it.
   So the two deaths differ in what the Owner sees, and which one a rung dies is not Syrax's choice.
+
+**The notice is reachable by a plugin, and that is a different question from whether it should be.**
+A `reply_payload_sending` hook sees it as a payload carrying `isFallbackNotice: true`, and returning
+`{ cancel: true }` stops it while the chain still advances and the answer still lands — measured on
+the branch `prototype/hush-fallback-notice`. What it costs is the thing this record opens with:
+loading a plugin is in-process code on the reply path, which is what ADR-0003 forswore. So this is
+not *"the runtime cannot"* but *"Syrax may not, on the boundary it chose"*, and the two should not be
+confused by a later reader looking for a knob.
 
 The two together retire the part of #123 that asked for a partial to be continued below: **the
 runtime never persists a partial in the first place.** ADR-0008 leaves the front lane unstreamed
@@ -103,7 +114,8 @@ keeping: **a provider's catalogue is evidence a model exists and is not evidence
 
 - **The Owner sees which rung answered when the front lane falls through.** Not what #123 wanted,
   and arguably not bad: the notice is the only thing that makes a degraded lane visible without
-  reading a log. It cannot be turned off, so the question is moot until the pinned runtime moves.
+  reading a log. Turning it off is a plugin, and a plugin is an ADR-0003 amendment rather than a
+  setting — so what stands between the Owner and a silent fallback is a decision, not a limit.
 - **The worker lane's reservations are what make Groq a rung.** `openai/gpt-oss-20b` reserves 2,048
   against an 8,000-token ceiling and a 5,239-token call. Raise that reservation past 2,761 and the
   rung stops working — with a `413` that reads exactly like the provider's fault, which is the trap
@@ -123,6 +135,10 @@ keeping: **a provider's catalogue is evidence a model exists and is not evidence
   `test/delegating-turn.test.ts` is the cheapest check against a new pin — it fails loudly if the
   draft stops being deleted, and `test/runtime-config.test.ts` fails if a stated key stops being
   one the runtime knows.
+- **ADR-0003's boundary is re-argued.** A hook plugin is the one route to a silent fallback and to
+  anything else the reply path decides, and `prototype/hush-fallback-notice` is the working proof
+  rather than a guess. The question reopens the moment the Owner wants that surface more than the
+  boundary.
 - **A partial ever becomes visible.** If the runtime gains a token-level path to Telegram, ADR-0008
   reopens and so does this: a visible partial is the thing that would make continuing below one a
   real question rather than a described one.
