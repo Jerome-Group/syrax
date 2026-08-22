@@ -113,6 +113,20 @@ The toolchain is three tools and one dependency each — `prettier` to format, `
 never a review topic. Prettier does not touch Markdown here: prose is wrapped by hand at the width
 every document already uses, and re-flowing it turns a one-paragraph edit into a whole-file diff.
 
+### Python, in one place and for one reason
+
+The search unit under `search/` is Python, and it is the only part of this repository that is
+(ADR-0004). The choice turned on the embedding and vector stack rather than on preference, so the
+boundary is the unit rather than a general permission: a new capability is TypeScript unless it has
+the same kind of argument behind it.
+
+Its toolchain mirrors the one above, one tool per job — `ruff format`, `ruff check`, `pytest` — run
+as further steps in the same job. `pyproject.toml` declares what the unit depends on and
+`requirements.txt` is the transitive pin a machine installs, the same split as the runtime's
+manifest and its lockfile; `requirements-dev.txt` is what the checks install, and it deliberately
+omits the 698 MB embedder export. The suite runs against a stand-in embedder for that reason: a
+test that has to download a model is a test nobody runs.
+
 The core's *many jobs* shape (§5) is qualified here by the Organisation's gate: a job running on a
 pull request must be named in the `Required checks` ruleset or waived in the conformance manifest,
 and both live in the management hub. So the checks grow as **steps in the one required job** until

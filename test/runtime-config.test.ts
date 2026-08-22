@@ -17,6 +17,9 @@ const deployment = readDeployment({
   carrierMap: "/private/root/state/carriers.json",
   logsDir: "/private/root/logs",
   wrapperPath: "/private/root/bin/start-gateway.sh",
+  searchRoot: "/private/root/search-env",
+  searchIndex: "/private/root/search-index",
+  searchWrapperPath: "/private/root/bin/start-search.sh",
   ownerTelegramUserId: 100000000,
 });
 

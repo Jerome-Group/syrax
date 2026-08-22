@@ -76,3 +76,15 @@ updates:
     rebase-strategy: auto
     cooldown:
       default-days: 7
+
+  # The search unit's own tree. `requirements.txt` is what a machine installs and
+  # `requirements-dev.txt` is what the checks install, so a bump to the second goes red here the
+  # way an npm one does; a bump to the first is a deployment change and is read like the runtime's.
+  - package-ecosystem: pip
+    directory: /search
+    schedule:
+      interval: daily
+    labels: []
+    rebase-strategy: auto
+    cooldown:
+      default-days: 7

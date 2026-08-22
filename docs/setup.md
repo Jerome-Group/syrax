@@ -64,7 +64,29 @@ commit.
    and **warns and proceeds** on a posture finding. `KeepAlive` brings the gateway back from a
    crash; `launchctl bootout gui/$(id -u)/com.jerome-group.syrax.gateway` stops it.
 
-8. Before committing a change, inspect the staged file list and search it for credentials, private
+8. **Stand up the search unit.** Its environment is created outside the checkout and installed
+   from the transitive pin, and the package is installed from the checkout so the code that runs is
+   the code that is tracked. The export is fetched **once, deliberately**: nothing in the index or
+   query path reaches a network, and an unattended start refuses rather than downloading.
+
+   ```sh
+   python3.14 -m venv "$SEARCH_ROOT"
+   "$SEARCH_ROOT/bin/pip" install -r search/requirements.txt
+   "$SEARCH_ROOT/bin/pip" install --no-deps -e ./search
+   "$SEARCH_ROOT/bin/python" -m syrax_search fetch-embedder "$DEPLOYMENT"
+
+   node src/cli/install-search-agent.ts "$DEPLOYMENT"
+   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jerome-group.syrax.search.plist
+   ```
+
+   The same command writes the two index schedules beside it, and they are loaded the same way.
+   Nothing is indexed until a pass is poked at the running unit:
+
+   ```sh
+   curl --fail -X POST http://127.0.0.1:18790/index/full
+   ```
+
+9. Before committing a change, inspect the staged file list and search it for credentials, private
    conversations, machine-specific paths, and provider responses.
 
 ## When a chat comes back empty

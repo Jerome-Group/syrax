@@ -1,0 +1,43 @@
+# The search unit is the one place Syrax builds a capability rather than reaching for a product's
+# own tools, and the one place it is not TypeScript. ADR-0004 turned that on the embedding and
+# vector stack: `onnxruntime`, `tokenizers` and `sqlite-vec` all have working wheels here, and the
+# embedder can be swapped in a line while the model is still being trialled.
+#
+# What is declared here is pinned transitively by `requirements.txt`, the way the runtime is pinned
+# by its lockfile rather than by the version its manifest names.
+
+[project]
+name = "syrax-search"
+version = "0.1.0"
+description = "Syrax's file-search index and the two tools it serves over MCP"
+requires-python = ">=3.14"
+dependencies = [
+    "mcp==2.0.0",
+    "numpy==2.3.4",
+    "sqlite-vec==0.1.6",
+    "uvicorn==0.40.0",
+]
+
+[project.optional-dependencies]
+# The pinned export and what opens it. Absent, the unit still builds a keyword arm and refuses to
+# embed, which is the honest failure on a machine where the export has not been fetched.
+embedder = [
+    "huggingface-hub==0.36.0",
+    "onnxruntime==1.24.1",
+    "tokenizers==0.22.1",
+]
+dev = [
+    "pytest==9.0.1",
+    "ruff==0.15.4",
+]
+
+[tool.ruff]
+# The width every other file in this repository is formatted to.
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

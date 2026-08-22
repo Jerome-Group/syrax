@@ -8,5 +8,12 @@
   "carrierMap": "/absolute/path/outside/this/repository/runtime-state/carriers.json",
   "logsDir": "/absolute/path/outside/this/repository/logs",
   "wrapperPath": "/absolute/path/outside/this/repository/bin/start-gateway.sh",
+  "searchRoot": "/absolute/path/outside/this/repository/search-env",
+  "searchIndex": "/absolute/path/outside/this/repository/search-index",
+  "searchWrapperPath": "/absolute/path/outside/this/repository/bin/start-search.sh",
+  "indexAllowlist": ["/absolute/path/to/a/root/worth/indexing"],
+  "extractionScope": ["/absolute/path/to/a/root/worth/indexing"],
+  "blocklist": ["/absolute/path/that/is/never/touched"],
+  "searchScopes": { "academic": "/absolute/path/to/a/root/worth/indexing" },
   "ownerTelegramUserId": 100000000
 }
