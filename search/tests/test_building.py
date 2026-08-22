@@ -90,3 +90,24 @@ def test_a_drive_export_is_read_rather_than_only_named(machine, embedder, tmp_pa
         "SELECT status, extracted FROM documents WHERE path = ?", (str(export),)
     ).fetchone()
     assert (status, extracted) == ("ok", 1)
+
+
+def test_progress_survives_a_pass_that_is_cut_short(machine, embedder, monkeypatch):
+    """A pass is hours, so what it has read is committed as it goes rather than at the end."""
+    import syrax_search.building as building
+
+    absorbed = building._absorb
+    seen = []
+
+    def cut_short(database, embedder, crawled, stored, extraction, report):
+        absorbed(database, embedder, crawled, stored, extraction, report)
+        seen.append(crawled.path)
+        if len(seen) == 3:
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(building, "_absorb", cut_short)
+    with pytest.raises(KeyboardInterrupt):
+        run_pass(machine, embedder, INCREMENTAL)
+
+    kept = open_index(machine.database_path).execute("SELECT count(*) FROM documents").fetchone()[0]
+    assert kept == 2, "the two committed before the interrupt, and not the one it landed in"

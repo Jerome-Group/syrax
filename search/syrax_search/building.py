@@ -91,7 +91,7 @@ class PassReport:
         }
 
 
-PROGRESS_EVERY = 200
+PROGRESS_EVERY = 50
 
 
 def progress(report: PassReport) -> None:
@@ -121,10 +121,12 @@ def run_pass(
                     _absorb(
                         database, embedder, crawled, stored.get(crawled.path), extraction, report
                     )
-                # A batch at a time, because a full pass is hours: a machine that goes down halfway
-                # through one keeps what it had read, and the next pass starts from there.
-                database.commit()
-                progress(report)
+                    # A document at a time, and never a batch: the batch is how many files are
+                    # *read* at once, and one textbook is two thousand windows — sixty-four of
+                    # them in one transaction is hours of embedding that a power cut discards and
+                    # that nothing can report progress through.
+                    database.commit()
+                    progress(report)
         for path, document in stored.items():
             if path not in seen:
                 forget_document(database, document.id)
