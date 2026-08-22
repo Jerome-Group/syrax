@@ -27,7 +27,9 @@ QUERY_PROMPT = "task: search result | query: {}"
 
 MODEL_FILE = "model_q4.onnx"
 TOKENIZER_FILE = "tokenizer.json"
-MAXIMUM_QUERY_TOKENS = 1024
+# What one forward pass takes. It bounds what is *embedded* — a window plus its prompt is well
+# inside it — and must never bound what is *windowed*, which is a whole textbook.
+MAXIMUM_INPUT_TOKENS = 1024
 DIMENSIONS = 768
 THREADS = 8
 
@@ -58,11 +60,12 @@ class PinnedEmbedder:
         self._idle_evict_seconds = idle_evict_seconds
         self._session: object | None = None
         self._tokenizer: object | None = None
+        self._windowing: object | None = None
         self._last_used = 0.0
 
     def tokenizer(self) -> object:
         self._load()
-        return _Windows(self._tokenizer)
+        return _Windows(self._windowing)
 
     def embed_documents(self, texts: list[str]) -> np.ndarray:
         return self._encode([DOCUMENT_PROMPT.format(text) for text in texts])
@@ -78,6 +81,7 @@ class PinnedEmbedder:
             return False
         self._session = None
         self._tokenizer = None
+        self._windowing = None
         return True
 
     def _encode(self, prompted: list[str]) -> np.ndarray:
@@ -112,15 +116,20 @@ class PinnedEmbedder:
         self._session = onnxruntime.InferenceSession(
             model, options, providers=["CPUExecutionProvider"]
         )
-        loaded = Tokenizer.from_file(tokenizer)
-        loaded.enable_padding(pad_id=0, pad_token="<pad>")
-        loaded.enable_truncation(max_length=MAXIMUM_QUERY_TOKENS)
-        self._tokenizer = loaded
+        # Two of them, and the second is not a micro-optimisation. Padding and truncation are state
+        # on the tokenizer object rather than arguments to a call, so a chunker sharing the
+        # encoder's would window every document from its first 1024 tokens — a 500-page textbook
+        # indexed as three windows of its front matter, silently, on both arms.
+        encoder = Tokenizer.from_file(tokenizer)
+        encoder.enable_padding(pad_id=0, pad_token="<pad>")
+        encoder.enable_truncation(max_length=MAXIMUM_INPUT_TOKENS)
+        self._tokenizer = encoder
+        self._windowing = Tokenizer.from_file(tokenizer)
         self._last_used = time.monotonic()
 
 
 class _Windows:
-    """The chunker's view of the model's tokenizer: ids in, text back, no prompts and no padding."""
+    """The chunker's view: ids in, text back, and a tokenizer that neither pads nor truncates."""
 
     def __init__(self, tokenizer: object) -> None:
         self._tokenizer = tokenizer
