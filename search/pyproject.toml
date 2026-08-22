@@ -24,7 +24,7 @@ dependencies = [
 embedder = [
     "huggingface-hub==0.36.0",
     "onnxruntime==1.24.1",
-    "tokenizers==0.22.1",
+    "tokenizers==0.23.1",
 ]
 dev = [
     "pytest==9.0.1",
