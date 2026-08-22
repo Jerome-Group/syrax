@@ -25,7 +25,7 @@ pydantic==2.13.4
 pydantic_core==2.46.4
 Pygments==2.21.0
 PyJWT==2.13.0
-pytest==9.0.1
+pytest==9.1.1
 python-multipart==0.0.32
 referencing==0.37.0
 rpds-py==2026.6.3
