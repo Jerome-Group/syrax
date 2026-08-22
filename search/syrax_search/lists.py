@@ -62,8 +62,8 @@ class Lists:
     """One machine's three lists, each already resolved to absolute paths."""
 
     index_allowlist: tuple[str, ...]
-    """A root, or a pattern. Still one list — see `extracts` for why it is not a fourth."""
     extraction_scope: tuple[str, ...]
+    """Each entry a root or a pattern — see `extracts` for why that is not a fourth list."""
     blocked_roots: tuple[str, ...]
 
     def blocks(self, path: str) -> str | None:
@@ -105,14 +105,26 @@ class Lists:
         )
 
 
+# What `fnmatch` treats as a wildcard, which is what tells a pattern from a plain root.
+WILDCARDS = "*?["
+
+
 def is_pattern(entry: str) -> bool:
-    return any(character in entry for character in "*?[")
+    return any(character in entry for character in WILDCARDS)
 
 
 def literal_prefix(entry: str) -> str:
-    """What a pattern says before it starts guessing — the part that must be inside a root."""
-    cut = min((entry.index(one) for one in "*?[" if one in entry), default=len(entry))
-    return entry[:cut].rsplit(os.sep, 1)[0] if cut < len(entry) else entry
+    """The directory a pattern is anchored to, which is what has to sit inside an allowlist root.
+
+    A plain root is its own anchor. `/papers/*/MH*.pdf` is anchored at `/papers`; a pattern with a
+    wildcard in its first segment is anchored at the filesystem root and is refused there rather
+    than here, since nothing in the allowlist contains it.
+    """
+    if not is_pattern(entry):
+        return entry
+    first = min(entry.index(one) for one in WILDCARDS if one in entry)
+    anchor = entry[:first].rsplit(os.sep, 1)[0]
+    return anchor or os.sep
 
 
 def is_within(path: str, root: str) -> bool:

@@ -57,7 +57,7 @@ def read_deployment(path: str) -> SearchConfig:
 
     index_root = _absolute(source, "searchIndex")
     allowlist = _roots(source, "indexAllowlist")
-    scope = _roots(source, "extractionScope")
+    scope = _entries(source, "extractionScope")
     outside = [
         entry for entry in scope if not any(is_within(literal_prefix(entry), a) for a in allowlist)
     ]
@@ -109,13 +109,17 @@ def _scopes(value: object, allowlist: tuple[str, ...]) -> dict[str, str]:
 
 
 def _roots(source: dict, key: str) -> tuple[str, ...]:
+    return _entries(source, key, "an absolute path")
+
+
+def _entries(source: dict, key: str, shape: str = "an absolute path or pattern") -> tuple[str, ...]:
     value = source.get(key)
     if not isinstance(value, list) or not value:
-        raise InvalidDeployment(f"{key} must be a non-empty list of absolute paths.")
-    for root in value:
-        if not isinstance(root, str) or not root.startswith("/"):
-            raise InvalidDeployment(f"{key} names {root!r}, which is not an absolute path.")
-    return tuple(root.rstrip("/") for root in value)
+        raise InvalidDeployment(f"{key} must be a non-empty list of {shape}s.")
+    for entry in value:
+        if not isinstance(entry, str) or not entry.startswith("/"):
+            raise InvalidDeployment(f"{key} names {entry!r}, which is not {shape}.")
+    return tuple(entry.rstrip("/") for entry in value)
 
 
 def _absolute(source: dict, key: str) -> str:

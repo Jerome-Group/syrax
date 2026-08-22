@@ -29,6 +29,12 @@ worthless*, and that turned out to be the common case — the failure is worse t
 against, because the ledger reports nothing wrong and search asserts the document is about
 copyright law.
 
+Two counts appear in the trail this left and they measure different things. The **1,424** on
+[#143](https://github.com/Jerome-Group/syrax/issues/143) came from the exploratory pass that found
+the defect, which asked whether a document's distinct content was under 200 characters. **1,199** is
+what the rule below actually reclassifies, and it is the number that governs: the share rule spares
+the short documents an absolute count condemns, which is the whole reason it is a share.
+
 **What gives it away is repetition, not length**, and the rule is a share rather than a count. A
 count condemns the short documents that are real: a one-paragraph note is entirely distinct, and a
 page of exam questions under the same stamp is a third distinct. The stamped scans measured here sit
@@ -50,7 +56,7 @@ fourth would make the section it warns with false. The requirement is not a new 
 restriction; it is the same restriction stated more precisely. So an entry becomes a root **or** a
 glob, and the concept is unchanged: *the subset whose documents are opened and read*.
 
-The consequence for the rest of `pyps` is the right one anyway. Those 1,419 papers become
+The consequence for the rest of `pyps` is the right one anyway. Those 1,419 non-MH papers become
 name-only — findable by name, honest about not having been read — which is what they have actually
 been all along while claiming otherwise.
 

@@ -32,16 +32,18 @@ USABLE_CHARACTERS = 32
 # A scanned document stamped by a library returns one line per page and nothing else — 952
 # characters of copyright notice across sixteen pages, which clears the length test above and is
 # then filed as read. What gives it away is not length but *repetition*: almost none of the text
-# is distinct. Measured on the real corpus, 1,424 documents were like this and none reached OCR,
-# because none of them looked empty (ADR-0024).
+# is distinct. Measured on the real corpus, this rule reclassifies 1,199 documents that had all
+# been recorded as read, none of which reached OCR because none of them looked empty (ADR-0024).
 #
 # A share rather than a count, because a count condemns the short documents that are real: a
 # one-paragraph note is entirely distinct, and a page of exam questions under the same stamp is a
 # third distinct. The stamped scans measured here sit at 0.06 to 0.12.
-DISTINCT_SHARE = 0.15
+MINIMUM_DISTINCT_SHARE = 0.15
 
-# OCR is the only unbounded cost in the pipeline — a 500-page scan is minutes per document — and
-# what a search needs from a scanned handout is enough text to find it by.
+# OCR is the only unbounded cost in the pipeline — 75.6 s per document measured, against fractions
+# of a second for everything else — and a cap is what makes an unattended pass a schedule rather
+# than a hope. 40 truncates no exam paper and does truncate a scanned textbook, which ADR-0024
+# argues is the right way round; lowering it to 10 was considered there and rejected.
 OCR_PAGE_LIMIT = 40
 
 
@@ -108,7 +110,7 @@ def has_text_layer(text: str) -> bool:
     if len(stripped) < USABLE_CHARACTERS:
         return False
     distinct = {line.strip() for line in text.splitlines() if line.strip()}
-    return sum(len(line) for line in distinct) / len(stripped) >= DISTINCT_SHARE
+    return sum(len(line) for line in distinct) / len(stripped) >= MINIMUM_DISTINCT_SHARE
 
 
 def _ocr_pdf(path: str) -> Extraction:
