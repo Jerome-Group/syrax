@@ -137,6 +137,80 @@ describe("the escape hatch", () => {
     assert.equal(answered.remaining[0]!.spent, 0);
   });
 
+  it("puts back a call the provider never served, so a bad backend cannot eat the day", async () => {
+    const stub = await ProviderStub.start();
+    stub.script({
+      kind: "overloaded",
+      message: "The model is overloaded. Please try again later.",
+    });
+    after(() => stub.close());
+    const monitor = new LaneMonitor(await monitorOn(stub));
+
+    const answered = await monitor.hatch.reach({ question: "a hard one", askedFor });
+
+    assert.equal(answered.reached, false);
+    assert.equal(answered.remaining[0]!.spent, 0, "a 503 was charged to the rung.");
+    assert.equal(
+      stub.askedModels.length,
+      1,
+      "the call never left, so there is nothing to put back.",
+    );
+  });
+
+  it("puts back a call that never reached a provider at all", async () => {
+    const { deployment } = temporaryMachine({
+      // Nothing listens here, which is what a transport failure and a timeout both look like.
+      providerBaseUrls: { "syrax-gemini": "http://127.0.0.1:1" },
+    });
+    writePrivateSecretsStore(deployment.secretsStore, {
+      providers: { gemini: { apiKey: geminiKey } },
+    });
+    const monitor = new LaneMonitor(readDeployment(deployment));
+
+    const answered = await monitor.hatch.reach({ question: "a hard one", askedFor });
+
+    assert.equal(answered.reached, false);
+    assert.match(answered.refused, /could not be reached/);
+    assert.equal(answered.remaining[0]!.spent, 0);
+  });
+
+  it("keeps the spend where the provider answered about the request itself", async () => {
+    const stub = await ProviderStub.start();
+    stub.script({
+      kind: "rateLimited",
+      code: "1302",
+      message: "Rate limit reached for requests",
+      retryAfterSeconds: 1,
+    });
+    after(() => stub.close());
+    const monitor = new LaneMonitor(await monitorOn(stub));
+
+    const answered = await monitor.hatch.reach({ question: "a hard one", askedFor });
+
+    assert.equal(
+      answered.remaining[0]!.spent,
+      1,
+      "a 429 is the provider's own answer about the day.",
+    );
+  });
+
+  it("keeps what refused a rung, in the provider's own words, past a restart", async () => {
+    const stub = await ProviderStub.start();
+    stub.script({
+      kind: "overloaded",
+      message: "The model is overloaded. Please try again later.",
+    });
+    after(() => stub.close());
+    const deployment = await monitorOn(stub);
+
+    await new LaneMonitor(deployment).hatch.reach({ question: "a hard one", askedFor });
+    const refused = new LaneMonitor(deployment).counters.state()[0]!.refused!;
+
+    assert.match(refused.said, /The model is overloaded/);
+    assert.equal(refused.status, 503);
+    assert.ok(Date.parse(refused.at) > 0, "a refusal with no time on it says nothing about when.");
+  });
+
   it("refuses rather than reaching a provider when the store holds no key for it", async () => {
     const stub = await ProviderStub.start();
     after(() => stub.close());
@@ -188,6 +262,20 @@ describe("the rationed lane's counters", () => {
 
     assert.equal(counters.remaining(hatchLane.rungs[0], today), 19);
     assert.equal(counters.remaining(hatchLane.rungs[0], tomorrow), 20);
+  });
+
+  it("empties the counts on the day roll and keeps what refused a rung", () => {
+    const { deployment } = temporaryMachine();
+    const counters = new DailyCounters(readDeployment(deployment).monitorState);
+    const today = new Date("2026-08-24T20:00:00Z");
+    const tomorrow = new Date("2026-08-25T20:00:00Z");
+    const rung = hatchLane.rungs[0];
+
+    counters.spend(rung, today);
+    counters.refuse(rung, { at: today.toISOString(), status: 503, said: "overloaded" }, today);
+
+    assert.equal(counters.state(tomorrow)[0]!.spent, 0);
+    assert.equal(counters.state(tomorrow)[0]!.refused?.said, "overloaded");
   });
 
   it("rolls the day where the provider resets it rather than where the machine is", () => {

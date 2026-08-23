@@ -112,8 +112,12 @@ nothing leaves the machine. Every answer states what is left, so *"two hatch cal
 want it?"* is a thing the front lane can say.
 
 The counters are per rung, one per model row of the version ladder, each carrying that row's own
-20-a-day allowance. A call is counted **before the request leaves** — a refusal spends the
-allowance too — and the day rolls where the provider resets it rather than where the machine is.
+20-a-day allowance. A call is counted **before the request leaves**, so a crash between the call and
+the answer cannot hand an allowance back — and it is **put back where the provider never served
+it**: a 5xx, a transport failure and a timeout are refunded, where a 429 and any other 4xx are the
+provider's own answer about the request and stay spent. What refused a rung is kept beside the
+counts in the provider's own words, and outlives the day the counts are emptied on. The day rolls
+where the provider resets it rather than where the machine is.
 Which rows the lane holds is `src/adapter/hatch-lane.ts`, and it is **four** — measured on the
 account rather than read off the catalogue, which lists seven Flash rows of which one is an alias of
 the newest and one is withdrawn while still listed. A row joins the lane only once it has answered

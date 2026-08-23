@@ -16,6 +16,8 @@ export type ScriptedResponse =
   /** A rung that dies mid-answer: this much text arrives, then the connection drops. */
   | { kind: "died"; text: string }
   | { kind: "rateLimited"; code: string; message: string; retryAfterSeconds: number }
+  /** The backend, not the allowance: a rung that was never served rather than one that refused. */
+  | { kind: "overloaded"; message: string }
   | { kind: "wall"; requestedTokens: number; limitTokens: number };
 
 export type ProviderRequest = { path: string; body: Record<string, unknown> };
@@ -123,6 +125,12 @@ export class ProviderStub {
       return json(response, 429, {
         error: { message: scripted.message, type: "tokens", code: scripted.code },
       });
+    }
+    if (scripted.kind === "overloaded") {
+      // Gemini answers an error as a one-element array, which is the shape a reader has to survive.
+      return json(response, 503, [
+        { error: { code: 503, message: scripted.message, status: "UNAVAILABLE" } },
+      ]);
     }
     if (scripted.kind === "wall") {
       return json(response, 413, {
