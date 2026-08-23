@@ -8,7 +8,7 @@ time.
 
 - **The three arms fuse once**, at equal weight, instead of the keyword halves fusing into one arm
   that then fuses against the vector arm.
-- **A two-digit year means the four-digit one**, as a rule and not a table.
+- **Two consecutive two-digit numbers are an academic year**, as a rule and not a table.
 - **The name pool is as deep as the text pool**, 40 rather than 10.
 - **Weighting a document by how much of the query its name accounts for is measured and rejected.**
 
@@ -58,16 +58,28 @@ wrong rather than that it felt wrong.
 ## A two-digit year, and a pool deep enough to hold the answer
 
 `25/26` and `2025-2026` are one thing to the person typing and two tokens to FTS5. The rule is that
-**a two-digit number also means the year it is short for**, prefixed with this century — expanded
-into the match expression as an OR group, and honoured by the test for whether a name accounts for
-the query, so a document cannot match on a year and then be told it was not named by one. It is
-wrong for a document from 1994, and that is accepted: this corpus is this decade's coursework, and
-the cost of being wrong is one weak extra term in a bag that is already an OR.
+**two consecutive two-digit numbers are an academic year**, and each is expanded into the match
+expression as an OR group with the four-digit form — honoured also by the test for whether a name
+accounts for the query, so a document cannot match on a year and then be told it was not named by
+one. It is wrong for a document from 1994, and that is accepted: this corpus is this decade's
+coursework.
+
+**The pairing is load-bearing and the first rule written here did without it.** Keying on *any*
+two-digit number is simpler and wrong for this corpus in particular, which numbers its tutorials,
+chapters and problems in two digits: `tutorial 12` would have reached every document carrying 2012,
+and — worse — such a document would then have counted as *naming* the query and been excused from
+the empty floor. A pair is what distinguishes a year from a count. It still cannot tell `chapter 11
+12` from an academic year, and that is the limit rather than a case to add a rule for.
 
 The name pool was 10 against the text arm's 40. `mh1101` alone is in 426 filenames, so ten was the
 whole of what a common module code left room for and the paper the query named sat below it.
 Measured, 40 puts one more answer into the shortlist and lifts four others; 80 measures the same as
 40.
+
+**The floor's exemption keeps its own depth of 10.** A name match excuses a document from the empty
+floor (ADR-0025), and that guard's reach is not the ranking's business: one constant serving both
+would mean the next person who widens the pool to lift a buried answer hands four times as many
+documents a way past a floor they were not thinking about.
 
 ## What this does not fix, and why it is not tuned until it does
 
@@ -97,6 +109,8 @@ different ticket from this one.
   ADR-0025's *the keyword arm ranked it* is their union, which is what it always was.
 - The fixture corpus gains a document whose name carries a year and whose body does not, so the
   equivalence is tested by reaching a document that is otherwise unreachable.
+- `NAME_POOL` and `NAMING_POOL` are separate constants because they answer to different records —
+  the first to this one and the second to ADR-0025.
 
 ## Revisit when
 
@@ -109,3 +123,6 @@ different ticket from this one.
   chapter three times.
 - **Anything proposes reading magnitude again.** The four shapes above are the measurement to beat,
   not an argument to repeat.
+- **A query wants a single two-digit year**, `the 25 paper` rather than `25/26`. The pairing rule
+  cannot see that one, and loosening it back to any two-digit number is the thing that costs
+  `tutorial 12`.

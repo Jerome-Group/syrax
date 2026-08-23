@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .terms import terms_of, variants_of, words_of
+from .terms import forms_of, terms_of, words_of
 
 # Fitted rather than tuned: 0.12 sits 0.003 above the best wrong answer on a fifteen-query
 # benchmark, which is a number chosen by that benchmark's smallest gap. It is safe in the direction
@@ -56,6 +56,12 @@ CANDIDATE_POOL = 40
 # it. Measured over the benchmark, widening it moved the answer into the shortlist for one more
 # query and moved four others up; 80 measured the same as 40, so this is where it stops paying.
 NAME_POOL = 40
+
+# How deep the *floor exemption* reads, which is not how deep the ranking does. A name match excuses
+# a document from the empty floor (ADR-0025), and that guard's reach should not move because the
+# ranking wanted a deeper pool — widening one to lift a buried answer would otherwise hand four
+# times as many documents a way past the floor, silently.
+NAMING_POOL = 10
 SHORTLIST = 3
 
 
@@ -173,7 +179,7 @@ def _match_expression(query: str) -> str | None:
     One group per word the person typed, holding every way that word is written, so a two-digit year
     reaches the documents that spell it out.
     """
-    groups = [_any_of(variants_of(term)) for term in terms_of(query)]
+    groups = [_any_of(forms) for forms in forms_of(terms_of(query))]
     return " OR ".join(groups) if groups else None
 
 
@@ -213,12 +219,12 @@ def _keyword_arm(
         """,
         (expression, scope, scope, NAME_POOL),
     ).fetchall()
-    terms = terms_of(query)
-    naming = [one for one, name in name_hits if _names_the_query(terms, name)]
+    written = forms_of(terms_of(query))
+    naming = [one for one, name in name_hits[:NAMING_POOL] if _names_the_query(written, name)]
     return _first_seen(text_hits), _first_seen(name_hits), naming
 
 
-def _names_the_query(terms: list[str], name: str) -> bool:
+def _names_the_query(written: tuple[tuple[str, ...], ...], name: str) -> bool:
     """How much of what was typed the document's own name accounts for.
 
     `name_fts` holds the whole path's words, so a document can be a name hit on a directory alone.
@@ -227,11 +233,11 @@ def _names_the_query(terms: list[str], name: str) -> bool:
     line without naming anything. On the measured queries the two readings agree wherever the
     exemption is what decides the verdict.
     """
-    if not terms:
+    if not written:
         return False
-    written = set(words_of(name))
-    matched = sum(1 for term in set(terms) if written.intersection(variants_of(term)))
-    return matched > len(set(terms)) * NAME_MATCH_MAJORITY
+    words = set(words_of(name))
+    matched = sum(1 for forms in written if words.intersection(forms))
+    return matched > len(written) * NAME_MATCH_MAJORITY
 
 
 def _vector_arm(

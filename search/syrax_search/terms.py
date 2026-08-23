@@ -34,24 +34,41 @@ def terms_of(query: str) -> list[str]:
     return [word for word in words_of(query) if _worth_matching(word)]
 
 
-# The century a two-digit year is short for. A rule rather than a table of the years the corpus
-# happens to contain: `25/26` is written where `2025-2026` is meant, and the two are one thing to
-# the person who typed it. It is wrong for a document from 1994 and that is accepted — the corpus
-# is this decade's coursework, and the cost of being wrong is one weak extra term in an OR bag.
+# The century a two-digit year is short for. It is wrong for a document from 1994 and that is
+# accepted: the corpus is this decade's coursework.
 CENTURY = "20"
 
 
-def variants_of(term: str) -> tuple[str, ...]:
-    """Every way this term is written, the term itself first. Two digits also mean four.
+def forms_of(terms: list[str]) -> tuple[tuple[str, ...], ...]:
+    """Each term and every way it is written, the term itself first — one entry, in order.
 
-    Both sides of the keyword arm read this: the FTS expression matches any form, and the test for
+    Both halves of the keyword arm read this: the FTS expression matches any form, and the test for
     whether a name accounts for the query counts a term as matched in any of them. If only the
     expression knew, a query could match a document by its year and then be told it had not been
     named by it.
+
+    **An academic year is two consecutive two-digit numbers**, which is what `25/26` is and what
+    `2025-2026` means. That pairing is the rule rather than a range of plausible years, because a
+    lone two-digit number in this corpus is far more often a tutorial, a chapter or a problem — and
+    expanding *those* would put every document from 2012 into the bag for `tutorial 12`.
     """
-    if len(term) == 2 and term.isdigit():
+    numbers = {one for one in terms if _is_two_digits(one)}
+    return tuple(_forms(one, numbers) for one in terms)
+
+
+def _forms(term: str, numbers: set[str]) -> tuple[str, ...]:
+    if _is_two_digits(term) and numbers.intersection(_neighbours(term)):
         return (term, CENTURY + term)
     return (term,)
+
+
+def _neighbours(term: str) -> tuple[str, str]:
+    """The two-digit numbers either side: a pair of them is a year, one on its own is a count."""
+    return (f"{int(term) - 1:02d}", f"{int(term) + 1:02d}")
+
+
+def _is_two_digits(term: str) -> bool:
+    return len(term) == 2 and term.isdigit()
 
 
 def _worth_matching(word: str) -> bool:

@@ -94,15 +94,23 @@ def test_a_year_written_in_two_digits_survives_the_query(machine, embedder):
 
 
 def test_a_year_written_in_two_digits_means_the_one_written_in_four():
-    """A rule about what two digits are, not a table of the years anybody happens to have."""
-    from syrax_search.terms import variants_of
+    """A rule about what two consecutive numbers are, not a table of the years anybody has."""
+    from syrax_search.terms import forms_of
 
-    assert variants_of("25") == ("25", "2025")
-    assert variants_of("26") == ("26", "2026")
-    assert variants_of("2025") == ("2025",), "four digits already say it"
-    assert variants_of("7") == ("7",), "one digit is a number, not a year"
-    assert variants_of("s2") == ("s2",), "a semester is not a year either"
-    assert variants_of("mh1101") == ("mh1101",)
+    assert forms_of(["mh1101", "final", "25", "26"]) == (
+        ("mh1101",),
+        ("final",),
+        ("25", "2025"),
+        ("26", "2026"),
+    )
+    assert forms_of(["2025", "2026"]) == (("2025",), ("2026",)), "four digits already say it"
+    assert forms_of(["tutorial", "12"]) == (("tutorial",), ("12",)), "a lone number is a count"
+    assert forms_of(["chapter", "11", "12"]) == (
+        ("chapter",),
+        ("11", "2011"),
+        ("12", "2012"),
+    ), "the rule cannot tell this from an academic year, and reaches 2011 and 2012 for it"
+    assert forms_of(["s2", "7"]) == (("s2",), ("7",))
 
 
 def test_a_two_digit_year_reaches_the_document_that_writes_it_in_four(machine, embedder):
