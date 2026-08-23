@@ -2,6 +2,8 @@
 
 Broad search is the first capability where an answer is not text. General sends a **document**, and
 on a close call it sends **three buttons**, and a tap on one has to come back and mean something.
+*(Ten buttons — [ADR-0028](0028-a-close-call-offers-ten.md). Nothing below changes: a tap
+carries a token and a position however many there are.)*
 None of that is expressible in a reply's text, so this is the first place where
 [ADR-0003](0003-the-runtime-adapter-wraps-openclaw.md)'s boundary — a configuration contract, no
 code on the request path — has to be held against a surface rather than against a chain.

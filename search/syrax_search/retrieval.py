@@ -62,7 +62,14 @@ NAME_POOL = 40
 # ranking wanted a deeper pool — widening one to lift a buried answer would otherwise hand four
 # times as many documents a way past the floor, silently.
 NAMING_POOL = 10
-SHORTLIST = 3
+
+# How much of the pool a close call offers. Three was the number ADR-0004 chose and ADR-0026 built a
+# keyboard for, and #151 left the answer at rank 5, 6 and 8 for three phrasings of one query —
+# inside the pool the fusion ranked, outside the shortlist drawn from it, and unreachable by any
+# ordering over shared words. Measured over twenty benchmark queries the answer is offered 11 times
+# at three and 15 at eight, and eight is where it stops paying: ten is two of headroom rather than a
+# number this benchmark chose. ADR-0028 argues what that does to the meaning of `ambiguous`.
+SHORTLIST = 10
 
 
 @dataclass(frozen=True)
