@@ -307,5 +307,36 @@ unit for a re-embed, which is the same pass the three-day schedule pokes and nee
 own. Give the benchmark directory a local `git init` and never push it: nothing else tracks a file
 whose entries cannot be reproduced, and the data cannot leave the machine by construction.
 
+### Filling the fixture half
+
+A set with nothing in it scores nothing, so the report has no baseline for a later change to be read
+against. The hand-written half goes in with:
+
+```
+<searchRoot>/bin/python -m syrax_search seed <deployment.json> <queries.jsonl>
+```
+
+Each line of that file is one query. It names the documents that answer it by **fragments of their
+path** rather than absolute paths — a person writing the list knows the chapter and not the mount
+point, and one chapter is often several documents, so a fragment is how one expectation reaches all
+of them:
+
+```json
+{"query": "the theorem about semisimple rings", "expect": ["Ch5_Semisimple_Algebras/13_Wedderburn"]}
+{"query": "sourdough hydration bulk fermentation", "nothing": true}
+{"query": "last term's marked paper", "expect": ["MH1101_Final_2025_Graded"], "scope": "academic"}
+```
+
+`nothing: true` asserts that the right answer is *nothing here*, which is what makes a query with no
+answer scorable rather than pending — and those are the queries that catch the `empty` floor
+drifting. A fragment naming no document the index holds is refused and named rather than skipped,
+because an expectation nothing can satisfy is a broken test. A query the set already holds is left
+alone: the set accretes and is never rewritten.
+
+Seeding runs each query, so the entry holds the verdict and the scores as the index stands at that
+moment — the half a rebuild destroys. A seeded entry carries **no failure shape**: it is a query
+kept so a change that breaks it is visible, not a miss somebody marked. Which of them the index
+currently fails is the report's `first` and `found`, computed fresh every run.
+
 [ADR-0007](adr/0007-the-retrieval-loop-reports-and-never-retunes.md) carries the reasoning, and the
 line it draws.

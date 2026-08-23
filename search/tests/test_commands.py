@@ -70,3 +70,27 @@ def test_a_poke_at_a_unit_that_is_not_up_fails_rather_than_indexing_here(machine
 
 def test_a_pass_that_is_not_one_of_the_two_is_refused(machine, tmp_path):
     assert main(["poke", _deployment_on(tmp_path, None), "everything"]) == 2
+
+
+def test_seed_fills_the_set_from_a_list_of_queries(machine, embedder, tmp_path, monkeypatch):
+    """A person's command: it runs each query, so the entry holds what the index scored it at."""
+    from syrax_search import __main__ as commands
+    from syrax_search.benchmark import entries
+    from syrax_search.building import INCREMENTAL, run_pass
+
+    run_pass(machine, embedder, INCREMENTAL)
+    monkeypatch.setattr(commands, "PinnedEmbedder", lambda *_: embedder)
+    source = tmp_path / "queries.jsonl"
+    source.write_text(
+        json.dumps({"query": "artin wedderburn theorem semisimple rings", "expect": ["wedderburn"]})
+        + "\n"
+    )
+
+    assert main(["seed", str(tmp_path / "deployment.json"), str(source)]) == 0
+    assert [one.query for one in entries(machine.benchmark_path)] == [
+        "artin wedderburn theorem semisimple rings"
+    ]
+
+
+def test_seed_without_a_list_of_queries_says_so(machine, tmp_path):
+    assert main(["seed", str(tmp_path / "deployment.json")]) == 2

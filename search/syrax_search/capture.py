@@ -89,6 +89,7 @@ class Answers:
 
 
 def _entry_of(answer: Answer, shape: Shape, expect: str | None) -> Entry:
+    """A captured miss names at most one correct document: the Owner points at one, in a reply."""
     return Entry(
         query=answer.query,
         shape=shape,
@@ -98,5 +99,5 @@ def _entry_of(answer: Answer, shape: Shape, expect: str | None) -> Entry:
         best=answer.verdict.best,
         origin=LIVE,
         scope=answer.scope,
-        expect=expect,
+        expect=() if expect is None else (expect,),
     )
