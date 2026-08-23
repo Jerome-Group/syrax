@@ -39,9 +39,12 @@ const userAgent = "syrax-lane-monitor/1.0";
 /**
  * Whether the rung's allowance actually went. A **4xx** is the provider answering about the request
  * — a 429 most of all, where the day is its decision and not ours — so it is spent. A **5xx**, and
- * the `null` that stands for a transport failure or a timeout, is a request that was never served:
- * charging for those lets an overloaded backend eat a rung's whole day and then refuse the Owner
- * for the rest of it, which is the ration eating itself (#167).
+ * the `null` that stands for a transport failure or a timeout, is charged to nobody here.
+ *
+ * A timeout is the one that is genuinely uncertain: a request the provider accepted and answered
+ * too slowly was charged for, and this puts it back. The asymmetry is deliberate and it is the
+ * cheaper way to be wrong — undercounting costs one 429, where overcounting lets a bad ten minutes
+ * eat a rung's whole day and then refuse the Owner for the rest of it (#167).
  */
 export function providerCharged(status: number | null): boolean {
   return status !== null && status < 500;

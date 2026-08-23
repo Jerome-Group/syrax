@@ -137,7 +137,8 @@ function readRefusals(held: unknown): Record<string, Refusal> {
       typeof refusal === "object" &&
       refusal !== null &&
       typeof (refusal as Refusal).at === "string" &&
-      typeof (refusal as Refusal).said === "string",
+      typeof (refusal as Refusal).said === "string" &&
+      ((refusal as Refusal).status === null || typeof (refusal as Refusal).status === "number"),
   );
   return Object.fromEntries(kept) as Record<string, Refusal>;
 }
