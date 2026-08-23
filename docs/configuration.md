@@ -106,6 +106,10 @@ every chat carries the connection: the hatch is a **lane** rather than a capabil
 boundary is the wrong thing to draw around it — the Owner asking for it in Academic is asking about
 the question in front of them.
 
+Every chat's standing instruction says what opens it — the Owner's own words and nothing else — that
+a refusal is relayed rather than retried, and that an answer states what is left. Where the hatch
+refused and the lane answered the question itself, the reply says whose answer it is.
+
 What the tool does that a chain rung cannot is **refuse before it spends**. It refuses a call the
 Owner did not ask for in so many words, and it refuses a day whose rungs are gone; in both cases
 nothing leaves the machine. Every answer states what is left, so *"two hatch calls left today, still

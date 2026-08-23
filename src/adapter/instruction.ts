@@ -9,6 +9,7 @@
  */
 
 import { everyChat, type Chat } from "./chats.ts";
+import { hatchTool } from "./monitor-tools.ts";
 import { searchesTheCorpus, searchTool } from "./search-tools.ts";
 
 /** Without this a fast answer is a fabricated one (ADR-0016). */
@@ -31,6 +32,19 @@ stands — no summary of it, no re-wording of it, and nothing added in front of 
  */
 const keyboards = `Editing a message that carries buttons drops them unless the edit passes them again,
 so pass them again whenever they are still wanted.`;
+
+/**
+ * The tool's own description says the same things and is not enough on its own: the first live call
+ * was retried on a refusal, and the ask that opened the hatch was the one that named it plainly
+ * while the one that did not was answered by this lane in its own voice, silently (#168). Every
+ * chat carries the tool, so every chat is told.
+ */
+const hatch = `\`${hatchTool}\` reaches the rationed lane, which is a stronger model on a small daily
+allowance. Call it **only** when the Owner has asked for it in so many words — never on your own
+judgement that a question is hard — passing their own words as \`askedFor\`. Say what is left when it
+answers: every reply carries what remains. If it refuses, say so and stop; never call it twice for
+one question, and if you then answer that question yourself, say the answer is yours rather than the
+hatch's.`;
 
 /**
  * The boundary is stated as a redirect rather than as a refusal because the Owner asked a real
@@ -96,6 +110,7 @@ export function chatInstruction(chat: Chat): string {
     `You answer the **${chat.carrierName}** chat, which owns ${chat.owns}.`,
     boundary(chat),
     keyboards,
+    hatch,
     ...(searchesTheCorpus(chat) ? [corpus(chat)] : []),
   ].join("\n\n");
 }
