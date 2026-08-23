@@ -84,25 +84,44 @@ class Entry:
     """
 
     query: str
-    shape: Shape
+    shape: Shape | None
+    """Which of the five this was, or `None` where the entry is not a miss at all.
+
+    The fixture half is mostly queries the index already answers, kept so a change that breaks one
+    is visible. Naming a failure shape on those to satisfy the field would put misses nobody had
+    into the counts the next fix is chosen from. A *captured* miss always has one — `capture`
+    refuses anything outside the five — and this is the hand-written half's licence, not its.
+    """
     verdict: str
     floor: float
     scores: dict[str, float]
     best: float | None
     origin: str = LIVE
     scope: str | None = None
-    expect: str | None = None
+    expect: tuple[str, ...] = ()
+    """Every document that answers this query. One chapter is three of them here — its source, its
+    render and the textbook's copy — and any one of them coming first is the query answered."""
+    expects_nothing: bool = False
+    """The right answer is *nothing here*, which is an assertion and not the absence of one."""
     retired: bool = False
     captured_at: str = ""
 
     @property
     def is_pending(self) -> bool:
-        """No correct path yet. *This document must not come first* is still a real assertion."""
-        return self.expect is None
+        """Nothing is asserted yet. *Nothing here* is asserted, so it is not this."""
+        return not self.expect and not self.expects_nothing
 
     @property
     def is_scorable(self) -> bool:
         return not self.retired and not self.is_pending
+
+    def is_answered_by(self, paths: list[str]) -> bool:
+        """Whether what came back holds the answer — which for some queries is coming back empty."""
+        return not paths if self.expects_nothing else bool(set(paths) & set(self.expect))
+
+    def is_led_by(self, paths: list[str]) -> bool:
+        """Whether what came back *leads* with it. Nothing leads a reply that names nothing."""
+        return not paths if self.expects_nothing else bool(paths) and paths[0] in self.expect
 
     def as_json(self) -> dict:
         return {
@@ -115,7 +134,8 @@ class Entry:
             "floor": self.floor,
             "scores": self.scores,
             "best": self.best,
-            "expect": self.expect,
+            "expect": list(self.expect),
+            "expects_nothing": self.expects_nothing,
             "retired": self.retired,
         }
 
@@ -162,7 +182,7 @@ def by_shape(set_entries: list[Entry]) -> dict[str, int]:
     """What is failing, in the vocabulary the fix is chosen from."""
     counted = {shape: 0 for shape in SHAPES}
     for one in set_entries:
-        if not one.retired:
+        if one.shape is not None and not one.retired:
             counted[one.shape] = counted[one.shape] + 1
     return counted
 
@@ -172,7 +192,9 @@ def _read(line: str) -> Entry | None:
         source = json.loads(line)
     except json.JSONDecodeError:
         return None
-    if not isinstance(source, dict) or not is_a_shape(str(source.get("shape"))):
+    if not isinstance(source, dict):
+        return None
+    if source.get("shape") is not None and not is_a_shape(str(source["shape"])):
         return None
     try:
         return _entry(source)
@@ -185,17 +207,27 @@ def _read(line: str) -> Entry | None:
 def _entry(source: dict) -> Entry:
     return Entry(
         query=str(source.get("query", "")),
-        shape=source["shape"],
+        shape=source.get("shape"),
         verdict=str(source.get("verdict", "")),
         floor=float(source.get("floor", 0.0)),
         scores={str(path): float(score) for path, score in (source.get("scores") or {}).items()},
         best=None if source.get("best") is None else float(source["best"]),
         origin=LIVE if source.get("origin") == LIVE else FIXTURE,
         scope=source.get("scope"),
-        expect=source.get("expect"),
+        expect=_expected(source.get("expect")),
+        expects_nothing=bool(source.get("expects_nothing")),
         retired=bool(source.get("retired")),
         captured_at=str(source.get("captured_at", "")),
     )
+
+
+def _expected(source: object) -> tuple[str, ...]:
+    """One path or several. `capture` writes one, and the hand-written half may name a set."""
+    if source is None:
+        return ()
+    if isinstance(source, str):
+        return (source,)
+    return tuple(str(one) for one in source)
 
 
 def _now() -> str:

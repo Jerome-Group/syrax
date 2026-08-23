@@ -95,13 +95,16 @@ class _Tally:
 
     def add(self, entry: Entry, verdict: Verdict) -> None:
         paths = [one.path for one in verdict.candidates]
-        top = paths[0] if paths else None
-        self.found += 1 if entry.expect in paths else 0
-        self.first += 1 if top == entry.expect else 0
+        self.found += 1 if entry.is_answered_by(paths) else 0
+        self.first += 1 if entry.is_led_by(paths) else 0
         # Only the top document's own score is fitted against, because that is the one the floor is
-        # read against. A query the index now answers with nothing has no score to fit either way.
-        if top is not None and top in verdict.scores:
-            (self.right if top == entry.expect else self.wrong).append(verdict.scores[top])
+        # read against. A query the index now answers with nothing has no score to fit either way,
+        # and neither has one whose right answer *is* nothing: there is no document for the floor to
+        # have been read about, so it belongs to neither distribution.
+        top = paths[0] if paths else None
+        if entry.expects_nothing or top is None or top not in verdict.scores:
+            return
+        (self.right if entry.is_led_by(paths) else self.wrong).append(verdict.scores[top])
 
 
 def _score(config: SearchConfig, embedder: Embedder) -> RetrievalReport:

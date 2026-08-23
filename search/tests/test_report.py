@@ -30,10 +30,18 @@ def entry(machine, query: str, expect: str | None, **overrides) -> Entry:
             floor=CONFIDENT_FLOOR,
             scores=overrides.pop("scores", {}),
             best=overrides.pop("best", 0.2),
-            expect=None if expect is None else path_of(machine, expect),
+            expect=_expected(machine, expect),
             **overrides,
         ),
     )
+
+
+def _expected(machine, expect) -> tuple[str, ...]:
+    """One name or several, each relative to the root the fixture corpus sits in."""
+    if expect is None:
+        return ()
+    wanted = [expect] if isinstance(expect, str) else expect
+    return tuple(path_of(machine, one) for one in wanted)
 
 
 def written(machine) -> dict:
@@ -140,3 +148,34 @@ def test_a_run_that_fails_is_reported_and_leaves_the_last_numbers_standing(index
     assert failed.is_worth_posting
     assert failed.numbers == good.numbers
     assert written(indexed)["failed"] == failed.failed
+
+
+def test_any_of_several_correct_documents_counts_as_first(indexed, embedder):
+    """A chapter the corpus holds three renderings of is answered by any one of them."""
+    entry(
+        indexed,
+        "artin wedderburn theorem semisimple rings",
+        ["notes/quiver.md", "notes/wedderburn.md"],
+    )
+    numbers = run(indexed, embedder).numbers
+
+    assert numbers["found"] == 1
+    assert numbers["first"] == 1, "the answer came first, and it is the second one named"
+
+
+def test_an_entry_that_expects_nothing_is_scored_on_getting_nothing(indexed, embedder):
+    """The queries that catch a floor drifting the wrong way are the ones with no answer."""
+    entry(indexed, "sourdough hydration bulk fermentation", None, expects_nothing=True)
+    numbers = run(indexed, embedder).numbers
+
+    assert numbers["scored"] == 1
+    assert numbers["pending"] == 0
+    assert numbers["found"] == 1 and numbers["first"] == 1
+
+
+def test_an_entry_that_expects_nothing_and_gets_something_is_a_miss(indexed, embedder):
+    entry(indexed, "artin wedderburn theorem semisimple rings", None, expects_nothing=True)
+    numbers = run(indexed, embedder).numbers
+
+    assert numbers["scored"] == 1
+    assert numbers["found"] == 0 and numbers["first"] == 0

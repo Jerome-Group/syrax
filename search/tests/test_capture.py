@@ -82,7 +82,7 @@ def test_a_capture_with_one_is_scored_rather_than_pending(set_path):
     reply = answers.capture(answer.token, "buried-in-the-shortlist", "/documents/MH1101.pdf")
 
     assert reply == {"captured": "buried-in-the-shortlist", "pending": False}
-    assert captured(set_path)[0].expect == "/documents/MH1101.pdf"
+    assert captured(set_path)[0].expect == ("/documents/MH1101.pdf",)
     assert captured(set_path)[0].is_scorable
 
 
@@ -159,7 +159,7 @@ def test_the_set_holds_both_halves_and_counts_them_apart(set_path, tmp_path):
         scores={},
         best=0.4,
         origin=FIXTURE,
-        expect="/documents/wedderburn.md",
+        expect=("/documents/wedderburn.md",),
     )
     with open(set_path, "a", encoding="utf-8") as handle:
         handle.write(json.dumps(hand_written.as_json()) + "\n")
@@ -184,7 +184,7 @@ def test_a_retired_entry_is_kept_and_left_out_of_the_scoring(set_path):
         floor=0.12,
         scores={},
         best=0.1,
-        expect="/documents/quiver.md",
+        expect=("/documents/quiver.md",),
         retired=True,
     )
     with open(set_path, "w", encoding="utf-8") as handle:
@@ -193,3 +193,77 @@ def test_a_retired_entry_is_kept_and_left_out_of_the_scoring(set_path):
     assert len(captured(set_path)) == 1
     assert not captured(set_path)[0].is_scorable
     assert counts(captured(set_path))["retired"] == 1
+
+
+def test_an_entry_kept_to_catch_a_regression_holds_no_shape(set_path):
+    """The fixture half is mostly queries that already work, and a working query is no shape.
+
+    Marking one `wrong-granularity` to satisfy the field would put a miss nobody had into the
+    counts the report chooses its next fix from.
+    """
+    held = Entry(
+        query="Dummit and Foote",
+        shape=None,
+        verdict="ambiguous",
+        floor=0.12,
+        scores={},
+        best=-0.084,
+        origin=FIXTURE,
+        expect=("/documents/dummit-foote.pdf",),
+    )
+    with open(set_path, "w", encoding="utf-8") as handle:
+        handle.write(json.dumps(held.as_json()) + "\n")
+
+    read = captured(set_path)
+    assert [one.shape for one in read] == [None]
+    assert read[0].is_scorable, "a query with an expectation is scored, miss or not"
+    assert by_shape(read) == {shape: 0 for shape in SHAPES}
+
+
+def test_a_line_whose_shape_is_not_one_of_the_five_is_still_skipped(set_path):
+    """Optional is not *anything*: a shape the vocabulary does not have is a line to drop."""
+    with open(set_path, "w", encoding="utf-8") as handle:
+        handle.write(json.dumps({"query": "one", "shape": "ranking-is-bad", "expect": "/a"}) + "\n")
+        handle.write(json.dumps({"query": "two", "shape": None, "expect": "/b"}) + "\n")
+
+    assert [one.query for one in captured(set_path)] == ["two"]
+
+
+def test_an_expectation_may_name_more_than_one_document(set_path):
+    """One chapter is three documents here: its source, its render, and the textbook's copy."""
+    with open(set_path, "w", encoding="utf-8") as handle:
+        handle.write(
+            json.dumps(
+                {
+                    "query": "the theorem about semisimple rings",
+                    "shape": None,
+                    "expect": ["/documents/13_Wedderburn.tex", "/documents/13_Wedderburn.pdf"],
+                }
+            )
+            + "\n"
+        )
+
+    entry = captured(set_path)[0]
+    assert entry.expect == ("/documents/13_Wedderburn.tex", "/documents/13_Wedderburn.pdf")
+    assert entry.is_scorable
+
+
+def test_one_path_still_reads_as_an_expectation_of_one(set_path):
+    """What `capture` writes is one path, and it stays readable as itself."""
+    with open(set_path, "w", encoding="utf-8") as handle:
+        one = {"query": "one", "shape": None, "expect": "/documents/a.md"}
+        handle.write(json.dumps(one) + "\n")
+
+    assert captured(set_path)[0].expect == ("/documents/a.md",)
+
+
+def test_an_entry_can_assert_that_the_right_answer_is_nothing(set_path):
+    """*Nothing here* is an assertion. Pending is the absence of one, and they are not the same."""
+    with open(set_path, "w", encoding="utf-8") as handle:
+        handle.write(json.dumps({"query": "sourdough hydration", "expects_nothing": True}) + "\n")
+        handle.write(json.dumps({"query": "no idea yet"}) + "\n")
+
+    asserted, pending = captured(set_path)
+    assert asserted.expects_nothing and asserted.is_scorable and not asserted.is_pending
+    assert pending.is_pending and not pending.is_scorable
+    assert counts(captured(set_path))["pending"] == 1

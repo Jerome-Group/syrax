@@ -4,11 +4,16 @@
     python -m syrax_search poke           <deployment.json> [incremental|full]
     python -m syrax_search index          <deployment.json> [incremental|full]
     python -m syrax_search reset          <deployment.json>
+    python -m syrax_search seed           <deployment.json> <queries.jsonl>
     python -m syrax_search fingerprint    <deployment.json>
     python -m syrax_search fetch-embedder <deployment.json>
 
 `fingerprint` is what decides a bump to `tokenizers` or `onnxruntime`: run it before and after, and
 identical output means the index is unaffected.
+
+`seed` fills the fixture half of the benchmark set from a hand-written list of queries, running
+each one so the entry holds what the index scored it at. It loads the embedder in this process for
+the same reason `index` does, and it is a person's command: nothing schedules it.
 
 `serve` is what the LaunchAgent runs. `poke` is a re-embed asked for on demand: it hands the pass to
 the unit that is already running, which is what the two schedules do and the reason neither a poke
@@ -70,6 +75,16 @@ def main(arguments: list[str]) -> int:
         reset(config)
         print(config.database_path)
         return 0
+    if command == "seed":
+        if len(arguments) < 3:
+            print("seed needs a list of queries to seed from", file=sys.stderr)
+            return 2
+        from .seeding import seed
+
+        embedder = PinnedEmbedder(config.embedder_root, config.idle_evict_seconds)
+        report = seed(config, embedder, arguments[2])
+        print(json.dumps(report.as_reply()))
+        return 0 if not report.refused else 1
     if command in ("poke", "index"):
         kind = arguments[2] if len(arguments) > 2 else INCREMENTAL
         if kind not in (INCREMENTAL, FULL):
