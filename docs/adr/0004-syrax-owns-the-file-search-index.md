@@ -13,6 +13,10 @@
 > `empty` floor is re-fitted from −0.23 to −0.05 for a corpus ten times the size it was measured on,
 > and `confident` gains a condition — the vector arm must have chosen the document whose score is
 > being read.
+>
+> **Amended by [ADR-0027](0027-the-arms-fuse-once-and-magnitude-was-not-the-fix.md)** in one: the
+> keyword arm's two halves fuse alongside the vector arm rather than into one arm that then fuses
+> against it, which is what had been discarding a name match's margin.
 
 Natural-language file search is built here: one SQLite database carrying a keyword arm and a vector
 arm over the same extracted text, indexed by a small Python process and served to the runtime as a
@@ -97,7 +101,9 @@ bibliography, because the book's own filename —
 `Abstract Algebra 3e Dummit, Foote.pdf` — was in no index at all. Adding a name match moved
 recall@1 from 4/14 to 5/14 and the reciprocal rank from 0.378 to 0.486. This is not the same as
 the filename-only indexing the extraction scope describes below: that is what a document gets
-*instead* of its contents, and this is what every document gets *as well as* them.
+*instead* of its contents, and this is what every document gets *as well as* them. *(Adding it was
+not the whole of the fix: the name half was fused into the text half before the fusion, which spent
+the margin a name match had just won — [ADR-0027](0027-the-arms-fuse-once-and-magnitude-was-not-the-fix.md).)*
 
 **Fixed overlapping windows, ~512 tokens at ~15% overlap**, scored per chunk and collapsed to the
 best chunk per document. One vector per document fails the stated bar outright: the query this

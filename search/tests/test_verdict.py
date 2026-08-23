@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from syrax_search.building import INCREMENTAL, run_pass
 from syrax_search.index import open_index
-from syrax_search.retrieval import CONFIDENT_FLOOR, arms_agree, search
+from syrax_search.retrieval import CONFIDENT_FLOOR, arms_agree, fuse, search
 
 
 def answer(machine, embedder, query: str, scope: str | None = None):
@@ -91,3 +91,41 @@ def test_a_year_written_in_two_digits_survives_the_query(machine, embedder):
     assert terms_of("MH1101 Final 25/26") == ["mh1101", "final", "25", "26"]
     assert terms_of("the AY2425 paper for S2") == ["ay2425", "paper", "s2"]
     assert terms_of("what and for the") == [], "the rule it replaces still does its own job"
+
+
+def test_a_year_written_in_two_digits_means_the_one_written_in_four():
+    """A rule about what two consecutive numbers are, not a table of the years anybody has."""
+    from syrax_search.terms import forms_of
+
+    assert forms_of(["mh1101", "final", "25", "26"]) == (
+        ("mh1101",),
+        ("final",),
+        ("25", "2025"),
+        ("26", "2026"),
+    )
+    assert forms_of(["2025", "2026"]) == (("2025",), ("2026",)), "four digits already say it"
+    assert forms_of(["tutorial", "12"]) == (("tutorial",), ("12",)), "a lone number is a count"
+    assert forms_of(["chapter", "11", "12"]) == (
+        ("chapter",),
+        ("11", "2011"),
+        ("12", "2012"),
+    ), "the rule cannot tell this from an academic year, and reaches 2011 and 2012 for it"
+    assert forms_of(["s2", "7"]) == (("s2",), ("7",))
+
+
+def test_a_two_digit_year_reaches_the_document_that_writes_it_in_four(machine, embedder):
+    """`25/26` is the whole of the query, and the corpus writes that year `2025-2026`."""
+    verdict = answer(machine, embedder, "25/26")
+    assert verdict.state != "empty"
+    assert any(one.name == "exam 2025-2026 semester 2.md" for one in verdict.candidates)
+
+
+def test_two_arms_agreeing_is_not_spent_on_a_single_position(machine, embedder):
+    """The three arms fuse once. Nesting the keyword halves cost them their margin.
+
+    Fusing text and name into a keyword arm first re-ranked them to positions, so a document both
+    halves agreed on arrived at the final fusion worth exactly what a lone vector hit was worth, and
+    lost to it on insertion order. Twenty-one benchmark queries: the answer came first for five of
+    them nested and nine flat.
+    """
+    assert fuse([1], [2, 3], [2])[0] == 2

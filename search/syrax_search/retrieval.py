@@ -1,4 +1,5 @@
-"""The two arms, their fusion, and the verdict the tool returns instead of results.
+"""The two arms, the one fusion over their three rankings, and the verdict returned instead of
+results.
 
 The thresholds live here rather than in a model's prompt, so they are numbers in one place that can
 be tuned against real queries instead of prose a model may quietly reinterpret — and moving one is
@@ -19,7 +20,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .terms import terms_of, words_of
+from .terms import forms_of, terms_of, words_of
 
 # Fitted rather than tuned: 0.12 sits 0.003 above the best wrong answer on a fifteen-query
 # benchmark, which is a number chosen by that benchmark's smallest gap. It is safe in the direction
@@ -49,7 +50,18 @@ NAME_MATCH_MAJORITY = 0.5
 
 RRF_K = 60
 CANDIDATE_POOL = 40
-NAME_POOL = 10
+
+# As deep as the text arm's, and it was a tenth of it. `mh1101` alone is in 426 filenames, so ten
+# was the whole of what a common module code left room for and the paper the query named sat below
+# it. Measured over the benchmark, widening it moved the answer into the shortlist for one more
+# query and moved four others up; 80 measured the same as 40, so this is where it stops paying.
+NAME_POOL = 40
+
+# How deep the *floor exemption* reads, which is not how deep the ranking does. A name match excuses
+# a document from the empty floor (ADR-0025), and that guard's reach should not move because the
+# ranking wanted a deeper pool — widening one to lift a buried answer would otherwise hand four
+# times as many documents a way past the floor, silently.
+NAMING_POOL = 10
 SHORTLIST = 3
 
 
@@ -119,9 +131,9 @@ class Verdict:
 def search(
     database: sqlite3.Connection, query: str, query_vector: np.ndarray, scope: str | None
 ) -> Verdict:
-    keyword, naming = _keyword_arm(database, query, scope)
+    text, names, naming = _keyword_arm(database, query, scope)
     vector, scores = _vector_arm(database, query_vector, scope)
-    ranked = _fuse(vector, keyword)
+    ranked = fuse(vector, text, names)
     if not ranked:
         return Verdict("empty", (), EMPTY_FLOOR)
 
@@ -140,7 +152,8 @@ def search(
     # filename the query happened to share words with is not grounds for sending a document the
     # index has never read inside.
     top = ranked[0]
-    if arms_agree(top, vector, keyword) and scores.get(top, EMPTY_FLOOR - 1) >= CONFIDENT_FLOOR:
+    cleared = scores.get(top, EMPTY_FLOOR - 1) >= CONFIDENT_FLOOR
+    if cleared and arms_agree(top, vector, text + names):
         return _decided("confident", database, ranked[:1], scores, best)
     return _decided("ambiguous", database, ranked[:SHORTLIST], scores, best)
 
@@ -161,18 +174,32 @@ def arms_agree(top: int, vector: list[int], keyword: list[int]) -> bool:
 
 
 def _match_expression(query: str) -> str | None:
-    """An OR bag rather than a phrase: a description shares no exact phrase with its document."""
-    terms = terms_of(query)
-    return " OR ".join(f'"{term}"' for term in terms) if terms else None
+    """An OR bag rather than a phrase: a description shares no exact phrase with its document.
+
+    One group per word the person typed, holding every way that word is written, so a two-digit year
+    reaches the documents that spell it out.
+    """
+    groups = [_any_of(forms) for forms in forms_of(terms_of(query))]
+    return " OR ".join(groups) if groups else None
+
+
+def _any_of(forms: tuple[str, ...]) -> str:
+    quoted = " OR ".join(f'"{one}"' for one in forms)
+    return quoted if len(forms) == 1 else f"({quoted})"
 
 
 def _keyword_arm(
     database: sqlite3.Connection, query: str, scope: str | None
-) -> tuple[list[int], list[int]]:
-    """The arm, and the documents the query *names* — the only ones that lift it off the floor."""
+) -> tuple[list[int], list[int], list[int]]:
+    """Its two halves apart, and the documents the query *names* — which lift it off the floor.
+
+    The halves are returned rather than fused here. Fusing them first re-ranked them into positions
+    and spent their agreement: a document both halves put near the top arrived at the second fusion
+    worth exactly what one vector hit was worth (#151).
+    """
     expression = _match_expression(query)
     if expression is None:
-        return [], []
+        return [], [], []
     text_hits = database.execute(
         """
         SELECT chunks.document_id FROM chunk_fts
@@ -192,12 +219,12 @@ def _keyword_arm(
         """,
         (expression, scope, scope, NAME_POOL),
     ).fetchall()
-    terms = terms_of(query)
-    naming = [one for one, name in name_hits if _names_the_query(terms, name)]
-    return _fuse(_first_seen(text_hits), _first_seen(name_hits)), naming
+    written = forms_of(terms_of(query))
+    naming = [one for one, name in name_hits[:NAMING_POOL] if _names_the_query(written, name)]
+    return _first_seen(text_hits), _first_seen(name_hits), naming
 
 
-def _names_the_query(terms: list[str], name: str) -> bool:
+def _names_the_query(written: tuple[tuple[str, ...], ...], name: str) -> bool:
     """How much of what was typed the document's own name accounts for.
 
     `name_fts` holds the whole path's words, so a document can be a name hit on a directory alone.
@@ -206,10 +233,11 @@ def _names_the_query(terms: list[str], name: str) -> bool:
     line without naming anything. On the measured queries the two readings agree wherever the
     exemption is what decides the verdict.
     """
-    wanted = set(terms)
-    if not wanted:
+    if not written:
         return False
-    return len(wanted & set(words_of(name))) > len(wanted) * NAME_MATCH_MAJORITY
+    words = set(words_of(name))
+    matched = sum(1 for forms in written if words.intersection(forms))
+    return matched > len(written) * NAME_MATCH_MAJORITY
 
 
 def _vector_arm(
@@ -254,8 +282,15 @@ def _first_seen(rows: list[tuple[int, ...]]) -> list[int]:
     return ordered
 
 
-def _fuse(*arms: list[int]) -> list[int]:
-    """Reciprocal rank fusion: the arms rank on incomparable scales, so only position is read."""
+def fuse(*arms: list[int]) -> list[int]:
+    """Reciprocal rank fusion: the arms rank on incomparable scales, so only position is read.
+
+    Every arm fuses here, once. Two of them agreeing about a document is two contributions, which is
+    how a fusion that reads only position still rewards a document for matching more of the query
+    than its rivals do. It was nested before — text and name fused into one keyword arm, then that
+    against the vector arm — and the nesting is what discarded the magnitude #151 went looking for:
+    the answer came first for five of twenty-one benchmark queries nested and nine flat.
+    """
     scores: dict[int, float] = {}
     for arm in arms:
         for position, document_id in enumerate(arm):
