@@ -170,10 +170,12 @@ turns, which is why all three are named separately here
 
 **Extraction scope**:
 The subset of the index allowlist whose documents are opened and read rather than indexed by name
-alone. It is **additive**: a path joins it on request, and because nothing in the pipeline is tied
-to a particular root, joining is a matter of configuration. A document inside the allowlist but
-outside this scope is still findable by name — what is lost is reaching inside it, and a search
-says so rather than returning nothing.
+alone. An entry is a **root or a pattern**, because one root can hold a faculty's exam papers where
+only one department's are wanted — so the scope says which *documents* are read, not only which
+trees they sit in. It is **additive**: an entry joins it on request, and because nothing in the
+pipeline is tied to a particular root, joining is a matter of configuration. A document inside the
+allowlist but outside this scope is still findable by name — what is lost is reaching inside it, and
+a search says so rather than returning nothing.
 _Avoid_: index scope, parse list — the first collides with the allowlist, and the second names a
 step where this names a set
 
