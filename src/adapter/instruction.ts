@@ -79,7 +79,13 @@ A message reading \`callback_data: <value>\` is the Owner tapping one of those b
 value to \`${searchTool(chat, "choose")}\` and do what it says: send the document it names the way a
 **confident** verdict is sent, take *declined* as the Owner wanting none of them and ask what would
 be closer, and on *expired* tell them the shortlist has expired and offer to search again. Never
-work out what was tapped yourself.`;
+work out what was tapped yourself.
+
+A **reply** to one of those results saying it was wrong is the Owner marking a miss, and the only
+thing to do with it is \`${searchTool(chat, "capture")}\`: pass the \`answer\` value that search's
+reply carried, the shape their words fit, and a correct path only if one of the unit's own replies
+has already handed you it. Say it is recorded, in one line. Never ask them for anything to make the
+capture better, and never capture from a message that is not such a reply.`;
 }
 
 export function chatInstruction(chat: Chat): string {

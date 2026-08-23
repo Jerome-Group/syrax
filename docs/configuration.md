@@ -274,3 +274,38 @@ costs a full re-embedding of the corpus, which is the only expensive part of any
 Extraction failures are recorded rather than dropped. Each failed document lands in a **failure
 ledger** beside the index, which the full pass retries and which is reportable in chat — a document
 that cannot be read is a fact worth surfacing, not a silent gap in what search can find.
+
+## The retrieval report
+
+A wrong result is marked by **replying to it**, or by the *none of these* tap under a shortlist.
+Either way the entry lands in the **retrieval benchmark** — one file under
+`<search_index>/benchmark`, holding the fixed queries and the captured misses together, each marked
+`fixture` or `live`. What a capture keeps is the verdict and the scores as they stood at the time,
+because a rebuilt index destroys them; the correct path is optional, and an entry without one is
+*pending* and counted apart.
+
+Every capture records **which of five failures** it was — a confident answer that was wrong, a
+shortlist without the answer in it, a shortlist that buried it, an *empty* verdict over a corpus
+that held it, or the right document at the wrong size. They are fixed in different places, which is
+the whole reason they are told apart.
+
+The set is scored on the three-day re-embed pass and on demand, inside the unit that is already
+running rather than in a second process. The report states what the `confident` floor **would** be
+if it were re-fitted against the set as it now stands, beside the pinned number and the fixture and
+live counts, and **never applies it** — computing the number is reporting, and writing it into
+configuration is a person's act with a pull request behind it. It is written to
+`<search_index>/benchmark/retrieval-report.json` every run, and posted into System only when a
+number moved or a run failed.
+
+```
+node src/cli/report-retrieval.ts <deployment.json>
+<searchRoot>/bin/python -m syrax_search poke <deployment.json> full
+```
+
+The first scores the set and posts the report if it is worth posting; the second asks the running
+unit for a re-embed, which is the same pass the three-day schedule pokes and needs no unit of its
+own. Give the benchmark directory a local `git init` and never push it: nothing else tracks a file
+whose entries cannot be reproduced, and the data cannot leave the machine by construction.
+
+[ADR-0007](adr/0007-the-retrieval-loop-reports-and-never-retunes.md) carries the reasoning, and the
+line it draws.

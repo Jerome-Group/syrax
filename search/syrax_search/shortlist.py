@@ -10,7 +10,6 @@ to decide when deleting it is safe, and a restart purges by construction.
 
 from __future__ import annotations
 
-import secrets
 import time
 from dataclasses import dataclass
 
@@ -22,6 +21,11 @@ from .retrieval import Candidate, Verdict
 LIFETIME_SECONDS = 15 * 60
 
 DECLINE = "none"
+
+
+def token_of(choice: str) -> str:
+    """The answer a tap belongs to. The value is composed here, so it is read back here."""
+    return choice.rpartition(":")[0]
 
 
 @dataclass(frozen=True)
@@ -38,16 +42,18 @@ class Shortlists:
         self._lifetime_seconds = lifetime_seconds
         self._offered: dict[str, _Offered] = {}
 
-    def offer(self, verdict: Verdict, scope: str | None = None) -> dict:
+    def offer(self, verdict: Verdict, scope: str | None, token: str) -> dict:
         """The verdict as the chat gets it: a tappable value per candidate on a close call.
 
         A verdict that is not a close call passes through untouched. `confident` sends its document
         without asking and `empty` has nothing to send, so neither has anything to choose between.
+
+        The token is the answer's own rather than one minted here, so a tap and a reply about the
+        same search are the same event to the capture that reads them (ADR-0007).
         """
         if not verdict.is_a_close_call:
             return verdict.as_reply()
 
-        token = secrets.token_urlsafe(6)
         self._offered[token] = _Offered(
             verdict.candidates, scope, time.monotonic() + self._lifetime_seconds
         )
@@ -61,8 +67,8 @@ class Shortlists:
         resolved through another's — the boundary the scope draws over `search` holds over the taps
         that come back from it.
         """
-        token, _, position = choice.rpartition(":")
-        offered = self._offered.get(token)
+        offered = self._offered.get(token_of(choice))
+        position = choice.rpartition(":")[2]
         if offered is None or offered.expires_at <= time.monotonic() or offered.scope != scope:
             return {"choice": "expired"}
         if position == DECLINE:

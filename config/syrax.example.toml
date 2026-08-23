@@ -24,7 +24,9 @@ chat_archive = "/absolute/path/outside/this/repository/chat-archive"
 # The search index is derived verbatim from private document contents. It is private runtime
 # state, and placement outside the checkout is what keeps it out — not an ignore rule.
 search_index = "/absolute/path/outside/this/repository/search-index"
-benchmark = "/absolute/path/outside/this/repository/benchmark"
+# The retrieval benchmark and the report scored from it, inside the index root so that the roots
+# the crawler is forbidden already cover them: every entry holds a real query and a real path.
+benchmark = "/absolute/path/outside/this/repository/search-index/benchmark"
 # Gateway logs carry chat content, so they are private runtime state like the rest of these roots.
 # Rotate them: a supervisor's append-only redirection grows without bound.
 logs = "/absolute/path/outside/this/repository/logs"
@@ -46,7 +48,8 @@ embedder_variant = "model_q4"
 # Provisional: fitted to a fifteen-query benchmark, and revisited as that benchmark grows.
 confident_floor = 0.12
 # Below this, the answer is "nothing here" rather than a shortlist of the least-bad matches.
-empty_floor = -0.23
+# Re-fitted against a corpus ten times the one the first number was measured on (ADR-0025).
+empty_floor = -0.05
 # The model is held while search is in use and dropped after this long idle, rather than
 # sitting in memory around the clock. The first search after a gap pays the model load.
 idle_evict_after = "30m"
