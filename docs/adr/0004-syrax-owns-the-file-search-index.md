@@ -17,6 +17,8 @@
 > **Amended by [ADR-0027](0027-the-arms-fuse-once-and-magnitude-was-not-the-fix.md)** in one: the
 > keyword arm's two halves fuse alongside the vector arm rather than into one arm that then fuses
 > against it, which is what had been discarding a name match's margin.
+>
+> **Amended by [ADR-0028](0028-a-close-call-offers-ten.md)** in one: a close call offers ten candidates rather than three.
 
 Natural-language file search is built here: one SQLite database carrying a keyword arm and a vector
 arm over the same extracted text, indexed by a small Python process and served to the runtime as a
@@ -135,7 +137,8 @@ margin, **and** for both arms to rank it first independently. That third conditi
 the bar real — a phrase only the vector arm likes is precisely where semantic search invents a
 plausible wrong file, and that is the failure that costs trust, because it sends the wrong document
 without asking. Anything short of all three is `ambiguous` and renders as three candidates;
-nothing above the floor is `empty`, stated plainly.
+nothing above the floor is `empty`, stated plainly. *(Ten candidates — the answer was landing inside
+the pool and outside the three, and [ADR-0028](0028-a-close-call-offers-ten.md) has the counts.)*
 
 **The three conditions did not survive the trial, and two of them are withdrawn.**
 [#34](https://github.com/Jerome-Group/syrax/issues/34) tuned them against real queries and found

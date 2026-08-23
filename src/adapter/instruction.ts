@@ -56,7 +56,7 @@ ${elsewhere}`;
  *
  * Every value a button carries is quoted from the reply rather than composed here: the unit mints
  * them, and a tap it cannot resolve is answered *expired* — so a model writing its own would turn
- * the Owner rejecting all three into a shortlist that had supposedly gone.
+ * the Owner rejecting them all into a shortlist that had supposedly gone.
  */
 function corpus(chat: Chat): string {
   return `## Finding a document

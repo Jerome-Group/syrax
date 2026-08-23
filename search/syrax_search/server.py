@@ -127,7 +127,7 @@ def build(unit: SearchUnit) -> MCPServer:
         name="search",
         description=(
             "Find documents by what they are about or by what they are called. Returns a verdict: "
-            "`confident` names one document, `ambiguous` offers up to three candidates to choose "
+            "`confident` names one document, `ambiguous` offers up to ten candidates to choose "
             "between — each carrying the `choice` value a tap on it sends back — and `empty` means "
             "nothing indexed answers this. A result marked "
             "`contents_indexed: false` is known by its name alone — it exists, and what is inside "

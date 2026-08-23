@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from syrax_search.building import INCREMENTAL, run_pass
 from syrax_search.index import open_index
-from syrax_search.retrieval import CONFIDENT_FLOOR, arms_agree, fuse, search
+from syrax_search.retrieval import CONFIDENT_FLOOR, SHORTLIST, arms_agree, fuse, search
 
 
 def answer(machine, embedder, query: str, scope: str | None = None):
@@ -29,7 +29,7 @@ def test_a_query_the_corpus_cannot_answer_is_empty(machine, embedder):
 def test_a_query_spread_across_documents_offers_a_shortlist(machine, embedder):
     verdict = answer(machine, embedder, "quiver representations path algebra stroke rate")
     assert verdict.state == "ambiguous"
-    assert 1 <= len(verdict.candidates) <= 3
+    assert 1 <= len(verdict.candidates) <= SHORTLIST
 
 
 def test_a_verdict_never_carries_a_score(machine, embedder):
@@ -129,3 +129,14 @@ def test_two_arms_agreeing_is_not_spent_on_a_single_position(machine, embedder):
     them nested and nine flat.
     """
     assert fuse([1], [2, 3], [2])[0] == 2
+
+
+def test_a_close_call_offers_more_than_the_three_it_used_to(machine, embedder):
+    """Ten, because for three captured phrasings of one query the answer sat at rank 5, 6 and 8.
+
+    Every one of them was inside the pool the fusion ranked and outside the shortlist drawn from it,
+    which is the one thing a person can fix that the ranking cannot (#151).
+    """
+    verdict = answer(machine, embedder, "exam 2025 2026 semester quiver rowing")
+    assert verdict.state == "ambiguous"
+    assert len(verdict.candidates) > 3, "the fixture corpus holds five, so three was a truncation"
