@@ -28,10 +28,19 @@ value back and answers `chosen`, `declined` or `expired`. The shortlist is held 
 fifteen-minute lifetime, for the reason ephemeral extraction is: nothing has to decide when deleting
 it is safe, and a restart purges by construction.
 
-**`expired` is one answer where the history is two.** A shortlist that aged out and one minted by a
-process that has since died are different pasts and the same present — it is gone, nothing is sent,
-and the Owner's next move is to search again. Reporting them apart would be reporting a fact about
-Syrax's uptime in a place the Owner is asking about their documents.
+**`expired` is one answer where the history is several.** Aged out, minted by a process that has
+since died, malformed, or offered to a chat whose scope this connection does not carry — all
+different pasts and the same present: this chat has no such shortlist, nothing is sent, and the
+Owner's next move is to ask again. Reporting them apart would put a fact about Syrax's uptime, or
+about another chat's corpus, in a reply about the Owner's documents.
+
+**A tap is scoped the way the search that produced it was.** `choose` reads the same
+`X-Syrax-Scope` header `search` does and refuses a token minted under a different one. Nothing on
+the surface can carry a tap across chats — the message a tap belongs to lives in one topic — but a
+boundary that holds only because the transport happens not to cross it is not a boundary.
+`attach` is deliberately **not** scoped, for the same reason `read` is not: the index allowlist is a
+compute budget and the blocklist is the boundary, and story 14 wants General reaching a capability's
+documents without reaching its tools.
 
 ## The document is handed over, because reaching for it costs the blocklist
 
@@ -79,24 +88,27 @@ nothing and says why nowhere.
 ## The keyboard rule is an instruction, and that is the honest shape
 
 *Every edit to a keyboard-bearing message re-passes the keyboard* is a rule about a surface the
-model drives, so it lives in General's standing instruction and not in a wrapper — a wrapper would be
-the request-path code ADR-0003 forbids. What is not left to prose is the fact underneath it, which
-is measured both ways: an edit carrying its buttons keeps them, and an edit without them silently
-returns a message with no keyboard at all. If the runtime ever stops dropping them, the test that
-asserts the drop fails and the instruction stops being load-bearing.
+model drives, so it lives in the standing instruction and not in a wrapper — a wrapper is the
+request-path code ADR-0003 forbids. **Every** chat is told, not only the ones that search: a rotted
+rung's *remove it* tap belongs to System (ADR-0012), and it is the same trap.
+
+What is not left to prose is the fact underneath it, which is measured both ways: an edit carrying
+its buttons keeps them, and an edit without them silently returns a message with no keyboard at
+all. If the runtime ever stops dropping them, the test that asserts the drop fails and the
+instruction stops being load-bearing.
 
 ## Consequences
 
 - **General can send a file, and every chat that searches can.** The `message` tool is allowed
   wherever `attach` is, because a document and a keyboard are the two things a search answers with
   and neither fits in reply text.
-- **The Academic chat is wired to its scope now**, ahead of [#130](https://github.com/Jerome-Group/syrax/issues/130)
-  making that chat live. A scope binding with one chat in it is not a binding, and the header would
-  have gone untested.
+- **The Academic chat is wired to its scope now**, ahead of
+  [#130](https://github.com/Jerome-Group/syrax/issues/130) making that chat live. A scope binding
+  with one chat in it is not a binding, and the header would have gone untested.
 - **A deployment must name a root for every scope a chat carries.** `searchScopes.academic` is now
   load-bearing rather than illustrative, and `config/deployment.example.json` already carried it.
-- **The search unit writes into the runtime's state directory.** It is one directory and one purpose,
-  and it is the price of not giving a model a filesystem.
+- **The search unit writes into the runtime's state directory.** One directory and one purpose, and
+  the price of not giving a model a filesystem.
 - **A tap that arrives after a restart says the shortlist expired.** The unit is a LaunchAgent with
   `KeepAlive`, so this is rare and correct rather than rare and wrong.
 
@@ -107,11 +119,11 @@ asserts the drop fails and the instruction stops being load-bearing.
   allowlist and its `read`-shaped expansion, and the per-agent `alsoAllow` replacement.
   `test/broad-search.test.ts` and `test/search-connections.test.ts` are the cheapest checks against
   a new pin.
-- **A second chat wants a shortlist.** Nothing here is General's: the shortlist, the handover and the
-  instruction are all keyed on a chat that searches, and Academic already has all three.
-- **A handover outlives its usefulness.** The staging sweep runs on the idle beat, so a document sent
-  once sits in the state directory until it fires. If that ever matters — a very large document, or
-  a machine short of space — the sweep is the place, not the tool.
+- **A second chat wants a shortlist.** Nothing here is General's: the shortlist, the handover and
+  the instruction are all keyed on a chat that searches, and Academic already has all three.
+- **A handover outlives its usefulness.** The staging sweep runs on the idle beat, so a document
+  sent once sits in the state directory until it fires. If that ever matters — a very large
+  document, or a machine short of space — the sweep is the place, not the tool.
 - **[#126](https://github.com/Jerome-Group/syrax/issues/126) captures the *none of these* tap.** It
   wants the verdict and the scores as they stood, and a shortlist held in memory holds the
   candidates and not those. That is the first thing that will ask this record whether the shortlist

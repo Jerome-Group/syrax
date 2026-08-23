@@ -20,13 +20,17 @@ import type { Deployment } from "./deployment.ts";
 /** The header the unit reads a connection's scope from. */
 export const scopeHeader = "X-Syrax-Scope";
 
+export function searchesTheCorpus(chat: Chat): boolean {
+  return chat.searches !== undefined;
+}
+
+/** Its connection carries a scope, which the search unit maps to a root by the chat's own name. */
+export function searchesOneScope(chat: Chat): boolean {
+  return chat.searches === "this chat's own scope";
+}
+
 /** What the unit serves, in the order a turn reaches them. */
 export type SearchUnitTool = "search" | "choose" | "attach" | "read";
-
-/** The name a model calls one of the unit's tools by: the runtime prefixes each with its server. */
-export function searchTool(chat: Chat, tool: SearchUnitTool): string {
-  return `syrax-search-${chat.id}__${tool}`;
-}
 
 export const everySearchUnitTool: readonly SearchUnitTool[] = [
   "search",
@@ -35,10 +39,19 @@ export const everySearchUnitTool: readonly SearchUnitTool[] = [
   "read",
 ];
 
+function serverName(chat: Chat): string {
+  return `syrax-search-${chat.id}`;
+}
+
+/** The name a model calls one of the unit's tools by: the runtime prefixes each with its server. */
+export function searchTool(chat: Chat, tool: SearchUnitTool): string {
+  return `${serverName(chat)}__${tool}`;
+}
+
 export function searchServers(deployment: Deployment) {
-  const searching = everyChat.filter((chat) => chat.searches !== undefined);
+  const searching = everyChat.filter(searchesTheCorpus);
   return Object.fromEntries(
-    searching.map((chat) => [`syrax-search-${chat.id}`, searchServer(deployment, chat)]),
+    searching.map((chat) => [serverName(chat), searchServer(deployment, chat)]),
   );
 }
 
@@ -46,7 +59,7 @@ function searchServer(deployment: Deployment, chat: Chat) {
   return {
     url: `http://127.0.0.1:${deployment.searchPort}/mcp`,
     transport: "streamable-http",
-    ...(chat.searches === "this chat's own scope" ? { headers: { [scopeHeader]: chat.id } } : {}),
+    ...(searchesOneScope(chat) ? { headers: { [scopeHeader]: chat.id } } : {}),
   };
 }
 
@@ -56,7 +69,7 @@ function searchServer(deployment: Deployment, chat: Chat) {
  */
 export function unconfiguredScopes(deployment: Deployment): string[] {
   return everyChat
-    .filter((chat) => chat.searches === "this chat's own scope")
+    .filter(searchesOneScope)
     .map((chat) => chat.id)
     .filter((scope) => deployment.searchScopes[scope] === undefined);
 }

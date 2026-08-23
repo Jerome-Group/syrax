@@ -1,22 +1,11 @@
 """`attach`: one document put where the chat can send it from, and nowhere else.
 
-The runtime uploads a local file only from a handful of roots it owns — its state directory, its
-scratch root, the calling agent's workspace — and the Owner's corpus is under none of them. Measured
-on `openclaw@2026.6.34`: any other path is refused outright with *local media path is not under an
-allowed directory*, **unless** the agent's own tool policy carries a filesystem `read`, which turns
-the allowlist into "wherever the source lives".
+The runtime uploads a local file only from roots it owns, and the Owner's corpus is under none of
+them. **ADR-0026 is why the answer is a copy rather than a wider reach**, and it is worth reading
+before changing anything here: the alternative costs the blocklist its meaning.
 
-Widening it that way is the option this exists to avoid. It would hand a model a general file read
-and the blocklist would stop being the boundary ADR-0004 makes it: the unit's own refusals would
-guard `read` while the agent walked past them with the runtime's.
-
-So the unit hands the document over instead. `attach` applies exactly `read`'s refusals and links —
-or copies, across a device boundary — the document under a staging root inside the runtime's own
-state, returning the staged path. The model never holds a filesystem: it holds one path this unit
-chose, to one document this unit already agreed to open.
-
-A staged name is a directory of its own, so two documents called *notes.pdf* do not collide and the
-sweep can drop a whole handover at once. They are swept on the same beat as the reader's held text.
+A handover is a directory of its own, so two documents called *notes.pdf* do not collide and the
+sweep drops a whole one at a time.
 """
 
 from __future__ import annotations

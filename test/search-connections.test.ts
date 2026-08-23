@@ -117,8 +117,8 @@ describe("what a chat that searches is told", () => {
   });
 
   it("offers a close call rather than picking from it", () => {
-    assert.match(instruction, /None of these/);
-    assert.match(instruction, /Never send one of them instead of asking/);
+    assert.match(instruction, /None of these\* carrying the reply's own `none_of_these` value/);
+    assert.match(instruction, /Never send one of them\s+instead of asking/);
   });
 
   it("delivers an empty verdict as nothing here, never as the least-bad match", () => {
@@ -136,11 +136,19 @@ describe("what a chat that searches is told", () => {
     assert.match(instruction, /on \*expired\* tell them the shortlist has expired/);
   });
 
-  it("re-passes a keyboard on every edit that means to keep it", () => {
-    assert.match(instruction, /Editing a message that carries buttons drops them unless the edit/);
-  });
-
   it("says none of it to a chat that does not search", () => {
     assert.doesNotMatch(chatInstruction(chats.media), /Finding a document/);
+  });
+});
+
+describe("what every chat is told about a keyboard", () => {
+  it("re-passes it on every edit that means to keep it, in every chat that can put one up", () => {
+    for (const chat of everyChat) {
+      assert.match(
+        chatInstruction(chat),
+        /Editing a message that carries buttons drops them unless the edit passes them again/,
+        `${chat.id} is not told, and a keyboard it edits disappears without a word.`,
+      );
+    }
   });
 });

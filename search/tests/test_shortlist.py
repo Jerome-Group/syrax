@@ -91,3 +91,14 @@ def test_sweeping_forgets_what_has_aged_out_and_keeps_what_has_not():
     assert shortlists.resolve(offer["results"][0]["choice"])["choice"] == "chosen"
     assert shortlists.sweep(time.monotonic() + 61) == 1
     assert shortlists.resolve(offer["results"][0]["choice"]) == {"choice": "expired"}
+
+
+def test_a_shortlist_offered_to_one_scope_does_not_resolve_through_another():
+    """The boundary a scope draws over `search` holds over the taps that come back from it."""
+    shortlists = Shortlists()
+    offer = shortlists.offer(close_call(), "academic")
+    tapped = offer["results"][0]["choice"]
+
+    assert shortlists.resolve(tapped, "academic")["choice"] == "chosen"
+    assert shortlists.resolve(tapped, None) == {"choice": "expired"}
+    assert shortlists.resolve(tapped, "media") == {"choice": "expired"}

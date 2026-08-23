@@ -64,7 +64,10 @@ class SearchUnit:
         async with self._querying:
             vector = await anyio.to_thread.run_sync(self.embedder.embed_query, query)
             verdict = search_index(self.database, query, vector, scope)
-            return self.shortlists.offer(verdict)
+            return self.shortlists.offer(verdict, scope)
+
+    def choose(self, choice: str, scope_name: str | None) -> dict:
+        return self.shortlists.resolve(choice, self.scope_root(scope_name))
 
     async def read(self, path: str) -> dict:
         async with self._querying:
@@ -117,8 +120,8 @@ def build(unit: SearchUnit) -> MCPServer:
             "and offer to search again rather than acting on it."
         ),
     )
-    async def choose(choice: str) -> dict:
-        return unit.shortlists.resolve(choice)
+    async def choose(choice: str, context: Context) -> dict:
+        return unit.choose(choice, _scope_of(context))
 
     @server.tool(
         name="attach",

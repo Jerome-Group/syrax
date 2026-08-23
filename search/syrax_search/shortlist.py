@@ -1,15 +1,11 @@
 """The shortlist a close call offers, and the tap that comes back for it.
 
-A tap carries sixty-four bytes and nothing else — Telegram's `callback_data` — so what a button
-carries is a token rather than a path. That bound is the smaller half of the reason. The larger is
-that a tap resolved by whatever the model remembers is a file chosen by a model: the unit mints the
-token, holds what it stands for, and is the only thing that can turn one back into a document.
+A button carries a token rather than a path, and this unit is the only thing that can turn one back
+into a document — ADR-0026 argues why, and why every way a tap can fail to resolve is folded into
+the single answer `expired`.
 
 Held in memory rather than written down, for the reason the reader's extracted text is: nothing has
-to decide when deleting it is safe, and a restart purges by construction. So a tap the unit cannot
-resolve has **one** answer rather than two. Aged out and minted-by-a-process-since-dead are
-different histories and the same present — the shortlist is gone, nothing is sent, and the Owner's
-next move is the same either way.
+to decide when deleting it is safe, and a restart purges by construction.
 """
 
 from __future__ import annotations
@@ -31,6 +27,7 @@ DECLINE = "none"
 @dataclass(frozen=True)
 class _Offered:
     candidates: tuple[Candidate, ...]
+    scope: str | None
     expires_at: float
 
 
@@ -41,7 +38,7 @@ class Shortlists:
         self._lifetime_seconds = lifetime_seconds
         self._offered: dict[str, _Offered] = {}
 
-    def offer(self, verdict: Verdict) -> dict:
+    def offer(self, verdict: Verdict, scope: str | None = None) -> dict:
         """The verdict as the chat gets it: a tappable value per candidate on a close call.
 
         A verdict that is not a close call passes through untouched. `confident` sends its document
@@ -52,16 +49,21 @@ class Shortlists:
 
         token = secrets.token_urlsafe(6)
         self._offered[token] = _Offered(
-            verdict.candidates, time.monotonic() + self._lifetime_seconds
+            verdict.candidates, scope, time.monotonic() + self._lifetime_seconds
         )
         choices = [f"{token}:{position}" for position in range(len(verdict.candidates))]
         return verdict.as_reply(choices) | {"none_of_these": f"{token}:{DECLINE}"}
 
-    def resolve(self, choice: str) -> dict:
-        """What a tap stands for: one document, the Owner declining all of them, or nothing left."""
+    def resolve(self, choice: str, scope: str | None = None) -> dict:
+        """What a tap stands for: one document, the Owner declining all of them, or nothing left.
+
+        `scope` is the connection's, not the model's, so a shortlist offered to one chat cannot be
+        resolved through another's — the boundary the scope draws over `search` holds over the taps
+        that come back from it.
+        """
         token, _, position = choice.rpartition(":")
         offered = self._offered.get(token)
-        if offered is None or offered.expires_at <= time.monotonic():
+        if offered is None or offered.expires_at <= time.monotonic() or offered.scope != scope:
             return {"choice": "expired"}
         if position == DECLINE:
             return {"choice": "declined"}

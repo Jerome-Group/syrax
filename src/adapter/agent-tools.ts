@@ -9,7 +9,7 @@
  */
 
 import type { Chat } from "./chats.ts";
-import { everySearchUnitTool, searchTool } from "./search-tools.ts";
+import { everySearchUnitTool, searchesTheCorpus, searchTool } from "./search-tools.ts";
 
 /** Without these the front lane cannot spawn, and the lane that thinks is unreachable (ADR-0022). */
 export const delegationTools = ["sessions_spawn", "sessions_yield", "subagents"];
@@ -22,7 +22,7 @@ export const delegationTools = ["sessions_spawn", "sessions_yield", "subagents"]
 const messageTool = "message";
 
 export function agentTools(chat: Chat): string[] {
-  if (chat.searches === undefined) return delegationTools;
+  if (!searchesTheCorpus(chat)) return [...delegationTools];
   return [
     ...delegationTools,
     ...everySearchUnitTool.map((tool) => searchTool(chat, tool)),

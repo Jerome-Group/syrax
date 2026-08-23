@@ -174,9 +174,10 @@ could widen its own reach in one confused turn.
 `read` returns a document's text, bounded by the blocklist and not by the allowlist; and `attach`
 copies one document to where the chat can send it from. That last one exists because the runtime
 uploads a local file only from roots it owns, and the alternative would be a general filesystem read
-in the agent's own hands — [ADR-0026](adr/0026-the-shortlist-is-the-units-and-the-file-is-handed-over.md)
-argues it. **So the unit reads `stateDir` too**: handovers are staged under `<stateDir>/media`, and
-swept on the same idle beat as everything else the unit holds.
+in the agent's own hands;
+[ADR-0026](adr/0026-the-shortlist-is-the-units-and-the-file-is-handed-over.md) argues it. **So the
+unit reads `stateDir` too**: handovers are staged under `<stateDir>/media`, and swept on the same
+idle beat as everything else the unit holds.
 
 ## Logs
 

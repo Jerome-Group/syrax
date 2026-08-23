@@ -110,3 +110,14 @@ async def test_attach_hands_a_document_over_the_wire(address, machine, tmp_path)
     handed = await _call(address, "attach", {"path": path}, None)
     assert handed["attach"] == "ok"
     assert handed["path"].startswith(machine.staging_root)
+
+
+@pytest.mark.anyio
+async def test_a_tap_does_not_cross_from_one_connections_scope_to_another(address):
+    query = "quiver representations path algebra stroke rate"
+    offer = await _call(address, "search", {"query": query}, "notes")
+    assert offer["verdict"] == "ambiguous"
+    tapped = offer["results"][0]["choice"]
+
+    assert (await _call(address, "choose", {"choice": tapped}, "notes"))["choice"] == "chosen"
+    assert await _call(address, "choose", {"choice": tapped}, None) == {"choice": "expired"}

@@ -36,7 +36,8 @@ function assertEveryScopeIsConfigured(deployment: Deployment): void {
   const missing = unconfiguredScopes(deployment);
   if (missing.length > 0) {
     throw new Error(
-      `searchScopes names no root for ${missing.join(", ")}, so that chat would search nothing.`,
+      `searchScopes names no root for ${missing.join(", ")}, so that chat would search nothing. ` +
+        `Add it as "searchScopes": { "${missing[0]}": "/an/absolute/root" } in the deployment.`,
     );
   }
 }
