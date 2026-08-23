@@ -354,6 +354,14 @@ describe("the rationed lane's composition", () => {
     for (const rung of hatchLane.rungs) assert.ok(!chained.includes(rungId(rung)));
   });
 
+  it("holds the rows measured as buckets of their own, and no alias or withdrawn name", () => {
+    assert.deepEqual(
+      hatchLane.rungs.map((rung) => rung.modelId),
+      ["gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3-flash-preview"],
+      "a row joins this list from a measurement, never from a catalogue.",
+    );
+  });
+
   it("is reached from every chat, being a lane rather than one chat's capability", () => {
     const { deployment } = temporaryMachine();
     const config = buildRuntimeConfig(readDeployment(deployment), {

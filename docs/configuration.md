@@ -114,9 +114,10 @@ want it?"* is a thing the front lane can say.
 The counters are per rung, one per model row of the version ladder, each carrying that row's own
 20-a-day allowance. A call is counted **before the request leaves** — a refusal spends the
 allowance too — and the day rolls where the provider resets it rather than where the machine is.
-Which rows the lane holds is `src/adapter/hatch-lane.ts`: a row joins it only once it has been
-measured answering from a bucket of its own, because half of Gemini's names are aliases of another
-row and an alias buys a counter and no allowance.
+Which rows the lane holds is `src/adapter/hatch-lane.ts`, and it is **four** — measured on the
+account rather than read off the catalogue, which lists seven Flash rows of which one is an alias of
+the newest and one is withdrawn while still listed. A row joins the lane only once it has answered
+and its neighbours have been probed in the same minute, because a name is not an allowance.
 
 **Headroom is read per provider, and the timestamp is part of the reading.** The provider is the
 authority wherever it speaks: Mistral and Groq state their remaining rungs in headers on a call

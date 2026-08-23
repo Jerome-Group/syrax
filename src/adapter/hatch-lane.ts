@@ -3,11 +3,11 @@
  * the runtime walks this chain — the lane monitor's hatch tool reaches a rung directly, and a rung
  * named here is deliberately absent from `front-lane.ts` and `worker-lane.ts` (ADR-0006).
  *
- * The composition is the version ladder as it was last measured answering from separate buckets.
- * `gemini-flash-latest` and the `-preview` suffixes of a version already here are aliases: they
- * share the bucket of the row they name, so adding one buys a counter and no allowance. A row joins
- * this list only once it has been saturated and its neighbour probed — which is what told the two
- * Flash Lite rows apart from the four names that turned out to be one of them.
+ * **The ladder is four rows, and it was five names.** Measured on the Owner's own account
+ * (`free-tier-limits.md`, 2026-08-24): `gemini-flash-latest` is an alias, refusing in the same
+ * minute bucket as `gemini-3.7-flash` while the other rows answered; and `gemini-2.5-flash` is in
+ * the catalogue and 404s. So a row joins this list only once it has been saturated and its
+ * neighbours probed, because a name is not an allowance and the catalogue is not an entitlement.
  */
 
 export type RationedRung = {
@@ -35,8 +35,14 @@ export const hatchLane = {
     },
     {
       provider: "syrax-gemini",
+      modelId: "gemini-3.5-flash",
+      name: "hatch-3 Gemini 3.5 Flash",
+      dailyRequests: 20,
+    },
+    {
+      provider: "syrax-gemini",
       modelId: "gemini-3-flash-preview",
-      name: "hatch-3 Gemini 3 Flash preview",
+      name: "hatch-4 Gemini 3 Flash preview",
       dailyRequests: 20,
     },
   ],
