@@ -127,6 +127,41 @@ manifest and its lockfile; `requirements-dev.txt` is what the checks install, an
 omits the 698 MB embedder export. The suite runs against a stand-in embedder for that reason: a
 test that has to download a model is a test nobody runs.
 
+### What this repository's CI cannot prove, and what stands in for it
+
+§5 says a green tick means the artefact was built and the tests run. One ecosystem here breaks that
+promise, and it does so on purpose, so the exception is written down rather than discovered.
+
+`search/requirements-dev.txt` is what CI installs, and it **omits the embedder stack** — the 698 MB
+ONNX export and the libraries that open it — because a check downloading a model on every pull
+request would not finish inside §5's ten minutes. The suite runs against a stand-in embedder
+instead. So a bump to **`tokenizers`** or **`onnxruntime`** is never executed by CI, and its green
+tick reports on a run in which the bumped library was absent.
+
+Those two are not ordinary dependencies either. `tokenizers` decides where a chunk boundary falls
+and `onnxruntime` decides what a vector is, and
+[ADR-0004](docs/adr/0004-syrax-owns-the-file-search-index.md) makes either a reason to reset the
+index — hours of re-embedding rather than a version string.
+
+**So one of those two is judged on the mini before it lands, and the check is one command:**
+
+```sh
+"$SEARCH_ROOT/bin/python" -m syrax_search fingerprint "$DEPLOYMENT"
+```
+
+It prints a window count, a boundary hash and a vector checksum over a fixed input — two numbers
+because the two libraries fail differently and neither implies the other. Run it on the pinned
+stack and on the bumped one. **Identical output means the index is unaffected and the bump is
+free.** Different output does not make the bump wrong; it means it costs a rebuild, which is a
+decision to put to the Owner rather than a merge to wave through. Run the suite in that same
+environment with `SYRAX_SEARCH_INDEX` set while you are there: `search/tests/test_pinned_embedder.py`
+skips everywhere else, and it is the only test that loads the real export.
+
+`huggingface-hub` sits in the same uninstalled set and is not in the same class — it is reached only
+by `fetch-embedder`, which a person runs once, so it cannot touch a built index. Everything else
+under `search/` **is** installed by `requirements-dev.txt` and exercised, so for those the tick
+means what it says.
+
 The core's *many jobs* shape (§5) is qualified here by the Organisation's gate: a job running on a
 pull request must be named in the `Required checks` ruleset or waived in the conformance manifest,
 and both live in the management hub. So the checks grow as **steps in the one required job** until

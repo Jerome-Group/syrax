@@ -3,7 +3,11 @@
     python -m syrax_search serve          <deployment.json>
     python -m syrax_search index          <deployment.json> [incremental|full]
     python -m syrax_search reset          <deployment.json>
+    python -m syrax_search fingerprint    <deployment.json>
     python -m syrax_search fetch-embedder <deployment.json>
+
+`fingerprint` is what decides a bump to `tokenizers` or `onnxruntime`: run it before and after, and
+identical output means the index is unaffected.
 
 `serve` is what the LaunchAgent runs. `index` is here for the first build and for a person with a
 reason; unattended passes go through the running unit instead, so they get the resident embedder
@@ -19,6 +23,7 @@ from .building import FULL, INCREMENTAL, run_pass
 from .config import read_deployment
 from .embedder import PinnedEmbedder
 from .embedder_export import fetch
+from .fingerprint import fingerprint
 from .server import serve
 
 
@@ -35,6 +40,10 @@ def main(arguments: list[str]) -> int:
     if command == "fetch-embedder":
         for written in fetch(config.embedder_root):
             print(written)
+        return 0
+    if command == "fingerprint":
+        embedder = PinnedEmbedder(config.embedder_root, config.idle_evict_seconds)
+        print(json.dumps(fingerprint(embedder)))
         return 0
     if command == "reset":
         from .building import reset

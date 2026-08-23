@@ -95,9 +95,16 @@ Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/do
 
 ### Dependency updates
 
-Surfaced at both ends of any session that touches a pull request — `docs/agents/dependencies.md`.
-Note its **first** merge condition: this repository auto-merges nothing until it opts in, and a
-skeleton CI has not earned that.
+Surfaced at both ends of any session that touches a pull request — `docs/agents/dependencies.md`,
+which is mirrored from the Organisation and is not edited here. Note its **first** merge condition:
+this repository auto-merges nothing until it opts in, and a skeleton CI has not earned that.
+
+Two things are this repository's own. Its *required check is green* condition **does not hold for
+`tokenizers` or `onnxruntime`**, which CI never installs — `CODING_STANDARDS.md` §6 says what to run
+instead. And bring a stale bump up to date with `@dependabot rebase` rather than
+`gh pr update-branch`: the latter writes a merge commit the trailer check judges as yours, and
+Dependabot then refuses to rebase a branch it considers edited, so the way back is
+`@dependabot recreate` on every one you touched.
 
 ## Repository notes
 
