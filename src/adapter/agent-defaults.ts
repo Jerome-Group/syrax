@@ -15,6 +15,7 @@ import {
   subagentRunTimeoutSeconds,
   turnCeilingSeconds,
 } from "./timeouts.ts";
+import { agentTools } from "./agent-tools.ts";
 import { workerLane } from "./worker-lane.ts";
 
 export function agentDefaults(deployment: Deployment) {
@@ -59,10 +60,12 @@ export function agentWorkspace(deployment: Deployment, chat: Chat): string {
   return join(deployment.workspace, chat.id);
 }
 
+/** One agent per chat, each carrying the tools its chat reaches and no others. */
 export function agentList(deployment: Deployment) {
   return everyChat.map((chat) => ({
     id: chat.id,
     workspace: agentWorkspace(deployment, chat),
     ...(chat.id === defaultChat.id ? { default: true } : {}),
+    tools: { alsoAllow: agentTools(chat) },
   }));
 }

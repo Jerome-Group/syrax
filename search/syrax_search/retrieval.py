@@ -60,6 +60,15 @@ class Candidate:
     extracted: bool
     """False where only the name is indexed: the document exists and was never read."""
 
+    def as_result(self, choice: str | None = None) -> dict:
+        """One document as a tool reply names it, with the value a tap on it would carry."""
+        return {
+            "path": self.path,
+            "name": self.name,
+            "contents_indexed": self.extracted,
+            **({} if choice is None else {"choice": choice}),
+        }
+
 
 @dataclass(frozen=True)
 class Verdict:
@@ -69,16 +78,22 @@ class Verdict:
     candidates: tuple[Candidate, ...]
     floor: float
 
-    def as_reply(self) -> dict:
+    def as_reply(self, choices: list[str] | None = None) -> dict:
+        """`choices` are the tap values a close call's shortlist minted, one per candidate."""
+        tappable = choices if choices is not None else [None] * len(self.candidates)
         return {
             "verdict": self.state,
             "results": [
-                {"path": one.path, "name": one.name, "contents_indexed": one.extracted}
-                for one in self.candidates
+                one.as_result(choice) for one, choice in zip(self.candidates, tappable, strict=True)
             ],
             "floor": self.floor,
             "floor_provenance": self.provenance,
         }
+
+    @property
+    def is_a_close_call(self) -> bool:
+        """`ambiguous`: the shortlist is offered here and nowhere else."""
+        return self.state == "ambiguous"
 
     @property
     def provenance(self) -> str:

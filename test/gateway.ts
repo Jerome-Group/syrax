@@ -86,6 +86,9 @@ export async function startGateway(options: {
   providerBaseUrls: Record<ProviderId, string>;
   /** What the wizard would have provisioned: which topic carries each chat. */
   carriers?: CarrierMap;
+  /** Where a search unit is standing, when a suite stands one. */
+  searchPort?: number;
+  searchScopes?: Record<string, string>;
 }): Promise<GatewayFixture> {
   const machine = temporaryMachine({ runtimeRoot });
   const deployment = readDeployment({
@@ -95,6 +98,8 @@ export async function startGateway(options: {
     gatewayPort: await freePort(),
     telegramApiRoot: options.telegramApiRoot,
     providerBaseUrls: options.providerBaseUrls,
+    ...(options.searchPort === undefined ? {} : { searchPort: options.searchPort }),
+    ...(options.searchScopes === undefined ? {} : { searchScopes: options.searchScopes }),
   });
   const root = machine.root;
   const carriers = options.carriers ?? {};

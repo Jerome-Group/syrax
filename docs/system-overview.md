@@ -50,6 +50,9 @@ The four chats stand: one bot locked to the Owner's Telegram ID, carrying Genera
 and System as an agent each, with a thread-less root message answered as General and a cleared
 carrier recreated by the write path — green against a local stub of each wire, so the reply path is
 proven without an external call. The lane that thinks is split from the lane that talks: a slow turn
-delegates to the worker chain and keeps one edited progress message up while it works. The
-capability tool layers and the search index are future project work. Each concrete choice adds a decision record when its reason
+delegates to the worker chain and keeps one edited progress message up while it works. Broad search
+is wired into the chats: General answers a described document with the document itself, offers three
+tappable candidates on a close call and says *nothing here* when nothing answers — with the
+retrieval scope bound to each chat's own connection rather than passed by a model. The capability
+tool layers are future project work. Each concrete choice adds a decision record when its reason
 would not be obvious from the code.

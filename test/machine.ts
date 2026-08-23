@@ -25,6 +25,9 @@ export function temporaryMachine(overrides: Record<string, unknown> = {}) {
       searchRoot: join(root, "search-env"),
       searchIndex: join(root, "search-index"),
       searchWrapperPath: join(root, "bin", "start-search.sh"),
+      // A machine with an Academic chat is a machine that has told the search unit where its
+      // modules live; the generator refuses to write a chat a scope with no root behind it.
+      searchScopes: { academic: join(root, "corpus", "modules") },
       ownerTelegramUserId,
       ...overrides,
     },

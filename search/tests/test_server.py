@@ -19,13 +19,15 @@ def tools(unit: SearchUnit) -> dict:
     return {tool.name: tool for tool in asyncio.run(build(unit).list_tools())}
 
 
-def test_the_unit_serves_exactly_search_and_read(unit):
-    assert set(tools(unit)) == {"search", "read"}
+def test_the_unit_serves_exactly_the_four_tools_it_declares(unit):
+    assert set(tools(unit)) == {"search", "choose", "read", "attach"}
 
 
 def test_scope_is_not_a_parameter_the_model_can_supply(unit):
     """Were it one, a chat could widen its own reach in a single confused turn (ADR-0004)."""
     assert set(tools(unit)["search"].input_schema["properties"]) == {"query"}
+    assert set(tools(unit)["choose"].input_schema["properties"]) == {"choice"}
+    assert set(tools(unit)["attach"].input_schema["properties"]) == {"path"}
 
 
 def test_a_configured_scope_resolves_to_its_root(unit, machine):

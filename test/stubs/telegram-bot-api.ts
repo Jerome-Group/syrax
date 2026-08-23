@@ -7,7 +7,21 @@
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 
-export type OutboundCall = { method: string; body: Record<string, unknown> };
+/** What crossed the wire, and — where the call posted one — the id the message came back with. */
+export type OutboundCall = {
+  method: string;
+  body: Record<string, unknown>;
+  messageId?: number;
+};
+
+/** A tap on one of the bot's own inline buttons, carrying the topic the message sits in. */
+export type InjectedTap = {
+  fromUserId: number;
+  data: string;
+  messageId: number;
+  chatId?: number;
+  messageThreadId?: number;
+};
 
 export type InjectedMessage = {
   fromUserId: number;
@@ -72,6 +86,33 @@ export class TelegramStub {
     this.#topics.delete(carrier);
   }
 
+  /**
+   * The Owner tapping a button. The message the tap belongs to is named rather than looked up: the
+   * stub records what crossed the wire and does not keep a chat, and the id is in that record.
+   */
+  injectTap(tap: InjectedTap): void {
+    const chatId = tap.chatId ?? tap.fromUserId;
+    this.#deliver({
+      update_id: this.#nextUpdateId++,
+      callback_query: {
+        id: `tap-${this.#nextUpdateId}`,
+        from: { id: tap.fromUserId, is_bot: false, first_name: "Sender" },
+        chat_instance: "stub-instance",
+        data: tap.data,
+        message: {
+          message_id: tap.messageId,
+          date: 1755000000,
+          chat: { id: chatId, type: "private", first_name: "Owner" },
+          from: botIdentity,
+          text: "the message the buttons hang on",
+          ...(tap.messageThreadId === undefined
+            ? {}
+            : { message_thread_id: tap.messageThreadId, is_topic_message: true }),
+        },
+      },
+    });
+  }
+
   inject(message: InjectedMessage): void {
     const chatId = message.chatId ?? message.fromUserId;
     this.#deliver({
@@ -116,6 +157,19 @@ export class TelegramStub {
     return this.calls.filter((call) => call.method === method && predicate(call));
   }
 
+  /**
+   * Resolves once nothing has crossed the wire for `quietMs`, so a test that reads the *order* of
+   * calls starts from a wire the last turn has finished with. A turn's own trailing calls — the
+   * progress draft's edit and deletion — land after the answer a test waited for.
+   */
+  async quiet(quietMs = 1_500): Promise<void> {
+    for (;;) {
+      const seen = this.calls.length;
+      await new Promise((resolve) => setTimeout(resolve, quietMs));
+      if (this.calls.length === seen) return;
+    }
+  }
+
   /** Nothing new crossed the wire: still `since` calls of `method` after settling for `quietMs`. */
   async stayedSilent(method: string, quietMs = 8_000, since = 0): Promise<boolean> {
     await new Promise((resolve) => setTimeout(resolve, quietMs));
@@ -149,18 +203,28 @@ export class TelegramStub {
     // The path alone: Telegram's own long-polling form carries a query string, and a method read
     // off the raw URL would neither route nor be recorded under its own name.
     const method = new URL(request.url ?? "/", "http://stub").pathname.split("/").pop() ?? "";
-    const body = await readJsonBody(request);
+    const body = await readBody(request);
 
     if (method === "getUpdates") {
       const updates = await this.#collectUpdates();
       return respond(response, updates);
     }
 
-    this.calls.push({ method, body });
+    const call: OutboundCall = { method, body };
+    this.calls.push(call);
 
     if (method === "getMe") return respond(response, botIdentity);
     if (method === "createForumTopic") {
       return respond(response, { message_thread_id: this.createTopic(), name: body.name });
+    }
+    if (method === "sendDocument" || method === "sendPhoto") {
+      call.messageId = this.#nextMessageId++;
+      return respond(response, {
+        message_id: call.messageId,
+        date: 1755000000,
+        chat: { id: body.chat_id, type: "private" },
+        from: botIdentity,
+      });
     }
     if (method === "sendMessage" || method === "editMessageText") {
       const carrier = body.message_thread_id;
@@ -168,8 +232,9 @@ export class TelegramStub {
         return refuse(response, "Bad Request: message thread not found");
       }
       if (body.text === "") return refuse(response, "Bad Request: message text is empty");
+      call.messageId = this.#nextMessageId++;
       return respond(response, {
-        message_id: this.#nextMessageId++,
+        message_id: call.messageId,
         date: 1755000000,
         chat: { id: body.chat_id, type: "private" },
         from: botIdentity,
@@ -194,15 +259,44 @@ export class TelegramStub {
   }
 }
 
-async function readJsonBody(request: IncomingMessage): Promise<Record<string, unknown>> {
+async function readBody(request: IncomingMessage): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = [];
   for await (const chunk of request) chunks.push(chunk as Buffer);
   if (chunks.length === 0) return {};
+  const raw = Buffer.concat(chunks).toString("utf8");
+  if (request.headers["content-type"]?.startsWith("multipart/form-data")) return formFields(raw);
   try {
-    return JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+    return JSON.parse(raw) as Record<string, unknown>;
   } catch {
     return {};
   }
+}
+
+/**
+ * A file upload is the one call Telegram takes as multipart rather than JSON. Its fields are read
+ * out by name, and the attachment each one references is recorded as the **filename** the bot put
+ * on the wire — which is what a test asking *which document was sent* wants, and never the bytes.
+ */
+function formFields(raw: string): Record<string, unknown> {
+  const fields: Record<string, unknown> = {};
+  const filenames: Record<string, string> = {};
+  for (const part of raw.split(/--[^\r\n]+\r\n/).slice(1)) {
+    const name = /name="([^"]+)"/.exec(part)?.[1];
+    if (name === undefined) continue;
+    const filename = /filename="?([^";\r\n]+)"?/.exec(part)?.[1];
+    if (filename !== undefined) {
+      filenames[name] = filename;
+      continue;
+    }
+    const value = part.split("\r\n\r\n").slice(1).join("\r\n\r\n").replace(/\r\n$/, "");
+    fields[name] = /^-?\d+$/.test(value) ? Number(value) : value;
+  }
+  for (const [name, value] of Object.entries(fields)) {
+    const attached =
+      typeof value === "string" ? filenames[value.replace("attach://", "")] : undefined;
+    if (attached !== undefined) fields[name] = attached;
+  }
+  return fields;
 }
 
 /** Telegram answers a bad request with 400 and its own description, which is the only probe. */

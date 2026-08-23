@@ -32,6 +32,25 @@ class _Held:
     expires_at: float
 
 
+def refused(config: SearchConfig, absolute: str) -> dict | None:
+    """Why this path will not be opened, or nothing. `read` and `attach` refuse identically."""
+    blocked = config.lists.blocks(absolute)
+    if blocked is not None:
+        return {"path": absolute, "reason": blocked}
+    if os.path.islink(absolute):
+        return {
+            "path": absolute,
+            "reason": "symlink: what it points at is read by its own path or not at all",
+        }
+    if not os.path.isfile(absolute):
+        return {"path": absolute, "reason": "not a file"}
+    return None
+
+
+def absolute_path(path: str) -> str:
+    return os.path.abspath(os.path.expanduser(path))
+
+
 class Reader:
     def __init__(self, config: SearchConfig, database: sqlite3.Connection) -> None:
         self._config = config
@@ -39,18 +58,10 @@ class Reader:
         self._held: dict[str, _Held] = {}
 
     def read(self, path: str) -> dict:
-        absolute = os.path.abspath(os.path.expanduser(path))
-        blocked = self._config.lists.blocks(absolute)
-        if blocked is not None:
-            return {"read": "refused", "path": absolute, "reason": blocked}
-        if os.path.islink(absolute):
-            return {
-                "read": "refused",
-                "path": absolute,
-                "reason": "symlink: what it points at is read by its own path or not at all",
-            }
-        if not os.path.isfile(absolute):
-            return {"read": "refused", "path": absolute, "reason": "not a file"}
+        absolute = absolute_path(path)
+        refusal = refused(self._config, absolute)
+        if refusal is not None:
+            return {"read": "refused", **refusal}
 
         stored = document_text(self._database, absolute)
         if stored:

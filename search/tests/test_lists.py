@@ -58,7 +58,7 @@ def test_a_symlink_is_never_followed(machine, tmp_path):
 def test_an_extraction_scope_outside_the_allowlist_is_refused(tmp_path):
     deployment = tmp_path / "deployment.json"
     deployment.write_text(
-        '{"searchIndex": "/tmp/i", "indexAllowlist": ["/a"], '
+        '{"searchIndex": "/tmp/i", "stateDir": "/tmp/s", "indexAllowlist": ["/a"], '
         '"extractionScope": ["/b"], "blocklist": ["/c"]}'
     )
     with pytest.raises(InvalidDeployment, match="subset"):
@@ -87,7 +87,7 @@ def test_a_pattern_is_anchored_at_the_directory_it_names(tmp_path):
 def test_a_pattern_is_still_a_subset_of_the_allowlist(tmp_path):
     deployment = tmp_path / "deployment.json"
     deployment.write_text(
-        '{"searchIndex": "/tmp/i", "indexAllowlist": ["/a"], '
+        '{"searchIndex": "/tmp/i", "stateDir": "/tmp/s", "indexAllowlist": ["/a"], '
         '"extractionScope": ["/b/*/AB*.pdf"], "blocklist": ["/c"]}'
     )
     with pytest.raises(InvalidDeployment, match="subset"):
@@ -97,7 +97,7 @@ def test_a_pattern_is_still_a_subset_of_the_allowlist(tmp_path):
 def test_a_pattern_inside_the_allowlist_is_accepted(tmp_path):
     deployment = tmp_path / "deployment.json"
     deployment.write_text(
-        '{"searchIndex": "/tmp/i", "indexAllowlist": ["/a"], '
+        '{"searchIndex": "/tmp/i", "stateDir": "/tmp/s", "indexAllowlist": ["/a"], '
         '"extractionScope": ["/a/papers/*/AB*.pdf"], "blocklist": ["/c"]}'
     )
     assert read_deployment(str(deployment)).lists.extracts("/a/papers/2025/AB1234 final.pdf")

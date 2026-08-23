@@ -31,6 +31,8 @@ from .embedder import Embedder, PinnedEmbedder
 from .index import open_index
 from .reading import Reader
 from .retrieval import search as search_index
+from .shortlist import Shortlists
+from .staging import Staging
 
 SCOPE_HEADER = "x-syrax-scope"
 SWEEP_SECONDS = 60
@@ -48,6 +50,8 @@ class SearchUnit:
         self.embedder = embedder or PinnedEmbedder(config.embedder_root, config.idle_evict_seconds)
         self.database = open_index(config.database_path)
         self.reader = Reader(config, self.database)
+        self.shortlists = Shortlists()
+        self.staging = Staging(config)
         self._querying = asyncio.Lock()
         self._indexing = asyncio.Lock()
 
@@ -59,11 +63,18 @@ class SearchUnit:
         scope = self.scope_root(scope_name)
         async with self._querying:
             vector = await anyio.to_thread.run_sync(self.embedder.embed_query, query)
-            return search_index(self.database, query, vector, scope).as_reply()
+            verdict = search_index(self.database, query, vector, scope)
+            return self.shortlists.offer(verdict, scope)
+
+    def choose(self, choice: str, scope_name: str | None) -> dict:
+        return self.shortlists.resolve(choice, self.scope_root(scope_name))
 
     async def read(self, path: str) -> dict:
         async with self._querying:
             return self.reader.read(path)
+
+    async def attach(self, path: str) -> dict:
+        return await anyio.to_thread.run_sync(self.staging.attach, path)
 
     async def index(self, kind: str) -> PassReport:
         async with self._indexing:
@@ -78,6 +89,8 @@ class SearchUnit:
 
     def sweep(self) -> None:
         self.reader.sweep()
+        self.shortlists.sweep()
+        self.staging.sweep()
         self.embedder.release_if_idle()
 
 
@@ -89,13 +102,37 @@ def build(unit: SearchUnit) -> MCPServer:
         description=(
             "Find documents by what they are about or by what they are called. Returns a verdict: "
             "`confident` names one document, `ambiguous` offers up to three candidates to choose "
-            "between, `empty` means nothing indexed answers this. A result marked "
+            "between — each carrying the `choice` value a tap on it sends back — and `empty` means "
+            "nothing indexed answers this. A result marked "
             "`contents_indexed: false` is known by its name alone — it exists, and what is inside "
             "it has not been read."
         ),
     )
     async def search(query: str, context: Context) -> dict:
         return await unit.search(query, _scope_of(context))
+
+    @server.tool(
+        name="choose",
+        description=(
+            "Turn a tap on one of `search`'s candidates back into the document it stands for. "
+            "Pass the `choice` value the button carried. `chosen` names one document, `declined` "
+            "means none of them was wanted, and `expired` means the shortlist is gone — say so "
+            "and offer to search again rather than acting on it."
+        ),
+    )
+    async def choose(choice: str, context: Context) -> dict:
+        return unit.choose(choice, _scope_of(context))
+
+    @server.tool(
+        name="attach",
+        description=(
+            "Put one document where it can be sent to the chat, and return the path to send. Use "
+            "it for any document that is going to the Owner as a file; the original is never sent "
+            "from where it lives. Refuses exactly what `read` refuses."
+        ),
+    )
+    async def attach(path: str) -> dict:
+        return await unit.attach(path)
 
     @server.tool(
         name="read",
@@ -156,5 +193,7 @@ def serve(config: SearchConfig, embedder: Embedder | None = None) -> None:
 
 _INSTRUCTIONS = (
     "Syrax's file search over the Owner's own documents. `search` answers with a verdict rather "
-    "than a ranked list, and the scope it covers is fixed by this connection rather than by you."
+    "than a ranked list, `choose` turns a tap on one of its candidates back into a document, "
+    "`read` returns a document's text and `attach` puts one where it can be sent. The scope all "
+    "of it covers is fixed by this connection rather than by you."
 )

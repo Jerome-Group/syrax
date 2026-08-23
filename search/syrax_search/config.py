@@ -25,6 +25,11 @@ DEFAULT_IDLE_EVICT_SECONDS = 1800
 # checkout: it is 698 MB of weights, and placement is what keeps it out (ADR-0004).
 EMBEDDER_DIRECTORY = "models/embeddinggemma-300m-onnx"
 
+# Under the runtime's state directory rather than the index root, and not a free choice: the runtime
+# uploads a local file only from roots it owns, and `<stateDir>/media` is the one of them that
+# belongs to neither an agent nor a scratch sweeper. `staging.py` argues the handover.
+STAGING_DIRECTORY = ("media", "syrax-search")
+
 
 class InvalidDeployment(Exception):
     pass
@@ -39,6 +44,8 @@ class SearchConfig:
     lists: Lists
     scopes: dict[str, str]
     """Named scopes an agent's MCP client is pointed at, never an argument the model supplies."""
+    staging_root: str
+    """Where `attach` puts a document so the chat can send it (ADR-0026)."""
 
     @property
     def database_path(self) -> str:
@@ -78,6 +85,7 @@ def read_deployment(path: str) -> SearchConfig:
             blocked_roots=(*_roots(source, "blocklist"), *_always_blocked(index_root)),
         ),
         scopes=_scopes(source.get("searchScopes"), allowlist),
+        staging_root=os.path.join(_absolute(source, "stateDir"), *STAGING_DIRECTORY),
     )
 
 

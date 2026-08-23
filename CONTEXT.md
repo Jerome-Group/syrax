@@ -187,6 +187,22 @@ is revisited when the machine changes rather than settled once.
 _Avoid_: denylist, exclusions — the second sounds like a tidying-up of results, where this is the
 one list that decides what may be touched at all
 
+**Shortlist**:
+What a close call offers: up to three candidate documents and a way to want none of them, each one
+a button the Owner taps. The search unit mints it and is the only thing that can turn a tap back
+into a document — a tap carries sixty-four bytes, so what a button holds is a token rather than a
+path. It expires, and a tap on one that has is answered *expired* rather than guessed at.
+_Avoid_: results, options — the first is the ranked list the verdict exists instead of, and the
+second says nothing about there being a way to reject all of them
+
+**Handover**:
+A copy of one document placed where the chat can send it from, made by `attach` and swept on the
+idle beat. It exists because the runtime uploads a local file only from roots it owns, and the
+alternative — widening the agent's own filesystem reach until the corpus is one of them — would
+give a model a general file read and cost the blocklist its meaning (ADR-0026).
+_Avoid_: upload, staging copy — the first names the step after this one, and the second describes
+the mechanism where this names the reason there is one
+
 **Ephemeral extraction**:
 Reading a document that the index does not hold, for one request. It is held only for as long as
 the request is live and never written down, so nothing has to decide when deleting it is safe.

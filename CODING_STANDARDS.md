@@ -176,7 +176,7 @@ none of them reaches inside the runtime:
 |------|-------------------|-------|
 | The Telegram wire | A local Bot API stub the gateway long-polls | `test/stubs/telegram-bot-api.ts` |
 | The provider wire | A local OpenAI-compatible stub, scripted with the measured failure shapes | `test/stubs/openai-provider.ts` |
-| The generated configuration | The file the adapter writes, read back as data | `test/runtime-config.test.ts` |
+| The generated configuration | What the adapter writes, read back as data | `test/runtime-config.test.ts`, `test/search-connections.test.ts` |
 
 Tests that drive the pinned gateway need it installed and **skip** without `SYRAX_RUNTIME_ROOT`.
 That is deliberate: the suite that matters runs on the mini, and CI proves the artefact rather
