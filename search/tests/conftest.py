@@ -85,6 +85,10 @@ CORPUS = {
         "quiver representations path algebra gabriel theorem dynkin diagrams indecomposable modules"
     ),
     "notes/rowing.md": "rowing erg splits stroke rate technique catch drive finish recovery",
+    # A year in its name and nowhere in its body: the only way to reach it is to spell the year.
+    "notes/exam 2025-2026 semester 2.md": (
+        "past year paper questions covering continuity differentiability and integration"
+    ),
     "scanned/hardware store receipt.pdf": None,
 }
 

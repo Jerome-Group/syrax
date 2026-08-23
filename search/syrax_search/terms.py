@@ -34,6 +34,26 @@ def terms_of(query: str) -> list[str]:
     return [word for word in words_of(query) if _worth_matching(word)]
 
 
+# The century a two-digit year is short for. A rule rather than a table of the years the corpus
+# happens to contain: `25/26` is written where `2025-2026` is meant, and the two are one thing to
+# the person who typed it. It is wrong for a document from 1994 and that is accepted — the corpus
+# is this decade's coursework, and the cost of being wrong is one weak extra term in an OR bag.
+CENTURY = "20"
+
+
+def variants_of(term: str) -> tuple[str, ...]:
+    """Every way this term is written, the term itself first. Two digits also mean four.
+
+    Both sides of the keyword arm read this: the FTS expression matches any form, and the test for
+    whether a name accounts for the query counts a term as matched in any of them. If only the
+    expression knew, a query could match a document by its year and then be told it had not been
+    named by it.
+    """
+    if len(term) == 2 and term.isdigit():
+        return (term, CENTURY + term)
+    return (term,)
+
+
 def _worth_matching(word: str) -> bool:
     if any(character.isdigit() for character in word):
         return len(word) > 1

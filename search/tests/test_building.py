@@ -14,16 +14,16 @@ from syrax_search.index import open_index
 
 def test_the_first_pass_extracts_embeds_and_names_everything(machine, embedder):
     report = run_pass(machine, embedder, INCREMENTAL)
-    assert report.extracted == 3, "the three documents inside the extraction scope"
-    assert report.embedded >= 3
-    assert report.seen == 4, "the PDF outside the scope is still seen, by its name"
+    assert report.extracted == 4, "the four documents inside the extraction scope"
+    assert report.embedded >= 4
+    assert report.seen == 5, "the PDF outside the scope is still seen, by its name"
 
 
 def test_the_incremental_pass_re_reads_only_what_moved(machine, embedder):
     run_pass(machine, embedder, INCREMENTAL)
     second = run_pass(machine, embedder, INCREMENTAL)
     assert second.extracted == 0
-    assert second.unchanged == 4
+    assert second.unchanged == 5
 
 
 def test_the_full_pass_re_reads_everything_and_re_embeds_nothing_unchanged(machine, embedder):
@@ -49,7 +49,7 @@ def test_a_document_that_leaves_the_corpus_is_forgotten(machine, embedder):
 
     database = open_index(machine.database_path)
     remaining = database.execute("SELECT count(*) FROM documents").fetchone()[0]
-    assert remaining == 3
+    assert remaining == 4
 
 
 def test_what_could_not_be_read_stays_in_the_ledger(machine, embedder):
