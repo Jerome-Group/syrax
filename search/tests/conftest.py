@@ -111,6 +111,7 @@ def machine(tmp_path):
         json.dumps(
             {
                 "searchIndex": str(tmp_path / "index"),
+                "stateDir": str(tmp_path / "runtime-state"),
                 "indexAllowlist": [str(documents)],
                 "extractionScope": [str(documents / "notes")],
                 "blocklist": [str(private)],

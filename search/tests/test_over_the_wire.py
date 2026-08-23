@@ -78,3 +78,35 @@ async def test_the_connection_carries_the_scope(address, machine):
     reply = await _call(address, "search", {"query": "receipt"}, "notes")
     notes = machine.scopes["notes"]
     assert all(one["path"].startswith(notes + "/") for one in reply["results"])
+
+
+@pytest.mark.anyio
+async def test_a_close_call_offers_a_shortlist_a_tap_can_resolve(address):
+    offer = await _call(
+        address, "search", {"query": "quiver representations path algebra stroke rate"}, None
+    )
+    assert offer["verdict"] == "ambiguous"
+
+    tapped = offer["results"][0]
+    chosen = await _call(address, "choose", {"choice": tapped["choice"]}, None)
+    assert chosen["choice"] == "chosen"
+    assert chosen["result"]["path"] == tapped["path"]
+
+    assert await _call(address, "choose", {"choice": offer["none_of_these"]}, None) == {
+        "choice": "declined"
+    }
+
+
+@pytest.mark.anyio
+async def test_a_tap_this_unit_never_minted_says_the_shortlist_has_expired(address):
+    assert await _call(address, "choose", {"choice": "nevermINTed:0"}, None) == {
+        "choice": "expired"
+    }
+
+
+@pytest.mark.anyio
+async def test_attach_hands_a_document_over_the_wire(address, machine, tmp_path):
+    path = str(tmp_path / "documents" / "notes" / "rowing.md")
+    handed = await _call(address, "attach", {"path": path}, None)
+    assert handed["attach"] == "ok"
+    assert handed["path"].startswith(machine.staging_root)

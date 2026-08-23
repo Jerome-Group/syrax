@@ -3,7 +3,8 @@ import { spawnSync } from "node:child_process";
 import { describe, it } from "node:test";
 import { buildRuntimeConfig } from "../src/adapter/build.ts";
 import { readDeployment } from "../src/adapter/deployment.ts";
-import { chatInstruction, everyChat } from "../src/adapter/chats.ts";
+import { everyChat } from "../src/adapter/chats.ts";
+import { chatInstruction } from "../src/adapter/instruction.ts";
 import { generateConfig } from "../src/adapter/generator.ts";
 import { runtimeEntrypoint, runtimeIsInstalled } from "./gateway.ts";
 import { temporaryMachine, writePrivateSecretsStore } from "./machine.ts";
@@ -20,6 +21,7 @@ const deployment = readDeployment({
   searchRoot: "/private/root/search-env",
   searchIndex: "/private/root/search-index",
   searchWrapperPath: "/private/root/bin/start-search.sh",
+  searchScopes: { academic: "/private/root/corpus/modules" },
   ownerTelegramUserId: 100000000,
 });
 

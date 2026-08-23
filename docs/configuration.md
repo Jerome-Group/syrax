@@ -144,7 +144,7 @@ different jobs. Naming them as one list is the mistake this section exists to pr
 | `indexAllowlist` | The roots that are crawled. A **compute scope**: it is sized by what is worth indexing here, not by what is safe to reach |
 | `extractionScope` | Which documents are opened and read — each entry a root **or a glob**, so one root's papers can be scoped to the modules that matter. Outside it, a document is indexed by name alone and a search says so rather than returning silence |
 | `blocklist` | What is never indexed, never extracted and never read, **anywhere on the machine** — the only one of the three that is a boundary |
-| `searchScopes` | Named roots a chat's connection can be bound to, so scope is configuration rather than something a model passes |
+| `searchScopes` | Named roots a chat's connection is bound to. **A name here is a chat's own name**, so the two configurations meet on it and neither can drift; the generator refuses to write a chat whose scope has no root |
 
 The index root and `~/Library` are blocked whether a deployment names them or not: without the
 first the index would index its own extracted text, and the second is where the machine keeps its
@@ -163,10 +163,20 @@ node src/cli/install-search-agent.ts <deployment.json>
 <searchRoot>/bin/python -m syrax_search fetch-embedder <deployment.json>
 ```
 
-**Scope is bound per connection, never per call.** An agent whose reach is one root carries the
+**Scope is bound per connection, never per call.** Each chat that searches gets an `mcp.servers`
+entry of its own pointing at the one resident unit. An agent whose reach is one root carries the
 `X-Syrax-Scope` header naming a `searchScopes` entry; General carries none and reaches the whole
 allowlist. Were scope a tool argument, the capability boundary would be model-settable and a chat
 could widen its own reach in one confused turn.
+
+**The unit serves four tools, and a chat is given its own connection's four or none at all.**
+`search` answers with a verdict; `choose` turns a tap on one of its candidates back into a document;
+`read` returns a document's text, bounded by the blocklist and not by the allowlist; and `attach`
+copies one document to where the chat can send it from. That last one exists because the runtime
+uploads a local file only from roots it owns, and the alternative would be a general filesystem read
+in the agent's own hands — [ADR-0026](adr/0026-the-shortlist-is-the-units-and-the-file-is-handed-over.md)
+argues it. **So the unit reads `stateDir` too**: handovers are staged under `<stateDir>/media`, and
+swept on the same idle beat as everything else the unit holds.
 
 ## Logs
 

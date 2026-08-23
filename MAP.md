@@ -17,6 +17,7 @@ Start here: `README.md`, then `AGENTS.md`.
 | Configuration | Public contract and placeholder values | `config/syrax.example.toml` |
 | Runtime adapter | Syrax's decisions as one generated runtime configuration | `src/adapter/build.ts` |
 | Chat surface | Syrax's own writes into the four chats, and the recreation a failed one triggers | `src/surface/chat-surface.ts` |
+| Agent instructions | What each chat's agent is told it is, including how it answers with the corpus | `src/adapter/instruction.ts` |
 | Supervision | The two LaunchAgents and the index schedules, and the wrappers' pre-flights that refuse to start wrong | `src/supervision/launch-agent.ts` |
 | Search unit | The file-search index and the two tools it serves over MCP — the one part of Syrax that is Python | `search/syrax_search/server.py` |
 | Runtime pin | The exact runtime version, installed outside the checkout | `runtime/package.json` |

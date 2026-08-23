@@ -30,6 +30,11 @@ export type Deployment = {
   searchWrapperPath: string;
   /** The loopback port the four agents reach the search unit on. */
   searchPort: number;
+  /**
+   * The named scopes the search unit maps to roots. The unit reads them from this same file; the
+   * adapter reads them only to refuse a chat whose scope no machine configured.
+   */
+  searchScopes: Record<string, string>;
   /** The one loopback port a gateway listens on; the suite moves its own off the supervised one. */
   gatewayPort: number;
   /** The only Telegram account that is answered. Everything else gets nothing. */
@@ -105,6 +110,7 @@ export function readDeployment(source: unknown): Deployment {
     searchIndex: input.searchIndex as string,
     searchWrapperPath: input.searchWrapperPath as string,
     searchPort: readPort(input.searchPort, searchPort),
+    searchScopes: readSearchScopes(input.searchScopes),
     ownerTelegramUserId: ownerTelegramUserId as number,
     telegramApiRoot: readUrl(input.telegramApiRoot, "telegramApiRoot") ?? telegramApiRoot,
     providerBaseUrls: readProviderBaseUrls(input.providerBaseUrls),
@@ -117,6 +123,19 @@ function readPort(value: unknown, fallback: number): number {
     throw new InvalidDeployment("a port must be a port number.");
   }
   return value as number;
+}
+
+function readSearchScopes(value: unknown): Record<string, string> {
+  if (value === undefined) return {};
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new InvalidDeployment("searchScopes maps a scope name to one root.");
+  }
+  for (const [scope, root] of Object.entries(value)) {
+    if (typeof root !== "string" || !root.startsWith("/")) {
+      throw new InvalidDeployment(`searchScopes.${scope} must be an absolute path.`);
+    }
+  }
+  return { ...(value as Record<string, string>) };
 }
 
 function readUrl(value: unknown, key: string): string | undefined {

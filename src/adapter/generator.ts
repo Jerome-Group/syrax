@@ -8,9 +8,11 @@ import { dirname, join, relative, resolve } from "node:path";
 import { agentWorkspace } from "./agent-defaults.ts";
 import { buildRuntimeConfig } from "./build.ts";
 import type { CarrierMap } from "./carriers.ts";
-import { chatInstruction, everyChat } from "./chats.ts";
+import { everyChat } from "./chats.ts";
+import { chatInstruction } from "./instruction.ts";
 import type { Deployment } from "./deployment.ts";
 import { ensurePrivateDirectory, writePrivateFile } from "./private-state.ts";
+import { unconfiguredScopes } from "./search-tools.ts";
 import { assertSecretsStoreIsPrivate } from "./secrets-store.ts";
 
 const checkout = resolve(import.meta.dirname, "..", "..");
@@ -26,8 +28,22 @@ function assertOutsideCheckout(deployment: Deployment): void {
   }
 }
 
+/**
+ * A scope the search unit was never given a root for is refused at the first query of the chat that
+ * carries it, which is a chat answering nothing and saying why nowhere.
+ */
+function assertEveryScopeIsConfigured(deployment: Deployment): void {
+  const missing = unconfiguredScopes(deployment);
+  if (missing.length > 0) {
+    throw new Error(
+      `searchScopes names no root for ${missing.join(", ")}, so that chat would search nothing.`,
+    );
+  }
+}
+
 export function generateConfig(deployment: Deployment, carriers: CarrierMap): void {
   assertOutsideCheckout(deployment);
+  assertEveryScopeIsConfigured(deployment);
   assertSecretsStoreIsPrivate(deployment.secretsStore);
 
   for (const directory of [
