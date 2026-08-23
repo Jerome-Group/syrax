@@ -38,12 +38,26 @@ results the Owner scans, and that is a different gesture from picking between th
 framing — `confident` sends, `ambiguous` asks, `empty` admits — survives; what changes is that
 asking now looks like a list.
 
+**The tail is not worse than the head, and that was measured rather than assumed.** The obvious
+objection to a longer shortlist is that nothing filters positions 4 through 10: the `empty` floor is
+read against the *best* score for the whole query and never per candidate, so a longer list could
+mean a longer tail of documents that would have been *nothing here* on their own. Measured on the
+three captured phrasings, it does not. For `MH1101 Final 25/26` the ten offered span −0.064 to
+−0.004 — a band narrower than the gap the floor was fitted across — and the document at rank 1
+scores **below** the one at rank 5. A per-candidate floor at −0.05 would delete the top result and
+keep the fifth. So there is no filter to add here that is not noise, and the reason is structural:
+everything reaching the fused top ten is a keyword match on a specific module code, and the vector
+arm barely separates those from each other.
+
 Two consequences follow and neither is fixed here:
 
 - **The three renderings problem gets worse before it gets better.** A chapter the corpus holds as
   `.tex`, `.pdf` and a textbook `.pdf` filled one slot in three and fills three in ten. ADR-0027
   already names this and leaves it; at ten it is more visible, and a person scanning a list will see
-  it as noise rather than as three documents.
+  it as noise rather than as three documents. It is not only chapters: ten offered for *where is it
+  shown that the composition factors of a group are unique* hold `Abstract Algebra 3e Dummit, Foote`
+  twice at identical scores and `A Course on Group Theory Rose` twice, because the corpus holds two
+  copies of each under different paths. Four of ten slots, two books.
 - **Nothing yet knows whether anyone taps past the third.** That is exactly what
   [#126](https://github.com/Jerome-Group/syrax/issues/126)'s capture loop measures, and it is the
   evidence this record should be re-read against.

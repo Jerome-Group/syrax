@@ -140,3 +140,7 @@ def test_a_close_call_offers_more_than_the_three_it_used_to(machine, embedder):
     verdict = answer(machine, embedder, "exam 2025 2026 semester quiver rowing")
     assert verdict.state == "ambiguous"
     assert len(verdict.candidates) > 3, "the fixture corpus holds five, so three was a truncation"
+    assert SHORTLIST == 10, (
+        "the fixture corpus is too small to reach ten, so the number ADR-0028 argues for is "
+        "asserted here rather than left to a corpus that cannot tell four from ten"
+    )
