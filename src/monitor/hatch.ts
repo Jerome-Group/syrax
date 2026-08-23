@@ -57,6 +57,13 @@ export class EscapeHatch {
         remaining: remaining(),
       };
     }
+    if (ask.question.trim() === "") {
+      return {
+        reached: false,
+        refused: "there is nothing to ask the rationed lane; nothing was spent",
+        remaining: remaining(),
+      };
+    }
     const rung = hatchLane.rungs.find((one) => this.#counters.remaining(one, now) > 0);
     if (rung === undefined) {
       return {

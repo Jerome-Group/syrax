@@ -6,22 +6,19 @@
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
+import { createServer } from "node:http";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
 import { buildRuntimeConfig } from "../src/adapter/build.ts";
 import { readDeployment, type Deployment } from "../src/adapter/deployment.ts";
-import { hatchTool } from "../src/adapter/monitor-tools.ts";
+import { hatchTool, hatchToolName, mcpPath } from "../src/adapter/monitor-tools.ts";
 import { hatchLane, rungId, silentProvider } from "../src/adapter/hatch-lane.ts";
 import { frontLane } from "../src/adapter/front-lane.ts";
 import { workerLane } from "../src/adapter/worker-lane.ts";
 import { modelRef } from "../src/adapter/lane.ts";
 import { DailyCounters, providerDay } from "../src/monitor/counters.ts";
-import {
-  LaneMonitor,
-  hatchToolName,
-  mcpPath,
-  serveLaneMonitor,
-} from "../src/monitor/lane-monitor.ts";
+import { LaneMonitor, serveLaneMonitor } from "../src/monitor/lane-monitor.ts";
+import { mcpEndpoint } from "../src/monitor/mcp.ts";
 import { ProviderStub } from "./stubs/openai-provider.ts";
 import { temporaryMachine, writePrivateSecretsStore } from "./machine.ts";
 
@@ -126,6 +123,18 @@ describe("the escape hatch", () => {
 
     assert.equal(answered.reached, false);
     assert.equal(answered.remaining[0]!.spent, 1);
+  });
+
+  it("refuses a question with nothing in it rather than spending a rung on it", async () => {
+    const stub = await ProviderStub.start();
+    after(() => stub.close());
+    const monitor = new LaneMonitor(await monitorOn(stub));
+
+    const answered = await monitor.hatch.reach({ question: "   ", askedFor });
+
+    assert.equal(answered.reached, false);
+    assert.deepEqual(stub.requests, []);
+    assert.equal(answered.remaining[0]!.spent, 0);
   });
 
   it("refuses rather than reaching a provider when the store holds no key for it", async () => {
@@ -293,6 +302,30 @@ describe("the hatch over MCP", () => {
       .structuredContent;
     assert.equal(answered.reached, true);
     assert.equal(answered.answer, "considered");
+  });
+
+  it("answers a tool that throws rather than taking the unit down with it", async () => {
+    const endpoint = mcpEndpoint("syrax-hatch", [
+      {
+        name: hatchToolName,
+        description: "one that fails",
+        inputSchema: { type: "object" },
+        call: () => Promise.reject(new Error("the counters could not be written")),
+      },
+    ]);
+    const server = createServer((request, response) => void endpoint(request, response));
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    after(() => new Promise((resolve) => server.close(() => resolve(undefined))));
+    const port = (server.address() as { port: number }).port;
+
+    const called = await rpc(`http://127.0.0.1:${port}${mcpPath}`, {
+      id: 1,
+      method: "tools/call",
+      params: { name: hatchToolName, arguments: {} },
+    });
+
+    assert.equal((called.error as { code: number }).code, -32603);
+    assert.match((called.error as { message: string }).message, /counters could not be written/);
   });
 
   it("names itself to a client that initializes, and answers no unknown method", async () => {

@@ -10,7 +10,11 @@
  */
 
 import type { Deployment } from "./deployment.ts";
-import { hatchServerName, hatchToolName, mcpPath } from "../monitor/lane-monitor.ts";
+
+/** The MCP server name the agents' connections carry, and the one tool it serves. */
+export const hatchServerName = "syrax-hatch";
+export const hatchToolName = "reach";
+export const mcpPath = "/mcp";
 
 /** The name a model calls the hatch by: the runtime prefixes the tool with its server. */
 export const hatchTool = `${hatchServerName}__${hatchToolName}`;

@@ -122,6 +122,15 @@ describe("the lane monitor's pre-flight", { skip: !onLaunchd }, () => {
     assert.match(ran.stderr, /the wizard has not run/);
   });
 
+  it("refuses a store whose directory the machine has left readable", async () => {
+    const { deployment, installed } = machine();
+    chmodSync(join(deployment.secretsStore, ".."), 0o755);
+
+    const ran = await preflight(installed.wrapperPath, "check_secrets_store");
+    assert.equal(ran.code, 2);
+    assert.match(ran.stderr, /mode 755, expected 700/);
+  });
+
   it("passes on a store the wizard left as it should", async () => {
     const { installed } = machine();
     const ran = await preflight(installed.wrapperPath, "check_secrets_store");

@@ -13,16 +13,12 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Deployment } from "../adapter/deployment.ts";
+import { hatchServerName, hatchToolName, mcpPath } from "../adapter/monitor-tools.ts";
 import { ensurePrivateDirectory } from "../adapter/private-state.ts";
 import { DailyCounters } from "./counters.ts";
 import { EscapeHatch, type HatchAsk } from "./hatch.ts";
 import { mcpEndpoint, type Tool } from "./mcp.ts";
 import { type Source, TelemetrySources } from "./sources.ts";
-
-/** The MCP server name the agents' connections carry; the runtime prefixes each tool with it. */
-export const hatchServerName = "syrax-hatch";
-export const hatchToolName = "reach";
-export const mcpPath = "/mcp";
 
 export class LaneMonitor {
   readonly counters: DailyCounters;

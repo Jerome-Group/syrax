@@ -53,10 +53,15 @@ check_state() {
 # ADR-0010: the store's mode is its protection, so a readable one is refused rather than used. The
 # hatch resolves the key at the moment it calls, and refusing here is refusing once instead.
 check_secrets_store() {
-  local mode
+  local mode directory
   [ -f "$secrets_store" ] || refuse "$secrets_store is not there: the wizard has not run."
   mode=$(stat -f %Lp "$secrets_store")
   [ "$mode" = 600 ] || refuse "$secrets_store is mode $mode, expected 600."
+  # The directory is half of the store's protection, and the hatch refuses on it at the moment it
+  # resolves a key — so it is asserted here for the same reason the mode above is.
+  directory=$(dirname "$secrets_store")
+  mode=$(stat -f %Lp "$directory")
+  [ "$mode" = 700 ] || refuse "$directory is mode $mode, expected 700."
 }
 
 preflight() {

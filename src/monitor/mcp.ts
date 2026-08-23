@@ -38,7 +38,13 @@ export function mcpEndpoint(serverName: string, tools: Tool[]) {
     }
     // A notification carries no id and expects no answer; `initialized` is the one that arrives.
     if (message.id === undefined) return send(response, 202, null);
-    return send(response, 200, await answer(message, serverName, tools));
+    try {
+      return send(response, 200, await answer(message, serverName, tools));
+    } catch (thrown) {
+      // A tool that throws is one call that failed, not a unit that goes down under `KeepAlive`
+      // holding counters nothing else has — and a client left waiting learns nothing either.
+      return send(response, 200, rpcError(message.id, -32603, reason(thrown)));
+    }
   };
 }
 
@@ -87,6 +93,10 @@ function result(id: number | string | null, payload: unknown) {
 
 function rpcError(id: number | string | null, code: number, message: string) {
   return { jsonrpc: "2.0", id, error: { code, message } };
+}
+
+function reason(thrown: unknown): string {
+  return thrown instanceof Error ? thrown.message : String(thrown);
 }
 
 async function readJson(request: IncomingMessage): Promise<Rpc | null> {
