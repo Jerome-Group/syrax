@@ -36,6 +36,21 @@ export type HatchAnswer =
  */
 const userAgent = "syrax-lane-monitor/1.0";
 
+/**
+ * Whether the rung's allowance actually went. A **4xx** is the provider answering about the request
+ * — a 429 most of all, where the day is its decision and not ours — so it is spent. A **5xx**, and
+ * the `null` that stands for a transport failure or a timeout, is a request that was never served:
+ * charging for those lets an overloaded backend eat a rung's whole day and then refuse the Owner
+ * for the rest of it, which is the ration eating itself (#167).
+ */
+export function providerCharged(status: number | null): boolean {
+  return status !== null && status < 500;
+}
+
+/** What the provider did with the call, in the two facts the counters need from it. */
+type Served =
+  { served: true; answer: string } | { served: false; status: number | null; said: string };
+
 export class EscapeHatch {
   #deployment: Deployment;
   #counters: DailyCounters;
@@ -81,48 +96,82 @@ export class EscapeHatch {
     }
 
     this.#counters.spend(rung, now);
-    try {
-      return {
-        reached: true,
-        rung: rungId(rung),
-        answer: await this.#ask(rung, key, ask),
-        remaining: remaining(),
-      };
-    } catch (error) {
-      return { reached: false, refused: reason(error), remaining: remaining() };
+    const served = await this.#ask(rung, key, ask);
+    if (served.served) {
+      return { reached: true, rung: rungId(rung), answer: served.answer, remaining: remaining() };
     }
+    if (!providerCharged(served.status)) this.#counters.refund(rung, now);
+    this.#counters.refuse(
+      rung,
+      { at: now.toISOString(), status: served.status, said: served.said },
+      now,
+    );
+    return { reached: false, refused: served.said, remaining: remaining() };
   }
 
-  async #ask(rung: RationedRung, key: string, ask: HatchAsk): Promise<string> {
-    const response = await fetch(
-      `${this.#deployment.providerBaseUrls[rung.provider]}/chat/completions`,
-      {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${key}`,
-          "content-type": "application/json",
-          "user-agent": userAgent,
-        },
-        body: JSON.stringify({
-          model: rung.modelId,
-          messages: [{ role: "user", content: ask.question }],
-        }),
-        signal: AbortSignal.timeout(providerIdleTimeoutSeconds[rung.provider] * 1000),
-      },
-    );
+  /**
+   * Never throws: what a call did is the answer this returns, because the counters have to act on
+   * it and a thrown transport failure carries no status to act on.
+   */
+  async #ask(rung: RationedRung, key: string, ask: HatchAsk): Promise<Served> {
+    let response: Response;
+    try {
+      response = await this.#send(rung, key, ask);
+    } catch (error) {
+      return {
+        served: false,
+        status: null,
+        said: `${rungId(rung)} could not be reached: ${reason(error)}`,
+      };
+    }
     // Read whatever the provider said about itself on the way past, which is the only way any of
     // this reaches telemetry: nothing here is a call made to observe one.
     this.#sources.observe(rung.provider, response.headers);
-    const body = (await response.json()) as {
-      choices?: { message?: { content?: string } }[];
-      error?: { message?: string };
-    };
+
+    const body = await readBody(response);
     if (!response.ok) {
-      throw new Error(
-        `${rungId(rung)} answered ${response.status}: ${body.error?.message ?? "no message"}`,
-      );
+      return {
+        served: false,
+        status: response.status,
+        said: `${rungId(rung)} answered ${response.status}: ${body.error?.message ?? "no message"}`,
+      };
     }
-    return body.choices?.[0]?.message?.content ?? "";
+    return { served: true, answer: body.choices?.[0]?.message?.content ?? "" };
+  }
+
+  #send(rung: RationedRung, key: string, ask: HatchAsk): Promise<Response> {
+    return fetch(`${this.#deployment.providerBaseUrls[rung.provider]}/chat/completions`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${key}`,
+        "content-type": "application/json",
+        "user-agent": userAgent,
+      },
+      body: JSON.stringify({
+        model: rung.modelId,
+        messages: [{ role: "user", content: ask.question }],
+      }),
+      signal: AbortSignal.timeout(providerIdleTimeoutSeconds[rung.provider] * 1000),
+    });
+  }
+}
+
+type CompletionBody = {
+  choices?: { message?: { content?: string } }[];
+  error?: { message?: string };
+};
+
+/**
+ * Gemini answers an error as a one-element array rather than an object, and a gateway in front of a
+ * provider answers HTML — so a body that will not parse is an empty one rather than a second
+ * failure on top of the first.
+ */
+async function readBody(response: Response): Promise<CompletionBody> {
+  try {
+    const held = (await response.json()) as CompletionBody | CompletionBody[];
+    return Array.isArray(held) ? (held[0] ?? {}) : held;
+  } catch {
+    return {};
   }
 }
 
