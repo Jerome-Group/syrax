@@ -77,8 +77,19 @@ class Verdict:
                 for one in self.candidates
             ],
             "floor": self.floor,
-            "floor_provenance": "fitted to a twenty-seven-query benchmark, provisional (ADR-0025)",
+            "floor_provenance": self.provenance,
         }
+
+    @property
+    def provenance(self) -> str:
+        """The two floors were fitted against different benchmarks, and only one is re-fitted.
+
+        One string for both would have to describe the weaker of the two, and this field exists to
+        stop a number wearing an authority it was not measured with.
+        """
+        if self.floor == EMPTY_FLOOR:
+            return "re-fitted to a twenty-seven-query benchmark, provisional (ADR-0025)"
+        return "fitted to a fifteen-query benchmark, provisional (ADR-0004)"
 
 
 def search(
@@ -150,7 +161,7 @@ def _keyword_arm(
     ).fetchall()
     name_hits = database.execute(
         """
-        SELECT documents.id, documents.path FROM name_fts
+        SELECT documents.id, documents.name FROM name_fts
         JOIN documents ON documents.id = name_fts.rowid
         WHERE name_fts MATCH ? AND (? IS NULL OR documents.path LIKE ? || '/%')
         ORDER BY rank LIMIT ?
@@ -158,16 +169,23 @@ def _keyword_arm(
         (expression, scope, scope, NAME_POOL),
     ).fetchall()
     terms = terms_of(query)
-    naming = [one for one, path in name_hits if _names_the_query(terms, path)]
+    naming = [one for one, name in name_hits if _names_the_query(terms, name)]
     return _fuse(_first_seen(text_hits), _first_seen(name_hits)), naming
 
 
-def _names_the_query(terms: list[str], path: str) -> bool:
-    """How much of what was typed the name accounts for. `name_fts` holds the path's words."""
+def _names_the_query(terms: list[str], name: str) -> bool:
+    """How much of what was typed the document's own name accounts for.
+
+    `name_fts` holds the whole path's words, so a document can be a name hit on a directory alone.
+    The exemption asks a narrower question than the match did, and deliberately: an ancestor
+    directory is shared by everything beneath it, so two of its words would carry a query over this
+    line without naming anything. On the measured queries the two readings agree wherever the
+    exemption is what decides the verdict.
+    """
     wanted = set(terms)
     if not wanted:
         return False
-    return len(wanted & set(words_of(path))) > len(wanted) * NAME_MATCH_MAJORITY
+    return len(wanted & set(words_of(name))) > len(wanted) * NAME_MATCH_MAJORITY
 
 
 def _vector_arm(

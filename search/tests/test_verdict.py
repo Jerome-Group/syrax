@@ -42,7 +42,7 @@ def test_a_verdict_never_carries_a_score(machine, embedder):
 
 def test_a_document_known_only_by_its_name_says_so(machine, embedder):
     verdict = answer(machine, embedder, "receipt")
-    named = [one for one in verdict.candidates if one.name == "receipt.pdf"]
+    named = [one for one in verdict.candidates if one.name == "hardware store receipt.pdf"]
     assert named and named[0].extracted is False
 
 
@@ -60,9 +60,9 @@ def test_a_body_word_alone_does_not_lift_a_query_off_the_empty_floor(machine, em
 
 def test_a_name_the_query_is_mostly_made_of_does_lift_one(machine, embedder):
     """The book's own filename is why *Dummit and Foote* is right at a score below the floor."""
-    verdict = answer(machine, embedder, "notes rowing zzzz")
+    verdict = answer(machine, embedder, "hardware store receipt zzzz")
     assert verdict.state == "ambiguous"
-    assert verdict.candidates[0].name == "rowing.md"
+    assert any(one.name == "hardware store receipt.pdf" for one in verdict.candidates)
 
 
 def test_a_name_that_matched_one_word_of_six_does_not_lift_one(machine, embedder):

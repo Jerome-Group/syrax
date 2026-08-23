@@ -85,7 +85,7 @@ CORPUS = {
         "quiver representations path algebra gabriel theorem dynkin diagrams indecomposable modules"
     ),
     "notes/rowing.md": "rowing erg splits stroke rate technique catch drive finish recovery",
-    "scanned/receipt.pdf": None,
+    "scanned/hardware store receipt.pdf": None,
 }
 
 
