@@ -38,12 +38,15 @@ class SeedReport:
     """The query, and the fragment of it that named no document the index holds."""
     already: list[str] = field(default_factory=list)
     """Queries the set already held: it accretes and is never rewritten, so the guard is here."""
+    unreadable: int = 0
+    """Lines that would not parse. One mistyped line costs that line, not the run."""
 
     def as_reply(self) -> dict:
         return {
             "seeded": self.seeded,
             "refused": [{"query": one, "fragment": fragment} for one, fragment in self.refused],
             "already": self.already,
+            "unreadable": self.unreadable,
         }
 
 
@@ -52,7 +55,7 @@ def seed(config: SearchConfig, embedder: Embedder, source_path: str) -> SeedRepo
     held = {one.query for one in entries(config.benchmark_path)}
     database = open_index(config.database_path)
     try:
-        for wanted in _read(source_path):
+        for wanted in _read(source_path, report):
             _seed_one(config, embedder, database, wanted, held, report)
     finally:
         database.close()
@@ -82,7 +85,13 @@ def _seed_one(
             return
         expect.extend(one for one in found if one not in expect)
 
-    scope = config.scopes.get(str(wanted["scope"])) if wanted.get("scope") else None
+    named = str(wanted["scope"]) if wanted.get("scope") else None
+    if named is not None and named not in config.scopes:
+        # Seeding it unscoped would measure the whole allowlist under a line that asked for a
+        # scope, and say nothing. `SearchUnit` refuses an unknown scope for the same reason.
+        report.refused.append((query, named))
+        return
+    scope = config.scopes[named] if named is not None else None
     verdict = search(database, query, embedder.embed_query(query), scope)
     append(
         config.benchmark_path,
@@ -104,15 +113,41 @@ def _seed_one(
 
 
 def _resolve(database: sqlite3.Connection, fragment: str) -> list[str]:
-    """Every document whose path carries this fragment — how one name reaches three files."""
+    """Every document whose path carries this fragment — how one name reaches three files.
+
+    `LIKE`'s own wildcards are escaped rather than passed through: `_` matches any character to
+    SQL and is a character in nearly every filename here, so `10_Composition_Series` unescaped
+    would also accept `10-Composition-Series` as a correct answer and never say it had.
+    """
     rows = database.execute(
-        "SELECT path FROM documents WHERE path LIKE ? ORDER BY path", (f"%{fragment}%",)
+        r"SELECT path FROM documents WHERE path LIKE ? ESCAPE '\' ORDER BY path",
+        (f"%{_literal(fragment)}%",),
     ).fetchall()
     return [row[0] for row in rows]
 
 
-def _read(path: str) -> list[dict]:
+def _literal(fragment: str) -> str:
+    for character in ("\\", "%", "_"):
+        fragment = fragment.replace(character, "\\" + character)
+    return fragment
+
+
+def _read(path: str, report: SeedReport) -> list[dict]:
+    """The list is hand-written, so a line that will not parse costs that line and not the run."""
     if not os.path.exists(path):
         raise FileNotFoundError(f"no list of queries at {path}")
+    wanted = []
     with open(path, encoding="utf-8") as handle:
-        return [json.loads(line) for line in handle if line.strip()]
+        for line in handle:
+            if not line.strip():
+                continue
+            try:
+                one = json.loads(line)
+            except json.JSONDecodeError:
+                report.unreadable += 1
+                continue
+            if isinstance(one, dict):
+                wanted.append(one)
+            else:
+                report.unreadable += 1
+    return wanted

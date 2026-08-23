@@ -179,3 +179,15 @@ def test_an_entry_that_expects_nothing_and_gets_something_is_a_miss(indexed, emb
 
     assert numbers["scored"] == 1
     assert numbers["found"] == 0 and numbers["first"] == 0
+
+
+def test_a_query_that_should_be_empty_and_is_not_is_fitted_against(indexed, embedder):
+    """It is the clearest wrong top answer there is, and the floor has to clear it."""
+    entry(indexed, "artin wedderburn theorem semisimple rings", None, expects_nothing=True)
+    report = run(indexed, embedder)
+
+    assert report.numbers["found"] == 0
+    assert report.best_wrong is not None, "the document it wrongly returned has a score"
+    assert report.numbers["refitted_confident_floor"] == round(
+        report.best_wrong + FITTING_MARGIN, 3
+    )

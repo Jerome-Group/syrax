@@ -98,11 +98,12 @@ class _Tally:
         self.found += 1 if entry.is_answered_by(paths) else 0
         self.first += 1 if entry.is_led_by(paths) else 0
         # Only the top document's own score is fitted against, because that is the one the floor is
-        # read against. A query the index now answers with nothing has no score to fit either way,
-        # and neither has one whose right answer *is* nothing: there is no document for the floor to
-        # have been read about, so it belongs to neither distribution.
+        # read against. A query the index now answers with nothing has no score to fit either way —
+        # and a query whose right answer *is* nothing, answered with a document anyway, is the
+        # clearest wrong top answer there is. It belongs in `wrong`, or the floor is fitted blind to
+        # the case where the index sent a file for a question the corpus cannot answer.
         top = paths[0] if paths else None
-        if entry.expects_nothing or top is None or top not in verdict.scores:
+        if top is None or top not in verdict.scores:
             return
         (self.right if entry.is_led_by(paths) else self.wrong).append(verdict.scores[top])
 

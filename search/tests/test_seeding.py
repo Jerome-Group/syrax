@@ -103,3 +103,36 @@ def test_a_named_scope_is_seeded_as_the_root_it_stands_for(indexed, embedder, tm
     seed(indexed, embedder, source)
 
     assert entries(indexed.benchmark_path)[0].scope == indexed.scopes["notes"]
+
+
+def test_a_scope_the_deployment_does_not_name_is_refused(indexed, embedder, tmp_path):
+    """Seeding it unscoped would measure the whole allowlist under a line that asked for less."""
+    source = written(
+        indexed, [{"query": "receipt", "expect": ["receipt"], "scope": "acadmic"}], tmp_path
+    )
+    report = seed(indexed, embedder, source)
+
+    assert report.seeded == 0
+    assert report.refused == [("receipt", "acadmic")]
+    assert entries(indexed.benchmark_path) == []
+
+
+def test_a_fragment_matches_what_it_says_rather_than_what_like_reads(indexed, embedder, tmp_path):
+    """`_` is a wildcard to LIKE and a character in every filename here."""
+    source = written(indexed, [{"query": "one", "expect": ["notes_wedderburn.md"]}], tmp_path)
+    report = seed(indexed, embedder, source)
+
+    assert report.refused == [("one", "notes_wedderburn.md")], "it must not match notes/wedderburn"
+
+
+def test_a_line_that_will_not_parse_costs_that_line_and_not_the_run(indexed, embedder, tmp_path):
+    """The list is hand-written, and the set's own reader says a mistyped line is one entry lost."""
+    source = tmp_path / "queries.jsonl"
+    source.write_text(
+        '{"query": "artin wedderburn theorem semisimple rings", "expect": ["wedderburn.md"]}\n'
+        "{not json at all,}\n"
+    )
+    report = seed(indexed, embedder, str(source))
+
+    assert report.seeded == 1
+    assert report.unreadable == 1
