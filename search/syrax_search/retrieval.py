@@ -15,7 +15,7 @@ ADR-0025 puts back the weakest form of agreement that answers that, and no more.
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -72,11 +72,20 @@ class Candidate:
 
 @dataclass(frozen=True)
 class Verdict:
-    """`confident`, `ambiguous` or `empty`, and the floor that decided it. Never a score."""
+    """`confident`, `ambiguous` or `empty`, and the floor that decided it.
+
+    The scores the floor was read against are carried and never replied with. A model handed a
+    number argues with it; a captured miss without one is a measurement that cannot be repeated,
+    since the index that produced it is rebuilt every third day (ADR-0007).
+    """
 
     state: str
     candidates: tuple[Candidate, ...]
     floor: float
+    scores: dict[str, float] = field(default_factory=dict)
+    """What each returned candidate scored on the vector arm; absent where it has no vector."""
+    best: float | None = None
+    """The best the vector arm reached at all, which is the number `empty` was decided on."""
 
     def as_reply(self, choices: list[str] | None = None) -> dict:
         """`choices` are the tap values a close call's shortlist minted, one per candidate."""
@@ -122,9 +131,9 @@ def search(
     # — a floor applied over those returns silence for exactly the queries that name what they
     # want (ADR-0004). A body-text hit is not the same evidence: one common word shared with a long
     # document is what the floor is there to reject, so it does not lift a query off it.
-    best = max(scores.values(), default=EMPTY_FLOOR - 1)
-    if best < EMPTY_FLOOR and not naming:
-        return Verdict("empty", (), EMPTY_FLOOR)
+    best = max(scores.values(), default=None)
+    if (best is None or best < EMPTY_FLOOR) and not naming:
+        return Verdict("empty", (), EMPTY_FLOOR, best=best)
 
     # A document held by name alone has no vector, so it cannot clear the floor and is never
     # `confident`. That is the right way round: `confident` sends a file without asking, and a
@@ -132,8 +141,8 @@ def search(
     # index has never read inside.
     top = ranked[0]
     if arms_agree(top, vector, keyword) and scores.get(top, EMPTY_FLOOR - 1) >= CONFIDENT_FLOOR:
-        return Verdict("confident", _describe(database, ranked[:1]), CONFIDENT_FLOOR)
-    return Verdict("ambiguous", _describe(database, ranked[:SHORTLIST]), CONFIDENT_FLOOR)
+        return _decided("confident", database, ranked[:1], scores, best)
+    return _decided("ambiguous", database, ranked[:SHORTLIST], scores, best)
 
 
 def arms_agree(top: int, vector: list[int], keyword: list[int]) -> bool:
@@ -254,11 +263,29 @@ def _fuse(*arms: list[int]) -> list[int]:
     return [document_id for document_id, _ in sorted(scores.items(), key=lambda pair: -pair[1])]
 
 
-def _describe(database: sqlite3.Connection, document_ids: list[int]) -> tuple[Candidate, ...]:
+def _decided(
+    state: str,
+    database: sqlite3.Connection,
+    document_ids: list[int],
+    scores: dict[int, float],
+    best: float | None,
+) -> Verdict:
+    """The verdict as it is answered, carrying what each document it names actually scored."""
+    described = _describe(database, document_ids)
+    return Verdict(
+        state,
+        tuple(described.values()),
+        CONFIDENT_FLOOR,
+        {one.path: scores[found] for found, one in described.items() if found in scores},
+        best,
+    )
+
+
+def _describe(database: sqlite3.Connection, document_ids: list[int]) -> dict[int, Candidate]:
     placeholders = ",".join("?" * len(document_ids))
     rows = database.execute(
         f"SELECT id, path, name, extracted FROM documents WHERE id IN ({placeholders})",
         document_ids,
     ).fetchall()
     by_id = {row[0]: Candidate(row[1], row[2], bool(row[3])) for row in rows}
-    return tuple(by_id[one] for one in document_ids if one in by_id)
+    return {one: by_id[one] for one in document_ids if one in by_id}

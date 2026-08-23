@@ -114,6 +114,17 @@ describe("the index schedules", () => {
     assert.match(incremental, /<key>Minute<\/key>\s*<integer>17<\/integer>/);
   });
 
+  it("adds no unit for the benchmark or for a re-embed asked for on demand", () => {
+    const { agent, home } = installed();
+    assert.deepEqual(
+      agent.plistPaths.map((path) => path.slice(home.length)),
+      [searchLabel, incrementalIndexLabel, fullIndexLabel].map(
+        (label) => `/Library/LaunchAgents/${label}.plist`,
+      ),
+      "a schedule of its own is what ADR-0007 says the loop does not get.",
+    );
+  });
+
   it("pokes the resident unit rather than loading a second embedder", () => {
     const { plists, deployment } = installed();
     for (const [label, pass] of [

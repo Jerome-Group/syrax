@@ -84,6 +84,12 @@ describe("the connections to the search unit", () => {
     }
   });
 
+  it("lets a chat that searches record a miss, and gives no other chat the tool", () => {
+    assert.ok(agentTools(chats.general).includes("syrax-search-general__capture"));
+    assert.ok(agentTools(chats.academic).includes("syrax-search-academic__capture"));
+    assert.ok(!agentTools(chats.system).some((tool) => tool.endsWith("__capture")));
+  });
+
   it("lets a chat that searches post the file and the keyboard a search answers with", () => {
     assert.ok(agentTools(chats.general).includes("message"));
     assert.ok(!agentTools(chats.media).includes("message"));
@@ -134,6 +140,20 @@ describe("what a chat that searches is told", () => {
 
   it("says an expired shortlist has expired rather than acting on it", () => {
     assert.match(instruction, /on \*expired\* tell them the shortlist has expired/);
+  });
+
+  it("captures a miss from a reply and never from anything else", () => {
+    assert.match(instruction, /syrax-search-general__capture/);
+    assert.match(instruction, /pass the `answer` value that search's\s+reply carried/);
+    assert.match(instruction, /never capture\s+from a message that is not such a reply/);
+  });
+
+  it("asks for nothing to make a capture better, correct path included", () => {
+    assert.match(
+      instruction,
+      /a correct path only if one of the unit's own replies\s+has already handed you it/,
+    );
+    assert.match(instruction, /Never ask them for anything to make the\s+capture better/);
   });
 
   it("says none of it to a chat that does not search", () => {

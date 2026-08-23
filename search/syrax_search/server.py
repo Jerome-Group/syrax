@@ -1,4 +1,4 @@
-"""The resident unit: two tools over MCP on loopback, and the index passes launchd pokes.
+"""The resident unit: the tools over MCP on loopback, and the passes launchd pokes.
 
 MCP's usual transport has the client spawn the server as a child process. Syrax has four agents, so
 that default would put four ONNX embedders resident on a 16 GB machine (ADR-0005). This one is
@@ -11,8 +11,9 @@ allowlist. Were scope a tool parameter, the capability boundary would be model-s
 could widen its own reach in one confused turn — so an unrecognised scope is refused rather than
 widened to everything.
 
-The index passes are plain HTTP rather than tools, for the same reason from the other direction: a
-reindex is launchd's to trigger and no agent's to call.
+The index passes and the benchmark run are plain HTTP rather than tools, for the same reason from
+the other direction: a reindex is launchd's or the Owner's to trigger and no agent's to call, and a
+score is read by whatever posts it rather than by a model.
 """
 
 from __future__ import annotations
@@ -25,13 +26,17 @@ from mcp.server.mcpserver.context import Context
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from .benchmark import FAILURES, Shape
 from .building import FULL, INCREMENTAL, PassReport, run_pass
+from .capture import Answers
 from .config import SearchConfig
 from .embedder import Embedder, PinnedEmbedder
 from .index import open_index
 from .reading import Reader
+from .report import RetrievalReport
+from .report import run as score_benchmark
 from .retrieval import search as search_index
-from .shortlist import Shortlists
+from .shortlist import Shortlists, token_of
 from .staging import Staging
 
 SCOPE_HEADER = "x-syrax-scope"
@@ -50,6 +55,7 @@ class SearchUnit:
         self.embedder = embedder or PinnedEmbedder(config.embedder_root, config.idle_evict_seconds)
         self.database = open_index(config.database_path)
         self.reader = Reader(config, self.database)
+        self.answers = Answers(config.benchmark_path)
         self.shortlists = Shortlists()
         self.staging = Staging(config)
         self._querying = asyncio.Lock()
@@ -64,10 +70,19 @@ class SearchUnit:
         async with self._querying:
             vector = await anyio.to_thread.run_sync(self.embedder.embed_query, query)
             verdict = search_index(self.database, query, vector, scope)
-            return self.shortlists.offer(verdict, scope)
+            answer = self.answers.remember(query, scope, verdict)
+            return self.shortlists.offer(verdict, scope, answer.token) | {"answer": answer.token}
 
     def choose(self, choice: str, scope_name: str | None) -> dict:
-        return self.shortlists.resolve(choice, self.scope_root(scope_name))
+        resolved = self.shortlists.resolve(choice, self.scope_root(scope_name))
+        if resolved["choice"] == "declined":
+            # The Owner rejecting every candidate is a miss whose shape is already known, so it is
+            # captured here rather than parsed: no model sees this tap, and none has to (ADR-0007).
+            self.answers.capture(token_of(choice), "not-in-the-shortlist")
+        return resolved
+
+    def capture(self, answer: str, shape: str, expect: str | None) -> dict:
+        return self.answers.capture(answer, shape, expect)
 
     async def read(self, path: str) -> dict:
         async with self._querying:
@@ -78,7 +93,17 @@ class SearchUnit:
 
     async def index(self, kind: str) -> PassReport:
         async with self._indexing:
-            return await anyio.to_thread.run_sync(run_pass, self.config, self.embedder, kind)
+            report = await anyio.to_thread.run_sync(run_pass, self.config, self.embedder, kind)
+        # The benchmark is scored on the index's own re-embed pass, which is the one that can have
+        # moved a number, and on demand — never on a schedule of its own (ADR-0007).
+        if kind == FULL:
+            await self.score()
+        return report
+
+    async def score(self) -> RetrievalReport:
+        """Every entry in the set, re-asked against the index as it stands. Nothing is applied."""
+        async with self._querying:
+            return await anyio.to_thread.run_sync(score_benchmark, self.config, self.embedder)
 
     def scope_root(self, name: str | None) -> str | None:
         if name is None:
@@ -89,6 +114,7 @@ class SearchUnit:
 
     def sweep(self) -> None:
         self.reader.sweep()
+        self.answers.sweep()
         self.shortlists.sweep()
         self.staging.sweep()
         self.embedder.release_if_idle()
@@ -105,7 +131,8 @@ def build(unit: SearchUnit) -> MCPServer:
             "between — each carrying the `choice` value a tap on it sends back — and `empty` means "
             "nothing indexed answers this. A result marked "
             "`contents_indexed: false` is known by its name alone — it exists, and what is inside "
-            "it has not been read."
+            "it has not been read. Every reply carries an `answer` value, which is the thing "
+            "`capture` records a wrong result against."
         ),
     )
     async def search(query: str, context: Context) -> dict:
@@ -122,6 +149,21 @@ def build(unit: SearchUnit) -> MCPServer:
     )
     async def choose(choice: str, context: Context) -> dict:
         return unit.choose(choice, _scope_of(context))
+
+    @server.tool(
+        name="capture",
+        description=(
+            "Record that one of `search`'s answers was wrong. Use it when the Owner replies to a "
+            "result to say so, and never otherwise: nothing here is inferred from how a message "
+            "reads. Pass the `answer` value that search's reply carried and the `shape` that fits "
+            "— " + ", ".join(f"`{one.shape}` ({one.what})" for one in FAILURES) + ". `expect` is "
+            "the absolute path that should have come back, if the Owner named one; leave it out "
+            "rather than asking for it. `expired` means the answer is too old to record against, "
+            "and `already` that this one is recorded."
+        ),
+    )
+    async def capture(answer: str, shape: Shape, expect: str | None = None) -> dict:
+        return unit.capture(answer, shape, expect)
 
     @server.tool(
         name="attach",
@@ -151,6 +193,16 @@ def build(unit: SearchUnit) -> MCPServer:
     @server.custom_route("/index/full", methods=["POST"])
     async def full(request: Request) -> JSONResponse:
         return _start_pass(unit, FULL)
+
+    # Awaited rather than accepted, unlike a pass: scoring the set is one query per entry against an
+    # index that is already built, and what pokes it is waiting to read the numbers back. A pass in
+    # flight is refused rather than scored through, because a number read off a half-rebuilt index
+    # moves for a reason that has nothing to do with retrieval — and moving is what gets posted.
+    @server.custom_route("/benchmark", methods=["POST"])
+    async def benchmark(request: Request) -> JSONResponse:
+        if unit.indexing:
+            return JSONResponse({"scored": False, "reason": "already indexing"}, 409)
+        return JSONResponse((await unit.score()).as_reply())
 
     return server
 
@@ -195,5 +247,6 @@ _INSTRUCTIONS = (
     "Syrax's file search over the Owner's own documents. `search` answers with a verdict rather "
     "than a ranked list, `choose` turns a tap on one of its candidates back into a document, "
     "`read` returns a document's text and `attach` puts one where it can be sent. The scope all "
-    "of it covers is fixed by this connection rather than by you."
+    "of it covers is fixed by this connection rather than by you. `capture` records a result the "
+    "Owner has said was wrong."
 )

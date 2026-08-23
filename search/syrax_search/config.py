@@ -30,6 +30,12 @@ EMBEDDER_DIRECTORY = "models/embeddinggemma-300m-onnx"
 # belongs to neither an agent nor a scratch sweeper. `staging.py` argues the handover.
 STAGING_DIRECTORY = ("media", "syrax-search")
 
+# A directory of its own under the index root, because what it holds is the one thing here a rebuild
+# cannot reproduce: every entry carries scores from an index that no longer exists. A `git init` in
+# it — never pushed, and the Owner's to run — is what makes a fat-fingered edit recoverable
+# (ADR-0007), and it needs a directory to be run in.
+BENCHMARK_DIRECTORY = ("benchmark",)
+
 
 class InvalidDeployment(Exception):
     pass
@@ -54,6 +60,16 @@ class SearchConfig:
     @property
     def failure_ledger_path(self) -> str:
         return os.path.join(self.index_root, "failures.jsonl")
+
+    @property
+    def benchmark_path(self) -> str:
+        """The one set of queries the index is scored against, fixture and live in one file."""
+        return os.path.join(self.index_root, *BENCHMARK_DIRECTORY, "set.jsonl")
+
+    @property
+    def retrieval_report_path(self) -> str:
+        """The last report, which is also what the next one reads to say whether a number moved."""
+        return os.path.join(self.index_root, *BENCHMARK_DIRECTORY, "retrieval-report.json")
 
 
 def read_deployment(path: str) -> SearchConfig:

@@ -12,6 +12,7 @@ import uvicorn
 from mcp.client.session import ClientSession
 from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
 
+from syrax_search.benchmark import LIVE, entries
 from syrax_search.building import INCREMENTAL, run_pass
 from syrax_search.server import SCOPE_HEADER, SearchUnit, build
 
@@ -121,3 +122,36 @@ async def test_a_tap_does_not_cross_from_one_connections_scope_to_another(addres
 
     assert (await _call(address, "choose", {"choice": tapped}, "notes"))["choice"] == "chosen"
     assert await _call(address, "choose", {"choice": tapped}, None) == {"choice": "expired"}
+
+
+@pytest.mark.anyio
+async def test_a_reply_saying_a_result_was_wrong_captures_it_with_its_numbers(address, machine):
+    answered = await _call(
+        address, "search", {"query": "artin wedderburn theorem semisimple rings"}, None
+    )
+    recorded = await _call(
+        address,
+        "capture",
+        {"answer": answered["answer"], "shape": "wrong-granularity"},
+        None,
+    )
+    assert recorded == {"captured": "wrong-granularity", "pending": True}
+
+    entry = entries(machine.benchmark_path)[0]
+    assert entry.query == "artin wedderburn theorem semisimple rings"
+    assert entry.verdict == answered["verdict"]
+    assert entry.scores and entry.origin == LIVE
+
+
+@pytest.mark.anyio
+async def test_the_none_of_these_tap_captures_the_same_way(address, machine):
+    """The tap's shape is known without asking, so nothing parses it and nothing is asked."""
+    offer = await _call(
+        address, "search", {"query": "quiver representations path algebra stroke rate"}, None
+    )
+    await _call(address, "choose", {"choice": offer["none_of_these"]}, None)
+
+    captured = entries(machine.benchmark_path)
+    assert [one.shape for one in captured] == ["not-in-the-shortlist"]
+    assert captured[0].verdict == "ambiguous"
+    assert captured[0].is_pending

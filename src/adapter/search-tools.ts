@@ -30,11 +30,12 @@ export function searchesOneScope(chat: Chat): boolean {
 }
 
 /** What the unit serves, in the order a turn reaches them. */
-export type SearchUnitTool = "search" | "choose" | "attach" | "read";
+export type SearchUnitTool = "search" | "choose" | "capture" | "attach" | "read";
 
 export const everySearchUnitTool: readonly SearchUnitTool[] = [
   "search",
   "choose",
+  "capture",
   "attach",
   "read",
 ];
