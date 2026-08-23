@@ -153,6 +153,17 @@ describe("the generated runtime configuration", () => {
       assert.match(chatInstruction(subject), /Deliver a sub-agent's answer as it\s+stands/);
     }
   });
+
+  it("tells every agent what opens the hatch, and what to do when it refuses", () => {
+    for (const subject of everyChat) {
+      const instruction = chatInstruction(subject);
+      assert.match(instruction, /syrax-hatch__reach/);
+      assert.match(instruction, /asked for it in so many words/);
+      assert.match(instruction, /never call it twice for\s+one question/);
+      assert.match(instruction, /Say what is left when it\s+answers/);
+      assert.match(instruction, /say the answer is yours rather than the\s+hatch's/);
+    }
+  });
 });
 
 describe("the four chats", () => {
