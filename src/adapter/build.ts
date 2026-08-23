@@ -8,6 +8,7 @@ import { agentDefaults, agentList } from "./agent-defaults.ts";
 import { delegationTools } from "./agent-tools.ts";
 import type { CarrierMap } from "./carriers.ts";
 import type { Deployment } from "./deployment.ts";
+import { hatchServer } from "./monitor-tools.ts";
 import { loggingBlock } from "./runtime-log.ts";
 import { providerBlocks } from "./providers.ts";
 import { searchServers } from "./search-tools.ts";
@@ -30,7 +31,7 @@ export function buildRuntimeConfig(deployment: Deployment, carriers: CarrierMap)
     tools: { profile: "minimal", alsoAllow: delegationTools },
     // Every server here is reachable by every agent; which tools an agent may *call* is the
     // per-agent allowlist in `agents.list`, and that is where the capability boundary is drawn.
-    mcp: { servers: searchServers(deployment) },
+    mcp: { servers: { ...searchServers(deployment), ...hatchServer(deployment) } },
     channels: { telegram: telegramChannel(deployment, carriers) },
     commands: ownerCommandAllowlist(deployment),
     gateway: {

@@ -54,6 +54,12 @@ empty_floor = -0.05
 # sitting in memory around the clock. The first search after a gap pays the model load.
 idle_evict_after = "30m"
 
+[lane_monitor]
+# The third unit: the escape hatch over MCP, and the counters behind it. Which models the rationed
+# lane holds is `src/adapter/hatch-lane.ts` rather than this file, for the reason the chains are —
+# a rung is a provider and a model together, ordered (ADR-0006).
+port = 18791
+
 [security]
 # One JSON store, reached by file-backed SecretRefs, and refused rather than used when the machine
 # has left it readable (ADR-0010). Nothing resolved is written down: the runtime's generated

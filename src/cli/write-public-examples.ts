@@ -12,10 +12,13 @@ import { gatewayWrapperScript } from "../supervision/gateway-wrapper.ts";
 import {
   gatewayLabel,
   gatewayLaunchAgentPlist,
+  hatchLabel,
   indexSchedulePlists,
+  monitorLaunchAgentPlist,
   searchLabel,
   searchLaunchAgentPlist,
 } from "../supervision/launch-agent.ts";
+import { monitorWrapperScript } from "../supervision/monitor-wrapper.ts";
 import { searchWrapperScript } from "../supervision/search-wrapper.ts";
 
 const configDirectory = resolve(import.meta.dirname, "..", "..", "config");
@@ -27,6 +30,12 @@ export const exampleDeploymentPath = join(configDirectory, "deployment.example.j
  * example is the text the mini gets rather than a copy carrying this checkout's location.
  */
 const exampleDeploymentLocation = "/absolute/path/outside/this/repository/deployment.json";
+
+/**
+ * The monitor's wrapper names the checkout, since the unit it runs is this repository's own source.
+ * The example says so rather than carrying whichever clone rendered it.
+ */
+const exampleCheckoutLocation = "/absolute/path/to/this/checkout";
 
 export function publicExamples(deployment: Deployment): Record<string, string> {
   const schedules = Object.entries(indexSchedulePlists(deployment)).map(
@@ -40,6 +49,12 @@ export function publicExamples(deployment: Deployment): Record<string, string> {
       exampleDeploymentLocation,
     ),
     [join(configDirectory, `${searchLabel}.example.plist`)]: searchLaunchAgentPlist(deployment),
+    [join(configDirectory, "start-monitor.example.sh")]: monitorWrapperScript(
+      deployment,
+      exampleDeploymentLocation,
+      exampleCheckoutLocation,
+    ),
+    [join(configDirectory, `${hatchLabel}.example.plist`)]: monitorLaunchAgentPlist(deployment),
     ...Object.fromEntries(schedules),
   };
 }

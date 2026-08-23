@@ -9,6 +9,7 @@
  */
 
 import type { Chat } from "./chats.ts";
+import { hatchTool } from "./monitor-tools.ts";
 import { everySearchUnitTool, searchesTheCorpus, searchTool } from "./search-tools.ts";
 
 /** Without these the front lane cannot spawn, and the lane that thinks is unreachable (ADR-0022). */
@@ -22,9 +23,10 @@ export const delegationTools = ["sessions_spawn", "sessions_yield", "subagents"]
 const messageTool = "message";
 
 export function agentTools(chat: Chat): string[] {
-  if (!searchesTheCorpus(chat)) return [...delegationTools];
+  if (!searchesTheCorpus(chat)) return [...delegationTools, hatchTool];
   return [
     ...delegationTools,
+    hatchTool,
     ...everySearchUnitTool.map((tool) => searchTool(chat, tool)),
     messageTool,
   ];

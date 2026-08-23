@@ -82,6 +82,49 @@ also reads the gateway log for rungs the chains have dropped, and sweeps the run
 see, per [ADR-0012](adr/0012-a-rotted-rung-is-reported-and-never-repaired.md). The launchd label
 stays `com.jerome-group.syrax.hatch`; the name is vocabulary rather than a redeploy.
 
+Its own three keys sit in the deployment beside the search unit's, and it is installed the same way:
+
+| Key | What it is |
+|-----|------------|
+| `monitorState` | Where the rationed lane's counters live — private runtime state, outside the checkout, and the reason the unit is separate: a restart that lost them would hand back an allowance already spent |
+| `monitorWrapperPath` | Its wrapper, in the gateway's shape. What the wrapper runs is **this repository's own source**, since the monitor is Syrax's code where the other two units are installed trees |
+| `monitorPort` | The loopback port the agents reach the escape hatch on; `18791` unless the deployment says otherwise |
+
+```
+node src/cli/install-monitor-agent.ts <deployment.json>
+```
+
+Its pre-flight has this unit's own two checks. It **refuses to start** when the counters' directory
+cannot be made private, and when the secrets store is missing or the machine has left it readable —
+[ADR-0010](adr/0010-one-secrets-store-reached-by-file-backed-refs.md)'s refusal met once at start
+rather than at each call the hatch makes.
+
+## The escape hatch
+
+The rationed lane is reached through one MCP tool the monitor serves, `syrax-hatch__reach`, and
+every chat carries the connection: the hatch is a **lane** rather than a capability, so a chat
+boundary is the wrong thing to draw around it — the Owner asking for it in Academic is asking about
+the question in front of them.
+
+What the tool does that a chain rung cannot is **refuse before it spends**. It refuses a call the
+Owner did not ask for in so many words, and it refuses a day whose rungs are gone; in both cases
+nothing leaves the machine. Every answer states what is left, so *"two hatch calls left today, still
+want it?"* is a thing the front lane can say.
+
+The counters are per rung, one per model row of the version ladder, each carrying that row's own
+20-a-day allowance. A call is counted **before the request leaves** — a refusal spends the
+allowance too — and the day rolls where the provider resets it rather than where the machine is.
+Which rows the lane holds is `src/adapter/hatch-lane.ts`: a row joins it only once it has been
+measured answering from a bucket of its own, because half of Gemini's names are aliases of another
+row and an alias buys a counter and no allowance.
+
+**Headroom is read per provider, and the timestamp is part of the reading.** The provider is the
+authority wherever it speaks: Mistral and Groq state their remaining rungs in headers on a call
+already being made, and those numbers are taken over any count kept here. Gemini reports nothing at
+all, which is why it is the one provider counted locally. Z.AI publishes no allowance to count and
+reports none, so its headroom is *unknown* — as is a source whose telemetry has stopped parsing,
+which then says when it was last understood rather than reading as a quiet day.
+
 ## The usage report
 
 The hatch unit writes the usage report to the `usage_report` path, and a launchd calendar job pokes

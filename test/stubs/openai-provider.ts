@@ -20,8 +20,12 @@ export type ScriptedResponse =
 
 export type ProviderRequest = { path: string; body: Record<string, unknown> };
 
-/** A scripted response, and how long the rung takes to produce it. */
-export type ScriptedTurn = ScriptedResponse & { afterMs?: number };
+/** A scripted response, how long the rung takes to produce it, and what it says about itself. */
+export type ScriptedTurn = ScriptedResponse & {
+  afterMs?: number;
+  /** Rate-limit headers, which three of the four providers send and two send in their own shape. */
+  headers?: Record<string, string>;
+};
 
 export class ProviderStub {
   readonly requests: ProviderRequest[] = [];
@@ -110,6 +114,9 @@ export class ProviderStub {
     if (scripted.kind === "silence") return;
     if (scripted.afterMs !== undefined) {
       await new Promise((resolve) => setTimeout(resolve, scripted.afterMs));
+    }
+    for (const [name, value] of Object.entries(scripted.headers ?? {})) {
+      response.setHeader(name, value);
     }
     if (scripted.kind === "rateLimited") {
       response.setHeader("retry-after", String(scripted.retryAfterSeconds));

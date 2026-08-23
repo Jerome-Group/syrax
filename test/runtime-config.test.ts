@@ -21,6 +21,8 @@ const deployment = readDeployment({
   searchRoot: "/private/root/search-env",
   searchIndex: "/private/root/search-index",
   searchWrapperPath: "/private/root/bin/start-search.sh",
+  monitorState: "/private/root/lane-monitor",
+  monitorWrapperPath: "/private/root/bin/start-monitor.sh",
   searchScopes: { academic: "/private/root/corpus/modules" },
   ownerTelegramUserId: 100000000,
 });
