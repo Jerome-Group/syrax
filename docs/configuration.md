@@ -117,7 +117,9 @@ allowance too — and the day rolls where the provider resets it rather than whe
 Which rows the lane holds is `src/adapter/hatch-lane.ts`, and it is **four** — measured on the
 account rather than read off the catalogue, which lists seven Flash rows of which one is an alias of
 the newest and one is withdrawn while still listed. A row joins the lane only once it has answered
-and its neighbours have been probed in the same minute, because a name is not an allowance.
+and its neighbours have been probed in the same minute, because a name is not an allowance;
+[ADR-0029](adr/0029-the-rationed-lanes-rungs-are-measured-and-there-are-four.md) carries the
+measurement and the rule.
 
 **Headroom is read per provider, and the timestamp is part of the reading.** The provider is the
 authority wherever it speaks: Mistral and Groq state their remaining rungs in headers on a call

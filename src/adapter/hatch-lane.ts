@@ -3,11 +3,11 @@
  * the runtime walks this chain — the lane monitor's hatch tool reaches a rung directly, and a rung
  * named here is deliberately absent from `front-lane.ts` and `worker-lane.ts` (ADR-0006).
  *
- * **The ladder is four rows, and it was five names.** Measured on the Owner's own account
- * (`free-tier-limits.md`, 2026-08-24): `gemini-flash-latest` is an alias, refusing in the same
- * minute bucket as `gemini-3.7-flash` while the other rows answered; and `gemini-2.5-flash` is in
- * the catalogue and 404s. So a row joins this list only once it has been saturated and its
- * neighbours probed, because a name is not an allowance and the catalogue is not an entitlement.
+ * **The ladder is four rows, and it was five names** (ADR-0029). `gemini-flash-latest` is an alias,
+ * refusing in the same minute bucket as `gemini-3.7-flash` while the other rows answered, and
+ * `gemini-2.5-flash` is in the catalogue and 404s. So a row joins this list only once it has
+ * answered and its neighbours have been probed in the same minute: a name is not an allowance, and
+ * a catalogue is not an entitlement.
  */
 
 export type RationedRung = {
