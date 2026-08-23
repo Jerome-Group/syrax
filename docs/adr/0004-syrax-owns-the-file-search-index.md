@@ -8,6 +8,11 @@
 > **Amended by [ADR-0024](0024-a-watermark-is-not-a-text-layer-and-the-scope-is-a-pattern.md)** in
 > two: a text layer that is one line repeated per page is treated as no text layer, and an
 > extraction scope entry may be a glob as well as a root.
+>
+> **Amended by [ADR-0025](0025-confident-asks-the-arm-whose-score-it-reads.md)** in two: the
+> `empty` floor is re-fitted from −0.23 to −0.05 for a corpus ten times the size it was measured on,
+> and `confident` gains a condition — the vector arm must have chosen the document whose score is
+> being read.
 
 Natural-language file search is built here: one SQLite database carrying a keyword arm and a vector
 arm over the same extracted text, indexed by a small Python process and served to the runtime as a
@@ -140,12 +145,16 @@ each one measuring something other than what it was asked to:
 - **The margin separates nothing.** Correct answers were found at a gap of 0.00000 and wrong ones
   at 0.00239.
 - **Both arms agreeing** was a perfect precision filter for the two rejected models and **fires
-  falsely for the pinned one**, which is the only place it matters.
+  falsely for the pinned one**, which is the only place it matters. *(Re-read at ten times this
+  corpus it still does, by the same margin; what replaced it is the weaker condition that the arm
+  being scored chose the document — [ADR-0025](0025-confident-asks-the-arm-whose-score-it-reads.md).)*
 
 So the floor keeps only its *other* job — triggering `empty` — where it works cleanly: **−0.23**,
 in a window from −0.292 to −0.172 that separates an unanswerable query from every correct answer.
 `confident` becomes a single condition, a floor of **0.12** on the fused top result, which marks 4
-of 14 queries confident with none wrong.
+of 14 queries confident with none wrong. *(Both are overtaken by the corpus this was measured
+against growing tenfold: the window is now −0.099 to −0.006 and the floor −0.05, and a single
+condition turned out to be one too few — [ADR-0025](0025-confident-asks-the-arm-whose-score-it-reads.md).)*
 
 That 0.12 is **provisional and fitted**, and is recorded as such rather than presented as tuned: it
 sits 0.003 above a wrong answer on a fifteen-query benchmark, which is a number chosen by the
@@ -296,7 +305,8 @@ before spending it would hold up the thing the number is meant to inform.
 - The `confident` floor of 0.12 is revisited on a benchmark larger than fifteen queries, because it
   was fitted to that one.
 - The corpus grows by an order of magnitude, at which point brute-force cosine over one SQLite file
-  stops being the obvious answer.
+  stops being the obvious answer. *(It did, at 147,214 chunks. Brute force held; the `empty` floor
+  did not — [ADR-0025](0025-confident-asks-the-arm-whose-score-it-reads.md).)*
 - Image, audio or video search becomes a requirement — the research names Omni as the fallback, at
   1.9–3.1 GB resident.
 - The machine changes shape, which is a prompt to re-read the blocklist rather than to trust it.

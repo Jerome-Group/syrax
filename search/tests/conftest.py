@@ -2,8 +2,13 @@
 
 The stub is not a mock that returns scripted answers: it is a real bag-of-words embedding over unit
 vectors, so `1 - distance` behaves the way the pinned model's does — a document that shares the
-query's words scores high, one that shares half of them lands mid-range, one that shares none lands
-below the empty floor. That is what makes a verdict test mean something.
+query's words scores high and one that shares none lands below the empty floor. That is what makes
+a verdict test mean something.
+
+It shares the floors with the real index rather than having its own, so **a query here is chosen
+for where its score falls against them**. At the floor ADR-0025 re-fitted, sharing a couple of words
+with a ten-word document is `empty` and not a shortlist, which is why the shortlist query names most
+of one document and part of another. A floor that moves again moves these queries with it.
 """
 
 from __future__ import annotations
@@ -80,7 +85,7 @@ CORPUS = {
         "quiver representations path algebra gabriel theorem dynkin diagrams indecomposable modules"
     ),
     "notes/rowing.md": "rowing erg splits stroke rate technique catch drive finish recovery",
-    "scanned/receipt.pdf": None,
+    "scanned/hardware store receipt.pdf": None,
 }
 
 

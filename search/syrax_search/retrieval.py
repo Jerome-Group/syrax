@@ -5,10 +5,11 @@ be tuned against real queries instead of prose a model may quietly reinterpret �
 a pull request, which is the line ADR-0007 draws between a loop that reports and a loop that
 retunes itself.
 
-Both floors are what survived #34's trial, and two conditions did not. `confident` originally
-required an absolute floor **and** a margin over the runner-up **and** both arms agreeing; the
-margin separated nothing, both-arms-agree fired falsely for the pinned model, and the floor's other
-job — deciding *empty* — is the only one it does cleanly.
+`confident` originally required an absolute floor **and** a margin over the runner-up **and** both
+arms agreeing. #34's trial dropped all three but the floor: the margin separated nothing and
+both-arms-agree fired falsely for the pinned model. A floor on its own turned out not to be enough
+either — it was read against a score belonging to whichever document fusion happened to lift, so
+ADR-0025 puts back the weakest form of agreement that answers that, and no more.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .terms import terms_of
+from .terms import terms_of, words_of
 
 # Fitted rather than tuned: 0.12 sits 0.003 above the best wrong answer on a fifteen-query
 # benchmark, which is a number chosen by that benchmark's smallest gap. It is safe in the direction
@@ -26,11 +27,22 @@ from .terms import terms_of
 # it is the first thing a grown benchmark should revisit.
 CONFIDENT_FLOOR = 0.12
 
-# In a window from -0.292 to -0.172 that separates an unanswerable query from every correct answer.
-EMPTY_FLOOR = -0.23
+# The midpoint of the window that separates an unanswerable query from every correct answer, which
+# is the method #34 fitted the first one by and not a number carried over from it. That first
+# window ran from -0.292 to -0.172 over 14,577 chunks and gave -0.23. Measured again over 147,214,
+# it runs from -0.099 to -0.006 and gives this — a maximum taken over ten times the sample is
+# higher for that reason alone, which is the trigger ADR-0004 names under *Revisit when* and
+# ADR-0025 acts on. Below it, `empty` had stopped firing at all.
+EMPTY_FLOOR = -0.05
 
-# Both floors are read against `1 - distance` from the vector arm, which is the expression the
-# trial fitted them to. ADR-0004 calls that quantity a cosine and it is not one: a `vec0` table
+# What the name arm has to have matched before it excuses a document from the floor. More than half
+# the query's words, because *Dummit and Foote* is a name and *my flight booking to Tokyo* matching
+# a coursework filename on `booking` is not. Measured, the two are not close: a query that names its
+# target covers 0.75 to 1.00 of itself and one that shares a word covers 0.33.
+NAME_MATCH_MAJORITY = 0.5
+
+# Both floors are read against `1 - distance` from the vector arm, which is the expression both
+# fittings measured. ADR-0004 calls that quantity a cosine and it is not one: a `vec0` table
 # without `distance_metric` returns L2. The arithmetic is reproduced rather than reinterpreted, and
 # ADR-0023 is why — declaring the metric cosine and keeping these two numbers would leave a floor
 # nobody has measured against wearing the authority of a measurement made against something else.
@@ -65,14 +77,25 @@ class Verdict:
                 for one in self.candidates
             ],
             "floor": self.floor,
-            "floor_provenance": "fitted to a fifteen-query benchmark, provisional (ADR-0004)",
+            "floor_provenance": self.provenance,
         }
+
+    @property
+    def provenance(self) -> str:
+        """The two floors were fitted against different benchmarks, and only one is re-fitted.
+
+        One string for both would have to describe the weaker of the two, and this field exists to
+        stop a number wearing an authority it was not measured with.
+        """
+        if self.floor == EMPTY_FLOOR:
+            return "re-fitted to a twenty-seven-query benchmark, provisional (ADR-0025)"
+        return "fitted to a fifteen-query benchmark, provisional (ADR-0004)"
 
 
 def search(
     database: sqlite3.Connection, query: str, query_vector: np.ndarray, scope: str | None
 ) -> Verdict:
-    keyword, named = _keyword_arm(database, query, scope)
+    keyword, naming = _keyword_arm(database, query, scope)
     vector, scores = _vector_arm(database, query_vector, scope)
     ranked = _fuse(vector, keyword)
     if not ranked:
@@ -85,7 +108,7 @@ def search(
     # want (ADR-0004). A body-text hit is not the same evidence: one common word shared with a long
     # document is what the floor is there to reject, so it does not lift a query off it.
     best = max(scores.values(), default=EMPTY_FLOOR - 1)
-    if best < EMPTY_FLOOR and not named:
+    if best < EMPTY_FLOOR and not naming:
         return Verdict("empty", (), EMPTY_FLOOR)
 
     # A document held by name alone has no vector, so it cannot clear the floor and is never
@@ -93,9 +116,24 @@ def search(
     # filename the query happened to share words with is not grounds for sending a document the
     # index has never read inside.
     top = ranked[0]
-    if scores.get(top, EMPTY_FLOOR - 1) >= CONFIDENT_FLOOR:
+    if arms_agree(top, vector, keyword) and scores.get(top, EMPTY_FLOOR - 1) >= CONFIDENT_FLOOR:
         return Verdict("confident", _describe(database, ranked[:1]), CONFIDENT_FLOOR)
     return Verdict("ambiguous", _describe(database, ranked[:SHORTLIST]), CONFIDENT_FLOOR)
+
+
+def arms_agree(top: int, vector: list[int], keyword: list[int]) -> bool:
+    """Both arms chose this document: the vector arm put it first, and the keyword arm ranked it.
+
+    Fusion can hand first place to a document neither arm led with, and the confident floor is then
+    read against a vector score that was never a statement about it — `00 Module Profile.md` cleared
+    0.12 on 0.132 while the vector arm preferred something else and the name arm ranked it nowhere
+    (#126). So `confident` asks the arm whose number is being read whether it agrees.
+
+    This is not ADR-0004's withdrawn condition restored. That one required both arms to rank the
+    document *first*, which at this corpus size takes two correct confident answers in three down
+    with the wrong ones; ADR-0025 has the numbers.
+    """
+    return bool(vector) and vector[0] == top and top in keyword
 
 
 def _match_expression(query: str) -> str | None:
@@ -107,7 +145,7 @@ def _match_expression(query: str) -> str | None:
 def _keyword_arm(
     database: sqlite3.Connection, query: str, scope: str | None
 ) -> tuple[list[int], list[int]]:
-    """The arm, and its name half on its own — the only half that can lift a query off the floor."""
+    """The arm, and the documents the query *names* — the only ones that lift it off the floor."""
     expression = _match_expression(query)
     if expression is None:
         return [], []
@@ -123,15 +161,31 @@ def _keyword_arm(
     ).fetchall()
     name_hits = database.execute(
         """
-        SELECT documents.id FROM name_fts
+        SELECT documents.id, documents.name FROM name_fts
         JOIN documents ON documents.id = name_fts.rowid
         WHERE name_fts MATCH ? AND (? IS NULL OR documents.path LIKE ? || '/%')
         ORDER BY rank LIMIT ?
         """,
         (expression, scope, scope, NAME_POOL),
     ).fetchall()
-    named = _first_seen(name_hits)
-    return _fuse(_first_seen(text_hits), named), named
+    terms = terms_of(query)
+    naming = [one for one, name in name_hits if _names_the_query(terms, name)]
+    return _fuse(_first_seen(text_hits), _first_seen(name_hits)), naming
+
+
+def _names_the_query(terms: list[str], name: str) -> bool:
+    """How much of what was typed the document's own name accounts for.
+
+    `name_fts` holds the whole path's words, so a document can be a name hit on a directory alone.
+    The exemption asks a narrower question than the match did, and deliberately: an ancestor
+    directory is shared by everything beneath it, so two of its words would carry a query over this
+    line without naming anything. On the measured queries the two readings agree wherever the
+    exemption is what decides the verdict.
+    """
+    wanted = set(terms)
+    if not wanted:
+        return False
+    return len(wanted & set(words_of(name))) > len(wanted) * NAME_MATCH_MAJORITY
 
 
 def _vector_arm(
