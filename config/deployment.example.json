@@ -11,6 +11,8 @@
   "searchRoot": "/absolute/path/outside/this/repository/search-env",
   "searchIndex": "/absolute/path/outside/this/repository/search-index",
   "searchWrapperPath": "/absolute/path/outside/this/repository/bin/start-search.sh",
+  "monitorState": "/absolute/path/outside/this/repository/lane-monitor",
+  "monitorWrapperPath": "/absolute/path/outside/this/repository/bin/start-monitor.sh",
   "indexAllowlist": ["/absolute/path/to/a/root/worth/indexing"],
   "extractionScope": [
     "/absolute/path/to/a/root/worth/indexing",

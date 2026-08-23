@@ -86,8 +86,20 @@ commit.
    curl --fail -X POST http://127.0.0.1:18790/index/full
    ```
 
-9. Before committing a change, inspect the staged file list and search it for credentials, private
-   conversations, machine-specific paths, and provider responses.
+9. **Stand up the lane monitor.** It is the third unit, and the one that holds what the runtime
+   does not: the rationed lane's counters, and the escape hatch that refuses before it spends.
+
+   ```sh
+   node src/cli/install-monitor-agent.ts "$DEPLOYMENT"
+   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jerome-group.syrax.hatch.plist
+   ```
+
+   What its wrapper runs is this checkout, so move or rename the checkout and run the installer
+   again. Its pre-flight **refuses to start** when the counters' directory cannot be made private,
+   and when the secrets store is missing or the machine has left it readable.
+
+10. Before committing a change, inspect the staged file list and search it for credentials, private
+    conversations, machine-specific paths, and provider responses.
 
 ## When a chat comes back empty
 

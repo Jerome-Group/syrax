@@ -21,6 +21,10 @@ import type { Deployment } from "../adapter/deployment.ts";
 export const gatewayLabel = "com.jerome-group.syrax.gateway";
 export const searchLabel = "com.jerome-group.syrax.search";
 
+/** The lane monitor's, kept as `hatch` from when the hatch was all it did: renaming it would be a
+ * redeploy for a word, and the name is vocabulary (ADR-0012). */
+export const hatchLabel = "com.jerome-group.syrax.hatch";
+
 export const incrementalIndexLabel = "com.jerome-group.syrax.index-incremental";
 export const fullIndexLabel = "com.jerome-group.syrax.index-full";
 
@@ -53,6 +57,10 @@ export function gatewayLaunchAgentPlist(deployment: Deployment): string {
 
 export function searchLaunchAgentPlist(deployment: Deployment): string {
   return residentUnitPlist(searchLabel, deployment.searchWrapperPath);
+}
+
+export function monitorLaunchAgentPlist(deployment: Deployment): string {
+  return residentUnitPlist(hatchLabel, deployment.monitorWrapperPath);
 }
 
 /** The hourly incremental pass and the three-day full one, each a poke at the resident unit. */

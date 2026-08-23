@@ -1,11 +1,14 @@
 # The runtime routes, and Syrax owns the escape hatch
 
-> **Amended twice.**
+> **Amended three times.**
 > [ADR-0009](0009-the-chains-are-recomposed-and-stand-down-is-a-config-write.md) re-composes both
 > chains and makes a stand down a config write with no restart — so this record's *"a configuration
 > change plus a unit restart"*, its *"drops in-flight turns"* and its *"escalating to 5 minutes"*
 > no longer hold. [ADR-0012](0012-a-rotted-rung-is-reported-and-never-repaired.md) gives the usage
 > report a second subject and a second source, and renames the third unit the **lane monitor**.
+> [ADR-0029](0029-the-rationed-lanes-rungs-are-measured-and-there-are-four.md) measures the version
+> ladder at **four** rungs and makes membership of the rationed lane a measurement rather than a
+> count.
 
 There is no provider router. The runtime's own fallback chains do the routing, and Syrax builds only
 the two things the runtime cannot express: an **escape-hatch tool** that refuses before it spends,
@@ -79,7 +82,8 @@ setting and the worker lane on the sub-agent override.
 [#13](https://github.com/Jerome-Group/syrax/issues/13)'s three-lane table will otherwise read as
 three configuration entries, and it is not one.
 
-**The escape hatch is a tool, not a chain.** It holds **five** counters — one per rung of the
+**The escape hatch is a tool, not a chain.** It holds **five** counters *(spent —
+[ADR-0029](0029-the-rationed-lanes-rungs-are-measured-and-there-are-four.md))* — one per rung of the
 version ladder, each model row carrying its own 20-a-day allowance — and refuses before spending
 anything, which a chain member cannot do. This is #13's own move applied one level down: it made the
 worker lane a sub-agent called as a tool rather than a fallback tier, and the same reasoning makes

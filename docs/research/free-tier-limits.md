@@ -726,6 +726,48 @@ same pass. That is recorded as measured and unexplained rather than reasoned awa
 routed to an endpoint the counter does not reach, and anything built on it would be resting on
 that guess.
 
+## The Flash ladder, measured for the hatch — 2026-08-24
+
+Research for [#127](https://github.com/Jerome-Group/syrax/issues/127), which needed to know how many
+rungs the rationed lane actually has before counters could be kept per rung. Measured against the
+Owner's own account, at a cost of **fifteen requests** out of the day's eighty.
+
+The catalogue lists seven Flash rows once the lite, image, audio and omni variants are set aside.
+Four of them are the lane:
+
+| Row | One minimal completion | What it is |
+|---|---|---|
+| `gemini-3.7-flash` | 200 | a rung |
+| `gemini-3.6-flash` | 200 | a rung |
+| `gemini-3.5-flash` | 200 | a rung |
+| `gemini-3-flash-preview` | 200 | a rung |
+| `gemini-flash-latest` | 200 | **an alias of 3.7** — see below |
+| `gemini-2.5-flash` | **404** | listed and gone |
+| `gemini-omni-flash-preview` | not probed | another family, not a text rung |
+
+**`gemini-flash-latest` shares 3.7's bucket, which makes it a counter and no allowance.** Seven
+rapid calls to it were refused on the **fifth** — `Quota exceeded for metric:
+generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 5`, the 5 RPM this
+document's first section read off the console. `gemini-3.7-flash` was refused in the same minute,
+while `gemini-3.5-flash` and `gemini-3-flash-preview` both answered `200` — so the bucket is per
+model, as [#94](https://github.com/Jerome-Group/syrax/issues/94) found for Flash Lite, and the
+`-latest` row is the newest row wearing a second name.
+
+**`gemini-2.5-flash` is the catalogue lying in the direction [#56](https://github.com/Jerome-Group/syrax/issues/56)
+measured**, and it says so itself:
+
+> This model models/gemini-2.5-flash is no longer available to new users. Please update your code to
+> use models/gemini-3.6-flash for the latest features and improvements.
+
+Its Flash Lite sibling went the same way — `gemini-2.5-flash-lite` answered `404 no longer
+available` in #94 — so a 2.x row is a name to stop reaching for rather than one that happens to be
+down.
+
+**So the ladder is four rungs, not the five [ADR-0006](../adr/0006-the-runtime-routes-and-syrax-owns-the-escape-hatch.md)
+counted**, and the count is a property of the provider rather than of the design: the fifth name is
+an alias and the sixth is withdrawn. `src/adapter/hatch-lane.ts` holds the four, and the hatch's
+counters are read from that composition, so the day a fifth row is measured it is one entry there.
+
 ## Sources
 
 - [Gemini API rate limits](https://ai.google.dev/gemini-api/docs/rate-limits) — tier ladder;

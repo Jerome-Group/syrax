@@ -30,6 +30,12 @@ export type Deployment = {
   searchWrapperPath: string;
   /** The loopback port the four agents reach the search unit on. */
   searchPort: number;
+  /** The lane monitor's counters and last-read timestamps: what the runtime does not hold. */
+  monitorState: string;
+  /** The lane monitor's own wrapper, in the gateway's shape. */
+  monitorWrapperPath: string;
+  /** The loopback port the agents reach the escape hatch on. */
+  monitorPort: number;
   /**
    * The named scopes the search unit maps to roots. The unit reads them from this same file; the
    * adapter reads them only to refuse a chat whose scope no machine configured.
@@ -52,6 +58,9 @@ export const gatewayPort = 18789;
 
 /** One above the gateway's, so a `lsof` on either reads as the unit it belongs to. */
 export const searchPort = 18790;
+
+/** One above the search unit's, for the same reason. */
+export const monitorPort = 18791;
 
 export const providerBaseUrls: Record<ProviderId, string> = {
   "syrax-gemini": "https://generativelanguage.googleapis.com/v1beta/openai",
@@ -76,6 +85,8 @@ const requiredPaths = [
   "searchRoot",
   "searchIndex",
   "searchWrapperPath",
+  "monitorState",
+  "monitorWrapperPath",
 ] as const;
 
 export function readDeployment(source: unknown): Deployment {
@@ -110,6 +121,9 @@ export function readDeployment(source: unknown): Deployment {
     searchIndex: input.searchIndex as string,
     searchWrapperPath: input.searchWrapperPath as string,
     searchPort: readPort(input.searchPort, searchPort),
+    monitorState: input.monitorState as string,
+    monitorWrapperPath: input.monitorWrapperPath as string,
+    monitorPort: readPort(input.monitorPort, monitorPort),
     searchScopes: readSearchScopes(input.searchScopes),
     ownerTelegramUserId: ownerTelegramUserId as number,
     telegramApiRoot: readUrl(input.telegramApiRoot, "telegramApiRoot") ?? telegramApiRoot,

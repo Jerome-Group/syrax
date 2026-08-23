@@ -5,6 +5,9 @@
 > front lane is reversed, and the accepted risk that Flash Lite is load-bearing on two lanes is
 > retired. Everything about stand down is untouched.
 >
+> **Amended by [ADR-0029](0029-the-rationed-lanes-rungs-are-measured-and-there-are-four.md).** The
+> rationed lane's five rungs are four, measured; everything else about the hatch is untouched.
+>
 > **Amended by [ADR-0021](0021-a-config-write-is-applied-when-it-is-written-and-landed-when-a-channel-reloads.md).** A stand down is still a config write, and the
 > write is still hot-applied — but it is not live on the next turn. It lands when a channel reloads,
 > so the actuator is the write **plus** a safe restart. Everything structural about stand down
@@ -165,8 +168,9 @@ The hot-apply is a new **actuator**; the hatch is a **sensor plus a refusal**. I
 Gemini is spent, and Gemini is the one provider that reports nothing at all — which is precisely why
 a local counter was kept for Gemini alone. Then it has to decline *before* spending 5% of the day,
 where a chain member can only 429. And the hatch sits in no chain, so there is no membership for a
-config write to remove. **Five per-rung counters survive unchanged, and the hatch stays its own
-unit**: removal-after-you-know does not substitute for refuse-before-you-spend.
+config write to remove. **Five per-rung counters survive unchanged *(spent —
+[ADR-0029](0029-the-rationed-lanes-rungs-are-measured-and-there-are-four.md))*, and the hatch stays
+its own unit**: removal-after-you-know does not substitute for refuse-before-you-spend.
 
 **Stand down and pin still do not collapse**, but ADR-0006's asymmetry was recorded on the wrong
 axis. It made them asymmetric on *cost* — pin native and free, stand down having no mechanism at all

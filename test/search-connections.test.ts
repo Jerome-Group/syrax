@@ -26,6 +26,8 @@ const deployment = readDeployment({
   searchRoot: "/private/root/search-env",
   searchIndex: "/private/root/search-index",
   searchWrapperPath: "/private/root/bin/start-search.sh",
+  monitorState: "/private/root/lane-monitor",
+  monitorWrapperPath: "/private/root/bin/start-monitor.sh",
   searchScopes: { academic: "/private/root/corpus/modules" },
   ownerTelegramUserId: 100000000,
 });
@@ -42,10 +44,11 @@ function agent(id: string) {
 
 describe("the connections to the search unit", () => {
   it("gives every chat that searches its own connection to the one resident unit", () => {
-    assert.deepEqual(Object.keys(servers), ["syrax-search-general", "syrax-search-academic"]);
-    for (const server of Object.values(servers)) {
-      assert.equal(server.url, "http://127.0.0.1:18790/mcp");
-      assert.equal(server.transport, "streamable-http");
+    const searchServers = Object.keys(servers).filter((name) => name.startsWith("syrax-search-"));
+    assert.deepEqual(searchServers, ["syrax-search-general", "syrax-search-academic"]);
+    for (const name of searchServers) {
+      assert.equal(servers[name]!.url, "http://127.0.0.1:18790/mcp");
+      assert.equal(servers[name]!.transport, "streamable-http");
     }
   });
 
@@ -69,7 +72,7 @@ describe("the connections to the search unit", () => {
 
   it("leaves the chats that own a capability off the corpus entirely", () => {
     for (const chat of [chats.media, chats.system]) {
-      assert.deepEqual(agent(chat.id).tools.alsoAllow, delegationTools);
+      assert.ok(!agent(chat.id).tools.alsoAllow.some((tool) => tool.startsWith("syrax-search-")));
     }
   });
 
