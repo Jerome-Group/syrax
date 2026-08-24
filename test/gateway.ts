@@ -14,7 +14,7 @@ import type { ProviderId } from "../src/adapter/lane.ts";
 import { everyChat } from "../src/adapter/chats.ts";
 import { ownerTelegramUserId, temporaryMachine, writePrivateSecretsStore } from "./machine.ts";
 import { ProviderStub } from "./stubs/openai-provider.ts";
-import { TelegramStub } from "./stubs/telegram-bot-api.ts";
+import { TelegramStub, type OutboundCall } from "./stubs/telegram-bot-api.ts";
 
 /** Set on the mini, where the suite runs; the gateway-backed tests skip without it. */
 export const runtimeRoot = process.env.SYRAX_RUNTIME_ROOT ?? "";
@@ -180,4 +180,44 @@ export async function standSyrax(
       await provider.close();
     },
   };
+}
+
+/** One turn, reported as what the prompt carries: the model asked, and the agent that asked. */
+export type Turn = { model: string; agent: string };
+
+/** What every stub in this fixture replies, and what a turn waits for on the way back out. */
+export const answer = "Answered.";
+
+/**
+ * One turn through the whole thing: injected at the Telegram wire, read at the provider wire. Every
+ * suite that drives the real gateway asks the same question of it — *which rung answered* — so the
+ * asking lives here rather than once per suite.
+ */
+export async function turn(syrax: SyraxFixture, text: string, carrier?: number): Promise<Turn> {
+  const isAnswer = (call: OutboundCall) => call.body.text === answer;
+  const since = syrax.telegram.matching("sendMessage", isAnswer).length;
+  syrax.telegram.inject({ fromUserId: ownerTelegramUserId, text, messageThreadId: carrier });
+  await syrax.telegram.waitFor("sendMessage", isAnswer, 60_000, since);
+  const body = syrax.provider.requests.at(-1)?.body as { model?: string };
+  return {
+    model: String(body.model),
+    agent: /agent=(\w+)/.exec(JSON.stringify(body))?.[1] ?? "none",
+  };
+}
+
+/** Turns until `landed` holds, or every attempt is spent — the answer being how many it took. */
+export async function turnsUntil(
+  syrax: SyraxFixture,
+  text: string,
+  carrier: number | undefined,
+  landed: (turn: Turn) => boolean,
+  attempts = 6,
+): Promise<{ turns: Turn[]; landed: boolean }> {
+  const turns: Turn[] = [];
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    turns.push(await turn(syrax, `${text} (${attempt})`, carrier));
+    if (landed(turns.at(-1)!)) return { turns, landed: true };
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  return { turns, landed: false };
 }

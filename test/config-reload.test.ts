@@ -13,47 +13,20 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { after, before, describe, it } from "node:test";
 import { writePrivateFile } from "../src/adapter/private-state.ts";
-import { runtimeEntrypoint, runtimeIsInstalled, standSyrax, type SyraxFixture } from "./gateway.ts";
+import {
+  answer,
+  runtimeEntrypoint,
+  runtimeIsInstalled,
+  standSyrax,
+  type SyraxFixture,
+  turn,
+  turnsUntil,
+} from "./gateway.ts";
 import { ownerTelegramUserId } from "./machine.ts";
 import { ProviderStub } from "./stubs/openai-provider.ts";
-import type { OutboundCall } from "./stubs/telegram-bot-api.ts";
 
-const answer = "Answered.";
-const isAnswer = (call: OutboundCall) => call.body.text === answer;
 const gemini = "gemini-3.5-flash-lite";
 const mistral = "ministral-3b-latest";
-
-/** One turn, reported as what the prompt carries: the model asked, and the agent that asked. */
-type Turn = { model: string; agent: string };
-
-/** One turn, and what the wire said. */
-async function turn(syrax: SyraxFixture, text: string, carrier?: number): Promise<Turn> {
-  const since = syrax.telegram.matching("sendMessage", isAnswer).length;
-  syrax.telegram.inject({ fromUserId: ownerTelegramUserId, text, messageThreadId: carrier });
-  await syrax.telegram.waitFor("sendMessage", isAnswer, 60_000, since);
-  const body = syrax.provider.requests.at(-1)?.body as { model?: string };
-  return {
-    model: String(body.model),
-    agent: /agent=(\w+)/.exec(JSON.stringify(body))?.[1] ?? "none",
-  };
-}
-
-/** Turns until `landed` holds, or every attempt is spent — the answer being how many it took. */
-async function turnsUntil(
-  syrax: SyraxFixture,
-  text: string,
-  carrier: number | undefined,
-  landed: (turn: Turn) => boolean,
-  attempts = 6,
-): Promise<{ turns: Turn[]; landed: boolean }> {
-  const turns: Turn[] = [];
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    turns.push(await turn(syrax, `${text} (${attempt})`, carrier));
-    if (landed(turns.at(-1)!)) return { turns, landed: true };
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-  }
-  return { turns, landed: false };
-}
 
 function rewrite(syrax: SyraxFixture, change: (config: Record<string, any>) => void): void {
   const path = syrax.gateway.deployment.configPath;

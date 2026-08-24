@@ -25,6 +25,8 @@ export const searchLabel = "com.jerome-group.syrax.search";
  * redeploy for a word, and the name is vocabulary (ADR-0012). */
 export const hatchLabel = "com.jerome-group.syrax.hatch";
 
+export const rungWatchLabel = "com.jerome-group.syrax.rung-watch";
+
 export const incrementalIndexLabel = "com.jerome-group.syrax.index-incremental";
 export const fullIndexLabel = "com.jerome-group.syrax.index-full";
 
@@ -38,6 +40,12 @@ const throttleIntervalSeconds = 10;
 type Calendar = { Day?: number[]; Hour?: number; Minute: number };
 
 const hourly: Calendar = { Minute: 17 };
+
+/**
+ * The rung watch, half an hour off the index pass. Spacing the schedules saves one wasted call
+ * rather than preventing an outage (ADR-0009), and launchd owning both is what makes it free.
+ */
+const hourlyOffPeak: Calendar = { Minute: 47 };
 
 /**
  * launchd counts days of the month rather than intervals, so "every third day" is written as the
@@ -76,6 +84,19 @@ export function indexSchedulePlists(deployment: Deployment): Record<string, stri
   };
 }
 
+/**
+ * The rung watch is a poke rather than a second reader: the offset, the rotted set and the chat
+ * surface all live in the resident unit, and a second process reading the same log would keep an
+ * offset nothing else agrees with.
+ */
+export function rungWatchPlist(deployment: Deployment): string {
+  return pokePlist(
+    rungWatchLabel,
+    `http://127.0.0.1:${deployment.monitorPort}/watch`,
+    hourlyOffPeak,
+  );
+}
+
 function residentUnitPlist(label: string, wrapperPath: string): string {
   return plist(label, [
     programArguments(["/bin/bash", wrapperPath]),
@@ -103,7 +124,10 @@ function indexSchedulePlist(
   pass: string,
   calendar: Calendar,
 ): string {
-  const endpoint = `http://127.0.0.1:${deployment.searchPort}/index/${pass}`;
+  return pokePlist(label, `http://127.0.0.1:${deployment.searchPort}/index/${pass}`, calendar);
+}
+
+function pokePlist(label: string, endpoint: string, calendar: Calendar): string {
   return plist(label, [
     programArguments([
       "/usr/bin/curl",

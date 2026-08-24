@@ -12,7 +12,7 @@ import { describe, it } from "node:test";
 import { promisify } from "node:util";
 import { readDeployment } from "../src/adapter/deployment.ts";
 import { checkout, installMonitorAgent } from "../src/cli/install-monitor-agent.ts";
-import { hatchLabel } from "../src/supervision/launch-agent.ts";
+import { hatchLabel, rungWatchLabel } from "../src/supervision/launch-agent.ts";
 import { temporaryMachine, writePrivateSecretsStore } from "./machine.ts";
 
 const run = promisify(execFile);
@@ -51,16 +51,27 @@ async function preflight(wrapperPath: string, call: string, ...args: string[]) {
 describe("installing the lane monitor's LaunchAgent", () => {
   it("keeps the label the hatch had, since renaming it is a redeploy for a word", () => {
     const { home, installed } = machine();
-    assert.equal(installed.plistPath, join(home, "Library", "LaunchAgents", `${hatchLabel}.plist`));
+    assert.deepEqual(installed.plistPaths, [
+      join(home, "Library", "LaunchAgents", `${hatchLabel}.plist`),
+      join(home, "Library", "LaunchAgents", `${rungWatchLabel}.plist`),
+    ]);
     assert.equal(hatchLabel, "com.jerome-group.syrax.hatch");
   });
 
   it("runs the wrapper rather than the unit, and comes back from a crash", () => {
     const { installed } = machine();
-    const plist = readFileSync(installed.plistPath, "utf8");
+    const plist = readFileSync(installed.plistPaths[0]!, "utf8");
     assert.match(plist, /<string>\/bin\/bash<\/string>\s*<string>[^<]*start-monitor\.sh<\/string>/);
     assert.match(plist, /<key>KeepAlive<\/key>\s*<dict>\s*<key>SuccessfulExit<\/key>\s*<false\/>/);
     assert.equal(plist.includes("EnvironmentVariables"), false);
+  });
+
+  it("pokes the resident unit on a calendar rather than standing a second reader", () => {
+    const { installed, deployment } = machine();
+    const plist = readFileSync(installed.plistPaths[1]!, "utf8");
+    assert.match(plist, new RegExp(`http://127.0.0.1:${deployment.monitorPort}/watch`));
+    assert.match(plist, /<key>StartCalendarInterval<\/key>/);
+    assert.equal(plist.includes("KeepAlive"), false, "a poke that is kept alive is a loop.");
   });
 
   it("writes the wrapper private and executable, since it is what launchd runs", () => {

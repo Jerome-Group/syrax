@@ -17,7 +17,7 @@ Start here: `README.md`, then `AGENTS.md`.
 | Configuration | Public contract and placeholder values | `config/syrax.example.toml` |
 | Runtime adapter | Syrax's decisions as one generated runtime configuration | `src/adapter/build.ts` |
 | Chat surface | Syrax's own writes into the four chats, and the recreation a failed one triggers | `src/surface/chat-surface.ts` |
-| Lane monitor | The rationed lane's counters, the escape hatch over MCP, and where each lane's headroom is read from | `src/monitor/lane-monitor.ts` |
+| Lane monitor | The rationed lane's counters, which rungs stand down or have rotted, the usage report, and the three tools served over MCP | `src/monitor/lane-monitor.ts` |
 | Supervision | The two LaunchAgents and the index schedules, and the wrappers' pre-flights that refuse to start wrong | `src/supervision/launch-agent.ts` |
 | Search unit | The file-search index and the tools it serves over MCP — the one part of Syrax that is Python | `search/syrax_search/server.py` |
 | Retrieval loop | The one benchmark set a captured miss lands in, and the report scored from it | `search/syrax_search/report.py` |

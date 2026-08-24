@@ -30,11 +30,11 @@ export type Deployment = {
   searchWrapperPath: string;
   /** The loopback port the four agents reach the search unit on. */
   searchPort: number;
-  /** The lane monitor's counters and last-read timestamps: what the runtime does not hold. */
+  /** The lane monitor's counters, stand downs and usage report: what the runtime does not hold. */
   monitorState: string;
   /** The lane monitor's own wrapper, in the gateway's shape. */
   monitorWrapperPath: string;
-  /** The loopback port the agents reach the escape hatch on. */
+  /** The loopback port the agents reach the lane monitor's three tools on. */
   monitorPort: number;
   /**
    * The named scopes the search unit maps to roots. The unit reads them from this same file; the

@@ -1,20 +1,16 @@
 # A config write is applied when it is written, and landed when a channel reloads
 
-A write to the generated configuration reaches the running gateway in **two moves, not one**. The
-first is the runtime's: the file is detected, validated and swapped in, and the log says
-`config hot reload applied`. The second is what the Owner would actually notice — the turn path
-rebuilt around the new configuration — and it happens only when a **channel reloads**. A `channels`
-write lands itself, because it is that reload. Everything else waits for one, and waiting is not a
-strategy: an `agents` write sat unlanded across six turns and twenty-one seconds, and landed the
-instant an unrelated `channels` write forced the reload. A `models` write goes the same way.
-
-So **a config write is an actuator only when it is paired with a lander**, and there are exactly two:
-the channel reload a `channels` write triggers by itself, and `openclaw gateway restart --safe`.
-
-The measurements are in [`docs/research/config-hot-reload.md`](../research/config-hot-reload.md),
-made against the pinned `openclaw@2026.6.34` at the provider wire on a running gateway. This record
-is the decision they force; that file is the evidence, and it is where a reader checking this should
-go first.
+> **Its own revisit trigger has fired, and what replaced the mechanism is measured.** *"A supported
+> way to land an `agents` write without a restart appears"* was measured for #128:
+> [`docs/research/landing-an-agents-write.md`](../research/landing-an-agents-write.md). `config.apply`
+> — the candidate named below — is a **writer, not a lander**. A `channels.stop` + `channels.start`
+> pair *is* one and keeps the sessions, and it must be **deferred until the turn that asked for it is
+> over**: issued mid-turn the stop times out, the start does nothing, and the channel is left down
+> with the gateway alive. Deferred and verified — wait on `gateway.restart.preflight`, reload, then
+> confirm on `channels.status` — it lands on the next turn with the sessions intact, which is what
+> #128 builds. The restart below is now the **fallback**, and the half this record called unmeasured
+> is measured: under a turn in flight it defers until the work drains and the reply arrives at the
+> moment it would have anyway.
 
 ## What ADR-0009 got right, and the half it did not
 

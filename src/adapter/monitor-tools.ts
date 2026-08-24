@@ -1,27 +1,37 @@
 /**
- * The escape hatch as an agent reaches it: one MCP connection to the lane monitor, carried by every
- * chat.
+ * The lane monitor as an agent reaches it: one MCP connection, and which chat may call what over
+ * it.
  *
- * Every chat rather than one of them, because the hatch is a **lane** and not a capability. A chat
+ * The hatch is carried by **every** chat, because it is a lane and not a capability. A chat
  * boundary decides which domain's tools are reachable, and the lane a turn is answered on is not a
  * domain — the Owner asking for the hatch in Academic is asking about the question in front of
  * them, and redirecting them to another chat would leave the context behind. What keeps it rare is
  * the hatch's own refusal, not which chat holds it.
+ *
+ * The report and the stand down are System's alone, and that *is* a domain: System owns Syrax's own
+ * state, and a stand down changes what every other chat is answered on.
  */
 
 import type { Deployment } from "./deployment.ts";
 
-/** The MCP server name the agents' connections carry, and the one tool it serves. */
-export const hatchServerName = "syrax-hatch";
+/** The MCP server name the agents' connections carry, and the tools it serves. */
+export const monitorServerName = "syrax-monitor";
 export const hatchToolName = "reach";
+export const reportToolName = "report";
+export const standDownToolName = "stand-down";
 export const mcpPath = "/mcp";
 
-/** The name a model calls the hatch by: the runtime prefixes the tool with its server. */
-export const hatchTool = `${hatchServerName}__${hatchToolName}`;
+/** Where launchd pokes the rung watch. It is not a tool: a schedule decides when a log is read. */
+export const watchPath = "/watch";
 
-export function hatchServer(deployment: Deployment) {
+/** The names a model calls them by: the runtime prefixes each tool with its server. */
+export const hatchTool = `${monitorServerName}__${hatchToolName}`;
+export const reportTool = `${monitorServerName}__${reportToolName}`;
+export const standDownTool = `${monitorServerName}__${standDownToolName}`;
+
+export function monitorServer(deployment: Deployment) {
   return {
-    [hatchServerName]: {
+    [monitorServerName]: {
       url: `http://127.0.0.1:${deployment.monitorPort}${mcpPath}`,
       transport: "streamable-http",
     },

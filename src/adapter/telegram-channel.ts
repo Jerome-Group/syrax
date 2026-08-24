@@ -9,6 +9,9 @@ import { everyChat } from "./chats.ts";
 import type { Deployment } from "./deployment.ts";
 import { secretPaths, secretRef } from "./secrets-store.ts";
 
+/** The one channel there is, named where it is configured: a reload is addressed to it by name. */
+export const channelName = "telegram";
+
 export function telegramChannel(deployment: Deployment, carriers: CarrierMap) {
   return {
     enabled: true,

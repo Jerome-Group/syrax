@@ -13,6 +13,7 @@ import { chatInstruction } from "./instruction.ts";
 import type { Deployment } from "./deployment.ts";
 import { ensurePrivateDirectory, writePrivateFile } from "./private-state.ts";
 import { unconfiguredScopes } from "./search-tools.ts";
+import { standingDown } from "./stand-down-ledger.ts";
 import { assertSecretsStoreIsPrivate } from "./secrets-store.ts";
 
 const checkout = resolve(import.meta.dirname, "..", "..");
@@ -42,6 +43,14 @@ function assertEveryScopeIsConfigured(deployment: Deployment): void {
   }
 }
 
+/**
+ * Every write of the file goes through here, which is what keeps a stand down from being reverted
+ * by one: the ledger is asked rather than the file the last write left behind (ADR-0009).
+ */
+function standingRungs(deployment: Deployment): string[] {
+  return standingDown(deployment.monitorState).map((held) => held.rung);
+}
+
 export function generateConfig(deployment: Deployment, carriers: CarrierMap): void {
   assertOutsideCheckout(deployment);
   assertEveryScopeIsConfigured(deployment);
@@ -64,6 +73,6 @@ export function generateConfig(deployment: Deployment, carriers: CarrierMap): vo
   // root. It is private runtime state by this repository's own definition, so it is written like it.
   writePrivateFile(
     deployment.configPath,
-    `${JSON.stringify(buildRuntimeConfig(deployment, carriers), null, 2)}\n`,
+    `${JSON.stringify(buildRuntimeConfig(deployment, carriers, standingRungs(deployment)), null, 2)}\n`,
   );
 }

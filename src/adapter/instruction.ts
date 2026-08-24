@@ -8,8 +8,8 @@
  * without being told, and the shape of a chat's own corpus turn.
  */
 
-import { everyChat, type Chat } from "./chats.ts";
-import { hatchTool } from "./monitor-tools.ts";
+import { everyChat, systemChat, type Chat } from "./chats.ts";
+import { hatchTool, reportTool, standDownTool } from "./monitor-tools.ts";
 import { searchesTheCorpus, searchTool } from "./search-tools.ts";
 
 /** Without this a fast answer is a fabricated one (ADR-0016). */
@@ -45,6 +45,31 @@ judgement that a question is hard — passing their own words as \`askedFor\`. S
 answers: every reply carries what remains. If it refuses, say so and stop; never call it twice for
 one question, and if you then answer that question yourself, say the answer is yours rather than the
 hatch's.`;
+
+/**
+ * The two overrides read as a matched pair and are nothing alike underneath: a **pin** forces a
+ * *selection* within a lane and belongs to the runtime, where a **stand down** changes a lane's
+ * *membership* and belongs to Syrax (ADR-0009). Only one of them is a tool, so the agent is told
+ * which — offering to stand a rung down because the Owner asked to pin one would take a lane apart
+ * to answer a question about one turn.
+ */
+const overrides = `## The lanes, and the two ways to override one
+
+\`${reportTool}\` states what each lane has left and which rungs are in it. Answer nothing about
+headroom, a provider or a rung without calling it — never from memory, and never from an earlier
+turn. A lane it reports as *unknown* is unknown rather than full: say so, and say when it was last
+understood.
+
+\`${standDownTool}\` takes a rung out of its lane until a stated reset and writes it back at that
+reset. Call it only when the Owner asks. It needs the \`provider/model\` the report names, an ISO
+8601 reset, and their reason; it refuses a rung no lane holds, a reset already past, and a lane's
+last rung. **It answers before the lane is rebuilt**, because this turn ending is what lets the
+rebuild happen: say the rung is written out and takes effect in a moment, and that System will say
+what it cost. Never call it twice waiting for that.
+
+A **pin** is the runtime's own \`/model <provider/model>\`, which the Owner types themselves and
+which forces a choice within a lane for their session. It is not yours to call and not yours to
+imitate: never stand a rung down to pin one.`;
 
 /**
  * The boundary is stated as a redirect rather than as a refusal because the Owner asked a real
@@ -111,6 +136,7 @@ export function chatInstruction(chat: Chat): string {
     boundary(chat),
     keyboards,
     hatch,
+    ...(chat.id === systemChat.id ? [overrides] : []),
     ...(searchesTheCorpus(chat) ? [corpus(chat)] : []),
   ].join("\n\n");
 }

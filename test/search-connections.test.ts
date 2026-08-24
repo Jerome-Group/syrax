@@ -32,7 +32,7 @@ const deployment = readDeployment({
   ownerTelegramUserId: 100000000,
 });
 
-const config = buildRuntimeConfig(deployment, { general: 2, academic: 3, media: 4, system: 5 });
+const config = buildRuntimeConfig(deployment, { general: 2, academic: 3, media: 4, system: 5 }, []);
 const servers = config.mcp.servers as Record<
   string,
   { url: string; transport: string; headers?: Record<string, string> }
