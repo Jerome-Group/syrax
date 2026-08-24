@@ -212,17 +212,29 @@ in the System chat, and it is Syrax's rather than the runtime's because it chang
 **membership**, which is configuration. It refuses a rung no lane holds, a reset already past, and a
 lane's last rung — a lane with no rungs answers nothing.
 
-**The write alone is not the actuator.** A `channels` write lands itself; an `agents` write, which is
-what a chain is, is applied when written and landed only when the turn path is rebuilt — so the stand
-down is the write **plus** `openclaw gateway restart --safe`, which drains the turns in flight and
-drops the sessions. What it costs is the sessions and **not the turn asking for it**: under a turn in
-flight the restart defers until the work drains, and the reply arrives at the same moment it would
-have anyway. The two alternatives were measured and neither survives:
-`config.apply` writes the file and reaches no turn, and a `channels.stop` + `channels.start` pair
-lands it and keeps the sessions but, issued mid-turn, leaves the channel down with the gateway alive.
+**The write alone is not the actuator, and the land waits for the turn that asked for it.** A
+`channels` write lands itself; an `agents` write, which is what a chain is, is applied when written
+and landed only when the turn path is rebuilt. So the tool **answers before the lane is rebuilt** —
+that answer is what ends the turn the landing is waiting for — and the landing follows: the gateway
+is asked whether anything is in flight (`gateway.restart.preflight`), the channel is stopped and
+started once it says no, and the channel is then **asked whether it came back** rather than believed
+when it says it did. Roughly thirteen seconds from the reply going out to a verified live channel,
+and the sessions survive it.
+
+Every branch that cannot get there ends at `openclaw gateway restart --safe`, which always leaves a
+live channel and costs the sessions instead: a gateway still working when the wait runs out, a
+channel that will not come back up, or a gateway that will not answer at all. **A stand down that
+leaves the Owner's chat deaf is worse than one that costs them a session.**
+
+The sequence opens with an admin call — starting a channel that is already running, which is a
+no-op — and that is not cosmetic: the CLI mints this machine's pairing from the scopes of the
+**first** method it is ever asked for, and a read-scoped call first leaves every admin call after it,
+the safe restart included, refused with *scope upgrade pending approval*.
+
 [ADR-0021](adr/0021-a-config-write-is-applied-when-it-is-written-and-landed-when-a-channel-reloads.md)
-and [the measurements](research/landing-an-agents-write.md) carry it; what it means here is that the
-Owner is told the sessions went.
+and [the measurements](research/landing-an-agents-write.md) carry all of it, including the two things
+that do not work: `config.apply` writes the file and reaches no turn, and the same channel reload
+issued *inside* the turn asking for it leaves the gateway alive with nothing listening.
 
 **The return is owned, never awaited.** A config write has no expiry, so the rung is written back at
 the reset by a timer the unit holds, and the ledger it is kept in outlives that timer: a reset that

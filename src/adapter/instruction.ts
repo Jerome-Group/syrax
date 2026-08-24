@@ -63,8 +63,9 @@ understood.
 \`${standDownTool}\` takes a rung out of its lane until a stated reset and writes it back at that
 reset. Call it only when the Owner asks. It needs the \`provider/model\` the report names, an ISO
 8601 reset, and their reason; it refuses a rung no lane holds, a reset already past, and a lane's
-last rung. Landing it restarts the gateway safely, which drops the sessions — say that when you
-report what happened.
+last rung. **It answers before the lane is rebuilt**, because this turn ending is what lets the
+rebuild happen: say the rung is written out and takes effect in a moment, and that System will say
+what it cost. Never call it twice waiting for that.
 
 A **pin** is the runtime's own \`/model <provider/model>\`, which the Owner types themselves and
 which forces a choice within a lane for their session. It is not yours to call and not yours to

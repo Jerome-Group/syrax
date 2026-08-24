@@ -47,19 +47,36 @@ export function writePrivateSecretsStore(path: string, contents: unknown = {}): 
 }
 
 /**
- * A stand-in for the pinned runtime at the path the deployment names, which records the commands
- * Syrax runs against it and the configuration it was pointed at. It is the seam a stand down's
- * lander is observed at: what matters is which call was issued, not what a real gateway would have
- * done with it — which is measured against a real one where it has to be.
+ * A stand-in for the pinned runtime at the path the deployment names: it records every command
+ * Syrax runs against it and the configuration it was pointed at, and answers the three gateway
+ * methods a landing asks — quiet, stop and start, and *is the channel back*. It is the seam the
+ * lander's **sequence** is observed at; that the sequence works against a real gateway is measured
+ * where it has to be, in `test/stand-down.test.ts` and `docs/research/`.
+ *
+ * `wedged` is a channel that never comes back up, which is how the fall-through to the safe restart
+ * is observed without one.
  */
-export function standInRuntime(runtimeRoot: string): string {
+export function standInRuntime(runtimeRoot: string, options: { wedged?: boolean } = {}): string {
   const entrypoint = runtimeEntrypoint(runtimeRoot);
   const log = join(runtimeRoot, "commands.log");
   mkdirSync(dirname(entrypoint), { recursive: true });
   writeFileSync(
     entrypoint,
     `import { appendFileSync } from "node:fs";
-appendFileSync(${JSON.stringify(log)}, \`\${process.argv.slice(2).join(" ")} \${process.env.OPENCLAW_CONFIG_PATH}\n\`);
+const ran = process.argv.slice(2);
+appendFileSync(${JSON.stringify(log)}, \`\${ran.join(" ")} \${process.env.OPENCLAW_CONFIG_PATH}\n\`);
+const method = ran[0] === "gateway" && ran[1] === "call" ? ran[2] : "";
+const answers = {
+  "gateway.restart.preflight": { safe: true, counts: { totalActive: 0 }, blockers: [] },
+  "channels.stop": { stopped: true },
+  "channels.start": { started: true },
+  "channels.status": {
+    channelAccounts: {
+      telegram: [{ accountId: "default", running: ${options.wedged ? "false" : "true"}, connected: ${options.wedged ? "false" : "true"} }],
+    },
+  },
+};
+if (method) process.stdout.write(JSON.stringify(answers[method] ?? {}));
 `,
   );
   return log;

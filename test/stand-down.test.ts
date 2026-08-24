@@ -72,6 +72,13 @@ describe("a stand down", () => {
     return written.agents.defaults.model;
   }
 
+  /** Just the gateway methods a landing asked for, in order: the sequence is what is measured. */
+  function methodsRun(): string[] {
+    return ranAgainstTheRuntime()
+      .filter((one) => one.startsWith("gateway call "))
+      .map((one) => one.split(" ")[2]!);
+  }
+
   function ranAgainstTheRuntime(): string[] {
     return existsSync(commands) ? readFileSync(commands, "utf8").trim().split("\n") : [];
   }
@@ -82,22 +89,38 @@ describe("a stand down", () => {
     ) as StandDown[];
   }
 
-  it("takes the rung out of its lane and lands the write with the runtime's safe restart", async () => {
+  it("writes the rung out of its lane before it answers, and lands it after", async () => {
     const monitor = new LaneMonitor(deployment);
 
-    const stood = await monitor.standDown({
+    const stood = monitor.standDown({
       rung: secondRung,
       until: new Date(Date.now() + 3_600_000),
       why: "the day's requests are gone",
     });
 
-    assert.equal(stood.landed.landed, true, stood.landed.said);
+    // The answer is what ends the turn the land is waiting for, so the write is done and the
+    // landing is not: nothing has been run against the runtime yet.
+    assert.equal(stood.standDown.rung, secondRung);
     assert.deepEqual(frontChain().fallbacks, [modelRef(frontLane.rungs[2]!)]);
-    assert.ok(
-      !JSON.stringify(frontChain()).includes(secondRung),
-      "the rung is still in the chain.",
+    assert.deepEqual(ranAgainstTheRuntime(), [], "it landed inside the turn that asked for it.");
+
+    const landed = await stood.landing;
+
+    assert.equal(landed.landed, true, landed.said);
+    assert.match(landed.said, /the sessions stand/);
+    // It opens with an admin call because the CLI mints this machine's pairing from the first
+    // method it is asked for, and a read-scoped one leaves every call after it refused.
+    assert.deepEqual(methodsRun(), [
+      "channels.start",
+      "gateway.restart.preflight",
+      "channels.stop",
+      "channels.start",
+      "channels.status",
+    ]);
+    assert.equal(
+      ranAgainstTheRuntime().some((one) => one.includes("restart --safe")),
+      false,
     );
-    assert.deepEqual(ranAgainstTheRuntime(), [`gateway restart --safe ${deployment.configPath}`]);
   });
 
   it("says so in System, with the reason and the reset it is bounded by", async () => {
@@ -105,7 +128,8 @@ describe("a stand down", () => {
     const crossed = telegram.calls.length;
     const until = new Date(Date.now() + 3_600_000);
 
-    await monitor.standDown({ rung: secondRung, until, why: "the day's requests are gone" });
+    await monitor.standDown({ rung: secondRung, until, why: "the day's requests are gone" })
+      .landing;
 
     const posted = telegram.calls.slice(crossed).filter((call) => call.method === "sendMessage");
     assert.equal(posted.length, 1);
@@ -119,16 +143,19 @@ describe("a stand down", () => {
     const monitor = new LaneMonitor(deployment);
     const crossed = telegram.calls.length;
 
-    const stood = await monitor.standDown({
+    const stood = monitor.standDown({
       rung: secondRung,
       until: new Date(Date.now() + 200),
       why: "a minute's worth",
     });
 
+    // Read before anything is awaited: the rung is out of the lane the moment the tool answers,
+    // and the landing that follows is what the reset's return will queue behind.
     assert.deepEqual(
       ledger().map((held) => held.rung),
       [secondRung],
     );
+    await stood.landing;
     assert.equal(stood.standDown.rung, secondRung);
     const posted = () =>
       telegram.calls
@@ -138,7 +165,7 @@ describe("a stand down", () => {
     await returned(() => posted().length === 2);
     assert.deepEqual(ledger(), []);
     assert.deepEqual(frontChain().fallbacks, frontLane.rungs.slice(1).map(modelRef));
-    assert.equal(ranAgainstTheRuntime().length, 2, "the return landed no write of its own.");
+    assert.equal(methodsRun().length, 10, "the return landed no write of its own.");
     assert.match(posted()[1]!, /a stand down returned/);
   });
 
@@ -181,7 +208,13 @@ describe("a stand down", () => {
     await new LaneMonitor(deployment).reconcile();
 
     assert.ok(!JSON.stringify(frontChain()).includes(secondRung), "the redeploy reverted it.");
-    assert.deepEqual(ranAgainstTheRuntime(), [`gateway restart --safe ${deployment.configPath}`]);
+    assert.deepEqual(methodsRun(), [
+      "channels.start",
+      "gateway.restart.preflight",
+      "channels.stop",
+      "channels.start",
+      "channels.status",
+    ]);
   });
 
   it("never inherits one from the configuration: a rung out of the file and out of the ledger comes back", async () => {
@@ -219,6 +252,25 @@ describe("a stand down", () => {
     );
     assert.ok(frontChain().fallbacks.includes(secondRung), "the rung stayed out of its lane.");
     assert.deepEqual(ledger(), []);
+  });
+
+  it("restarts rather than leave the chat deaf, where the channel will not come back", async () => {
+    commands = standInRuntime(deployment.runtimeRoot, { wedged: true });
+    const monitor = new LaneMonitor(deployment);
+
+    const landed = await monitor.standDown({
+      rung: secondRung,
+      until: new Date(Date.now() + 3_600_000),
+      why: "the day's requests are gone",
+    }).landing;
+
+    assert.equal(landed.landed, true, landed.said);
+    assert.match(landed.said, /restarted safely/);
+    assert.match(landed.said, /did not come back up/);
+    assert.ok(
+      ranAgainstTheRuntime().at(-1)!.startsWith("gateway restart --safe"),
+      "it left the channel down.",
+    );
   });
 
   it("says so when a reset arrived while the monitor was down, as it would in process", async () => {
@@ -292,7 +344,7 @@ describe("a stand down over a real gateway", { skip: !runtimeIsInstalled() }, ()
     await syrax?.stop();
   });
 
-  it("lands on the turns that follow it, which no number of turns would have done alone", async () => {
+  it("lands on the next turn without a restart, and the sessions stand", async () => {
     syrax = await standSyrax({ catalogue: [gemini, mistral] });
     // One turn before the write: it says where the measurement starts, and it lets the config
     // watcher attach — the gateway starts it after reporting itself ready.
@@ -304,10 +356,11 @@ describe("a stand down over a real gateway", { skip: !runtimeIsInstalled() }, ()
       rung: `syrax-gemini/${gemini}`,
       until: new Date(Date.now() + 3_600_000),
       why: "the day's requests are gone",
-    });
+    }).landing;
 
-    assert.equal(stood.landed.landed, true, stood.landed.said);
-    assert.match(stood.landed.said, /restarted safely/);
+    assert.equal(stood.landed, true, stood.said);
+    assert.match(stood.said, /the sessions stand/);
+
     const landed = await turnsUntil(
       syrax,
       "Which model is this?",
@@ -318,8 +371,9 @@ describe("a stand down over a real gateway", { skip: !runtimeIsInstalled() }, ()
       landed.landed,
       `the stand down never reached a turn: ${JSON.stringify(landed.turns)}`,
     );
-    // The restart drains rather than kills, so the cost is the sessions and not this turn. What
-    // that costs a turn in flight is measured in `docs/research/landing-an-agents-write.md`.
-    assert.ok(landed.turns.length <= 3, `it took ${landed.turns.length} turns to land.`);
+    assert.equal(landed.turns.length, 1, `it took ${landed.turns.length} turns to land.`);
+    // The sessions are what the other lander spends: the turn after the landing still carries what
+    // was said before it.
+    assert.match(JSON.stringify(syrax.provider.requests.at(-1)?.body), /Which model is this/);
   });
 });

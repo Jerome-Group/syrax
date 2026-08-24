@@ -43,8 +43,14 @@ import {
 /** `setTimeout` counts in a signed 32-bit millisecond, and a reset may be further off than that. */
 const longestTimer = 2147483647;
 
-/** A stand down and what became of the write it needs to be one (ADR-0021). */
-export type StoodDown = { standDown: StandDown; landed: Landed };
+/**
+ * A stand down, answered before the lanes have been rebuilt around it: the landing is a promise
+ * rather than a fact for the reason the land is deferred at all — it happens after this answer,
+ * because this answer is what ends the turn it is waiting for (ADR-0021, and the measurements in
+ * `docs/research/landing-an-agents-write.md`). Nothing on the tool path awaits it; what it settles
+ * to is posted in System.
+ */
+export type StoodDown = { standDown: StandDown; landing: Promise<Landed> };
 
 export class LaneMonitor {
   readonly counters: DailyCounters;
@@ -118,7 +124,8 @@ export class LaneMonitor {
     if (!this.#membership.differsFrom(this.standDowns.active(now).map((held) => held.rung))) {
       return null;
     }
-    const landed = await this.#membership.write();
+    this.#membership.write();
+    const landed = await this.#membership.land();
     if (!landed.landed) {
       console.error(`syrax lane monitor: the lanes were written and not landed: ${landed.said}`);
     }
@@ -139,38 +146,46 @@ export class LaneMonitor {
   }
 
   /**
-   * The write plus the lander, in that order, and the return scheduled rather than awaited: a
-   * stand down that writes and stops is a stand down that does not happen, and one whose return
-   * nothing owns is a rung retired by accident (ADR-0009, ADR-0021).
+   * The write, then the land once the turn asking for it is over, and the return scheduled rather
+   * than awaited (ADR-0009, ADR-0021). A stand down that writes and stops is a stand down that does
+   * not happen; one whose return nothing owns is a rung retired by accident; and one that lands
+   * inside its own turn takes the chat down with it, which is the thing the deferral is for.
+   *
+   * **It answers before it has landed**, on purpose: the answer is what ends the turn the land is
+   * waiting for. What the landing did arrives in System behind it.
    */
-  async standDown(
-    asked: { rung: string; until: Date; why: string },
-    now: Date = new Date(),
-  ): Promise<StoodDown> {
+  standDown(asked: { rung: string; until: Date; why: string }, now: Date = new Date()): StoodDown {
     const standDown = this.standDowns.stand(asked, now);
-    const landed = await this.#membership.write();
+    this.#membership.write();
     this.#scheduleReturn(standDown);
-    await this.announce(
-      {
-        kind: "a stand down",
-        said: `${standDown.rung} is out of the ${standDown.lane} lane until ${standDown.until} — ${standDown.why}. ${landed.said}.`,
-      },
+    const landing = this.#landAndSay(
+      "a stand down",
+      `${standDown.rung} is out of the ${standDown.lane} lane until ${standDown.until} — ${standDown.why}.`,
       now,
     );
-    return { standDown, landed };
+    return { standDown, landing };
   }
 
-  async bringBack(rung: string, now: Date = new Date()): Promise<StoodDown> {
+  bringBack(rung: string, now: Date = new Date()): StoodDown {
     const standDown = this.standDowns.bringBack(rung);
-    const landed = await this.#membership.write();
-    await this.announce(
-      {
-        kind: "a stand down returned",
-        said: `${standDown.rung} is back in the ${standDown.lane} lane at the reset it was stood down until. ${landed.said}.`,
-      },
+    this.#membership.write();
+    const landing = this.#landAndSay(
+      "a stand down returned",
+      `${standDown.rung} is back in the ${standDown.lane} lane at the reset it was stood down until.`,
       now,
     );
-    return { standDown, landed };
+    return { standDown, landing };
+  }
+
+  /**
+   * The other half of every membership change, and the only place the Owner hears what it cost:
+   * the transition is posted once the lanes are actually rebuilt, so a message saying a rung is out
+   * of its lane is never sent while the lane still holds it.
+   */
+  async #landAndSay(kind: Transition["kind"], said: string, now: Date): Promise<Landed> {
+    const landed = await this.#membership.land();
+    await this.announce({ kind, said: `${said} ${landed.said}.` }, now);
+    return landed;
   }
 
   tools(): Tool[] {
@@ -225,7 +240,15 @@ export class LaneMonitor {
           },
           required: ["rung", "until", "why"],
         },
-        call: (given) => this.standDown(asStandDown(given)),
+        // The landing is deliberately not awaited and deliberately not returned: this answer is
+        // what ends the turn the landing is waiting for, and System gets what it settled to.
+        call: (given) => {
+          const { standDown } = this.standDown(asStandDown(given));
+          return Promise.resolve({
+            standDown,
+            landing: "the lane is rebuilt once this turn is over; System says what it cost",
+          });
+        },
       },
     ];
   }
@@ -258,12 +281,14 @@ export class LaneMonitor {
     const timer = setTimeout(
       () => {
         if (Date.now() < due) return this.#scheduleReturn(standDown);
-        void this.bringBack(standDown.rung).catch((error: unknown) => {
+        try {
+          void this.bringBack(standDown.rung).landing;
+        } catch (error) {
           if (error instanceof AlreadyReturned) return;
           console.error(
             `syrax lane monitor: ${standDown.rung} was not written back: ${reason(error)}`,
           );
-        });
+        }
       },
       Math.min(Math.max(0, due - Date.now()), longestTimer),
     );

@@ -1,11 +1,12 @@
 /**
- * A lane's membership as the running gateway holds it: what the generated file says, and the two
- * moves that change it.
+ * A lane's membership as the running gateway holds it: what the generated file says, and the moves
+ * that change it.
  *
- * **A write is an actuator only when it is paired with a lander** (ADR-0021). A `channels` write
- * lands itself; a chain lives under `agents`, which is applied when written and landed only when
- * something rebuilds the turn path — so writing here is always writing *and* the runtime's own safe
- * restart. This is the one place that pairing exists, so a caller cannot do half of it.
+ * **A write is an actuator only when it is paired with a lander** (ADR-0021), and the two are
+ * separate calls here for one reason: the land must not happen inside the turn that asked for it.
+ * A stand down is asked for in the chat, so the write goes out immediately and the land waits for
+ * the reply to leave — measured in `docs/research/landing-an-agents-write.md`, where a channel
+ * reloaded mid-turn left the gateway alive with nothing listening.
  */
 
 import { readCarrierMap } from "../adapter/carriers.ts";
@@ -20,6 +21,9 @@ import { existsSync, readFileSync } from "node:fs";
 
 export class LaneMembership {
   #deployment: Deployment;
+  /** Landings are queued, never overlapped: two channel reloads at once is one channel stopped
+   * while the other is starting it, and the file they both land is the same file anyway. */
+  #landing: Promise<unknown> = Promise.resolve();
 
   constructor(deployment: Deployment) {
     this.#deployment = deployment;
@@ -43,10 +47,19 @@ export class LaneMembership {
     );
   }
 
-  /** The write and its lander. The stand downs are read from the ledger by the generator itself. */
-  write(): Promise<Landed> {
+  /**
+   * The write, which is applied and not landed: the next turn still uses the chain the gateway last
+   * built from. The stand downs are read from the ledger by the generator itself.
+   */
+  write(): void {
     generateConfig(this.#deployment, readCarrierMap(this.#deployment.carrierMap));
-    return landConfigWrite(this.#deployment);
+  }
+
+  /** The lander, which is the half that reaches a turn. One at a time, in the order asked. */
+  land(): Promise<Landed> {
+    const landed = this.#landing.then(() => landConfigWrite(this.#deployment));
+    this.#landing = landed.catch(() => undefined);
+    return landed;
   }
 
   #read(): unknown {
