@@ -49,8 +49,8 @@ export function writePrivateSecretsStore(path: string, contents: unknown = {}): 
 /**
  * A stand-in for the pinned runtime at the path the deployment names, which records the commands
  * Syrax runs against it and the configuration it was pointed at. It is the seam a stand down's
- * lander is observed at: what matters is that the safe restart was issued, not what a real gateway
- * would have done with it.
+ * lander is observed at: what matters is which call was issued, not what a real gateway would have
+ * done with it — which is measured against a real one where it has to be.
  */
 export function standInRuntime(runtimeRoot: string): string {
   const entrypoint = runtimeEntrypoint(runtimeRoot);

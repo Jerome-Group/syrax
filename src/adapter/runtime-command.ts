@@ -1,11 +1,20 @@
 /**
- * The pinned runtime run as a command rather than as the gateway: one entrypoint, and the one
- * command Syrax itself issues.
+ * The pinned runtime run as a command rather than as the gateway, and the one job Syrax needs of it:
+ * making a write to the generated configuration reach the next turn.
  *
- * A configuration write reaches the running gateway in two moves, and only the second is one the
- * Owner would notice (ADR-0021). `channels` lands itself; an `agents` write — which is what a stand
- * down is — waits for a channel reload that may never come, so the write is paired with the
- * runtime's own safe restart. `--safe` preflights the work in flight and restarts once it drains.
+ * A config write reaches a running gateway in two moves, and only the second is one the Owner would
+ * notice (ADR-0021). A chain lives under `agents`, which is applied when written and landed only
+ * when the turn path is rebuilt — so a write is an actuator only when it is paired with a lander,
+ * and `gateway restart --safe` is the lander.
+ *
+ * **The restart is the mechanism rather than the fallback, and that is now measured rather than
+ * assumed** (`docs/research/landing-an-agents-write.md`). `config.apply`, the candidate ADR-0021
+ * named, is a writer: it wrote the file, returned `ok`, and six turns went on using the old chain.
+ * A `channels.stop` + `channels.start` pair *is* a lander and keeps the sessions a restart spends —
+ * but issued from inside a turn, which is how a stand down is always asked for, the stop times out
+ * mid-teardown, the start that follows it does nothing, and the channel is left down with the
+ * gateway alive. The restart is the only one of the three that knows a turn is in flight: it defers
+ * until the work drains, and the in-flight reply arrives at the same moment it would have anyway.
  */
 
 import { spawn } from "node:child_process";
@@ -16,7 +25,7 @@ export function runtimeEntrypoint(runtimeRoot: string): string {
   return join(runtimeRoot, "node_modules", "openclaw", "openclaw.mjs");
 }
 
-/** What the restart did, in the two facts a caller can act on. */
+/** What the lander did, in the two facts a caller can act on. */
 export type Landed = { landed: boolean; said: string };
 
 /**
@@ -49,11 +58,8 @@ export function landConfigWrite(deployment: Deployment): Promise<Landed> {
     restart.on("close", (code) =>
       resolve(
         code === 0
-          ? { landed: true, said: "the gateway restarted safely" }
-          : {
-              landed: false,
-              said: `the safe restart exited ${code}: ${said.trim() || "nothing said"}`,
-            },
+          ? { landed: true, said: "the gateway restarted safely, so the sessions are gone" }
+          : { landed: false, said: `the safe restart exited ${code}: ${said.trim() || "nothing"}` },
       ),
     );
   });

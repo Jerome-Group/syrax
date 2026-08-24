@@ -20,7 +20,14 @@ import { writePrivateFile } from "../src/adapter/private-state.ts";
 import { workerLane } from "../src/adapter/worker-lane.ts";
 import { LaneMonitor } from "../src/monitor/lane-monitor.ts";
 import { standDownLedger, type StandDown } from "../src/adapter/stand-down-ledger.ts";
-import { writeSecretsStore } from "./gateway.ts";
+import {
+  runtimeIsInstalled,
+  standSyrax,
+  turn,
+  turnsUntil,
+  writeSecretsStore,
+  type SyraxFixture,
+} from "./gateway.ts";
 import { standInRuntime, temporaryMachine } from "./machine.ts";
 import { TelegramStub } from "./stubs/telegram-bot-api.ts";
 
@@ -131,7 +138,7 @@ describe("a stand down", () => {
     await returned(() => posted().length === 2);
     assert.deepEqual(ledger(), []);
     assert.deepEqual(frontChain().fallbacks, frontLane.rungs.slice(1).map(modelRef));
-    assert.deepEqual(ranAgainstTheRuntime().length, 2, "the return landed no write of its own.");
+    assert.equal(ranAgainstTheRuntime().length, 2, "the return landed no write of its own.");
     assert.match(posted()[1]!, /a stand down returned/);
   });
 
@@ -270,3 +277,49 @@ async function returned(landed: () => boolean, within = 5000): Promise<void> {
   }
   assert.fail("the stand down was never written back.");
 }
+
+/**
+ * The claim the unit tests above cannot make: that the rung is gone from the lane a **running**
+ * gateway answers on, and that it went without a restart. It is measured where ADR-0021 measured
+ * the question it corrects — at the provider wire, on the model the next turn is sent to.
+ */
+describe("a stand down over a real gateway", { skip: !runtimeIsInstalled() }, () => {
+  const gemini = "gemini-3.5-flash-lite";
+  const mistral = "ministral-3b-latest";
+  let syrax: SyraxFixture;
+
+  after(async () => {
+    await syrax?.stop();
+  });
+
+  it("lands on the turns that follow it, which no number of turns would have done alone", async () => {
+    syrax = await standSyrax({ catalogue: [gemini, mistral] });
+    // One turn before the write: it says where the measurement starts, and it lets the config
+    // watcher attach — the gateway starts it after reporting itself ready.
+    assert.equal((await turn(syrax, "Which model is this?")).model, gemini);
+    const deployment = readDeployment(syrax.gateway.deployment);
+    const monitor = new LaneMonitor(deployment);
+
+    const stood = await monitor.standDown({
+      rung: `syrax-gemini/${gemini}`,
+      until: new Date(Date.now() + 3_600_000),
+      why: "the day's requests are gone",
+    });
+
+    assert.equal(stood.landed.landed, true, stood.landed.said);
+    assert.match(stood.landed.said, /restarted safely/);
+    const landed = await turnsUntil(
+      syrax,
+      "Which model is this?",
+      syrax.carriers.general,
+      (each) => each.model === mistral,
+    );
+    assert.ok(
+      landed.landed,
+      `the stand down never reached a turn: ${JSON.stringify(landed.turns)}`,
+    );
+    // The restart drains rather than kills, so the cost is the sessions and not this turn. What
+    // that costs a turn in flight is measured in `docs/research/landing-an-agents-write.md`.
+    assert.ok(landed.turns.length <= 3, `it took ${landed.turns.length} turns to land.`);
+  });
+});

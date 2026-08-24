@@ -1,5 +1,14 @@
 # A config write is applied when it is written, and landed when a channel reloads
 
+> **Its own revisit trigger has fired and is settled.** *"A supported way to land an `agents` write
+> without a restart appears"* was measured for #128:
+> [`docs/research/landing-an-agents-write.md`](../research/landing-an-agents-write.md). `config.apply`
+> — the candidate named below — is a **writer, not a lander**. A `channels.stop` + `channels.start`
+> pair *is* one and keeps the sessions, but issued from inside a turn, which is how a stand down is
+> always asked for, it leaves the channel down with the gateway alive. The decision below is
+> unchanged, and the half it called unmeasured now is not: under a turn in flight, `--safe` deferred
+> until the work drained and the reply arrived at the same moment it would have anyway.
+
 A write to the generated configuration reaches the running gateway in **two moves, not one**. The
 first is the runtime's: the file is detected, validated and swapped in, and the log says
 `config hot reload applied`. The second is what the Owner would actually notice — the turn path

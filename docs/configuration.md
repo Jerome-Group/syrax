@@ -211,10 +211,16 @@ in the System chat, and it is Syrax's rather than the runtime's because it chang
 lane's last rung — a lane with no rungs answers nothing.
 
 **The write alone is not the actuator.** A `channels` write lands itself; an `agents` write, which is
-what a chain is, is applied when written and landed only when a channel reloads — so the stand down
-is the write **plus** `openclaw gateway restart --safe`, which drains the turns in flight and drops
-the sessions. [ADR-0021](adr/0021-a-config-write-is-applied-when-it-is-written-and-landed-when-a-channel-reloads.md)
-has the measurements; what it means here is that the Owner is told the sessions went.
+what a chain is, is applied when written and landed only when the turn path is rebuilt — so the stand
+down is the write **plus** `openclaw gateway restart --safe`, which drains the turns in flight and
+drops the sessions. What it costs is the sessions and **not the turn asking for it**: under a turn in
+flight the restart defers until the work drains, and the reply arrives at the same moment it would
+have anyway. The two alternatives were measured and neither survives:
+`config.apply` writes the file and reaches no turn, and a `channels.stop` + `channels.start` pair
+lands it and keeps the sessions but, issued mid-turn, leaves the channel down with the gateway alive.
+[ADR-0021](adr/0021-a-config-write-is-applied-when-it-is-written-and-landed-when-a-channel-reloads.md)
+and [the measurements](research/landing-an-agents-write.md) carry it; what it means here is that the
+Owner is told the sessions went.
 
 **The return is owned, never awaited.** A config write has no expiry, so the rung is written back at
 the reset by a timer the unit holds, and the ledger it is kept in outlives that timer: a reset that
