@@ -14,6 +14,7 @@
  * than as a quiet hour.
  */
 
+import { createHash } from "node:crypto";
 import { closeSync, openSync, readSync, statSync } from "node:fs";
 
 /** One decision, in the fields a reader can act on. The provider's words are passed through. */
@@ -30,8 +31,23 @@ export type Decision = {
   said: string | null;
 };
 
-/** Where the last read stopped, and the two facts that say whether it is still that file. */
-export type Cursor = { inode: number; size: number; offset: number; readAt: string };
+/**
+ * Where the last read stopped, and what says it is still the same file underneath.
+ *
+ * The inode and the size are ADR-0012's two keys and they are **not enough**: a filesystem is free
+ * to hand a replacement file the inode the deleted one had, and a log that has only just started
+ * again is not shorter than a small offset into the old one. So the cursor also carries a print of
+ * the bytes immediately before the offset, and a read that cannot find them again starts over and
+ * says it did.
+ */
+export type Cursor = {
+  inode: number;
+  size: number;
+  offset: number;
+  /** A hash of the bytes just before `offset`, which is what makes this the same file's offset. */
+  print: string;
+  readAt: string;
+};
 
 export type Reading = {
   decisions: Decision[];
@@ -49,16 +65,23 @@ export function readDecisions(logPath: string, previous: Cursor | null, now: Dat
   } catch {
     return {
       decisions: [],
-      cursor: previous ?? { inode: 0, size: 0, offset: 0, readAt: to },
+      cursor: previous ?? { inode: 0, size: 0, offset: 0, print: "", readAt: to },
       window: { from, to, unknown: "the runtime's log could not be opened" },
     };
   }
 
-  const start = startOf(previous, stat.ino, stat.size);
+  const start = startOf(previous, stat.ino, stat.size, printAt(logPath, previous?.offset ?? 0));
   const lines = linesBetween(logPath, start.offset, stat.size);
+  const offset = start.offset + lines.bytes;
   return {
     decisions: lines.text.split("\n").flatMap(asDecision),
-    cursor: { inode: stat.ino, size: stat.size, offset: start.offset + lines.bytes, readAt: to },
+    cursor: {
+      inode: stat.ino,
+      size: stat.size,
+      offset,
+      print: printAt(logPath, offset),
+      readAt: to,
+    },
     window: { from, to, unknown: start.unknown },
   };
 }
@@ -67,6 +90,7 @@ function startOf(
   previous: Cursor | null,
   inode: number,
   size: number,
+  print: string,
 ): { offset: number; unknown: string | null } {
   if (previous === null) {
     return {
@@ -86,7 +110,32 @@ function startOf(
       unknown: "the log is shorter than the last read left it, so it was rewritten",
     };
   }
+  if (print !== previous.print) {
+    return {
+      offset: 0,
+      unknown: "the log no longer holds what the last read left behind it",
+    };
+  }
   return { offset: previous.offset, unknown: null };
+}
+
+/**
+ * The bytes immediately before an offset, hashed. A short window is enough to tell one log from
+ * another at the same offset, and hashing keeps a chat line out of this unit's own state file.
+ */
+function printAt(path: string, offset: number): string {
+  if (offset <= 0) return "";
+  const wanted = Math.min(256, offset);
+  const handle = openSync(path, "r");
+  try {
+    const buffer = Buffer.alloc(wanted);
+    const read = readSync(handle, buffer, 0, wanted, offset - wanted);
+    return createHash("sha256").update(buffer.subarray(0, read)).digest("hex").slice(0, 16);
+  } catch {
+    return "";
+  } finally {
+    closeSync(handle);
+  }
 }
 
 /** Whole lines only: a read that lands mid-line leaves the rest of it for the next one. */

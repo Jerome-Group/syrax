@@ -166,8 +166,10 @@ automatically. [ADR-0012](adr/0012-a-rotted-rung-is-reported-and-never-repaired.
 reasoning.
 
 For this the unit reads the gateway's own log, where the runtime already classifies a
-`model_not_found` and names the rung that answered instead. It keeps a byte offset keyed on inode
-**and** size and reports **the window it actually covered** rather than only when it last ran — a log
+`model_not_found` and names the rung that answered instead. It keeps a byte offset keyed on inode, size **and** a print of the
+bytes the last read left behind — a filesystem is free to hand a replacement file the deleted one's
+inode, and a log that has only just started again is not shorter than a small offset into the old
+one — and it reports **the window it actually covered** rather than only when it last ran — a log
 it cannot open, a log replaced under it, or a gap it can prove it missed is *unknown* rather than a
 quiet day. launchd pokes `POST /watch` on the loopback port hourly, at 47 minutes past, and the same
 read is what notices a **lane switch**: the lane answering on a rung below the one it was last seen

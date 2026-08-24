@@ -8,7 +8,7 @@
  */
 
 import assert from "node:assert/strict";
-import { unlinkSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
 import { readDeployment } from "../src/adapter/deployment.ts";
@@ -94,25 +94,55 @@ describe("the fallback-decision reader", () => {
     assert.equal(second.decisions.length, 1);
   });
 
-  it("says what it could not cover: a log replaced, and one it has never read", () => {
+  it("says what it could not cover: a log rewritten under it, and one never read", () => {
+    const { root } = temporaryMachine();
+    const log = join(root, "openclaw.log");
+    const first = decisionLine(
+      "2026-08-24T09:00:00Z",
+      "candidate_succeeded",
+      `syrax-mistral/${mistral}`,
+    );
+    writeFileSync(log, `${first}\n`);
+    const read = readDecisions(log, null, new Date());
+    assert.match(String(read.window.unknown), /never been read/);
+
+    // Rewritten in place and to the same length, so neither of ADR-0012's two keys can see it: the
+    // inode is the one the reader last saw, and the file is not shorter than the offset into it.
+    // What catches it is the print of the bytes the last read left behind.
+    const second = decisionLine(
+      "2026-08-24T10:00:00Z",
+      "candidate_succeeded",
+      `syrax-mistral/${mistral}`,
+    );
+    assert.equal(second.length, first.length, "the two lines must be the same length to prove it.");
+    writeFileSync(log, `${second}\n`);
+    const rewritten = readDecisions(log, read.cursor, new Date());
+
+    assert.match(String(rewritten.window.unknown), /no longer holds/);
+    assert.equal(rewritten.decisions.length, 1, "the rewrite was read from its start.");
+    assert.equal(rewritten.decisions[0]!.at, "2026-08-24T10:00:00Z");
+  });
+
+  it("reads on from where it stopped when the log is the one it left", () => {
     const { root } = temporaryMachine();
     const log = join(root, "openclaw.log");
     writeFileSync(
       log,
       `${decisionLine("2026-08-24T09:00:00Z", "candidate_succeeded", `syrax-mistral/${mistral}`)}\n`,
     );
-    const first = readDecisions(log, null, new Date());
-    assert.match(String(first.window.unknown), /never been read/);
-
-    unlinkSync(log);
+    const read = readDecisions(log, null, new Date());
     writeFileSync(
       log,
-      `${decisionLine("2026-08-24T10:00:00Z", "candidate_succeeded", `syrax-mistral/${mistral}`)}\n`,
+      `${decisionLine("2026-08-24T09:01:00Z", "candidate_succeeded", `syrax-mistral/${mistral}`)}\n`,
+      {
+        flag: "a",
+      },
     );
-    const rotated = readDecisions(log, first.cursor, new Date());
 
-    assert.match(String(rotated.window.unknown), /replaced/);
-    assert.equal(rotated.decisions.length, 1, "the replacement was read from its start.");
+    const on = readDecisions(log, read.cursor, new Date());
+
+    assert.equal(on.window.unknown, null, "an untouched log was read as a rewritten one.");
+    assert.equal(on.decisions.length, 1);
   });
 
   it("holds a rotted rung between reads, and lets it go when it answers again", () => {
