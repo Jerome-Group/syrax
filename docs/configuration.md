@@ -161,13 +161,22 @@ It also reports **rotted rungs** — chain members whose model no longer answers
 calls it by. That is a different subject from headroom, a vanished model having no allowance left to
 measure, and it arrives in the same report because the two answer one question between them: whether
 the lane can still be relied on. A rung is reported when it changes state and listed in between, with
-the provider's own message passed through verbatim and a tappable action that removes it — the write
-is Syrax's, the decision is the Owner's. Nothing is ever replaced automatically.
-[ADR-0012](adr/0012-a-rotted-rung-is-reported-and-never-repaired.md) carries the reasoning.
+the provider's own message passed through verbatim. Nothing is ever replaced or removed
+automatically. [ADR-0012](adr/0012-a-rotted-rung-is-reported-and-never-repaired.md) carries the
+reasoning.
 
-For this the unit reads the gateway's own log, so it keeps a byte offset and reports **the window it
-actually covered** rather than only when it last ran — a log it cannot open, or a gap it can prove it
-missed, is *unknown* rather than a quiet day.
+For this the unit reads the gateway's own log, where the runtime already classifies a
+`model_not_found` and names the rung that answered instead. It keeps a byte offset keyed on inode
+**and** size and reports **the window it actually covered** rather than only when it last ran — a log
+it cannot open, a log replaced under it, or a gap it can prove it missed is *unknown* rather than a
+quiet day. launchd pokes `POST /watch` on the loopback port hourly, at 47 minutes past, and the same
+read is what notices a **lane switch**: the lane answering on a rung below the one it was last seen
+on.
+
+Two halves of ADR-0012 are not built yet. The log speaks only once something has already gone wrong,
+so a rung *beneath* the serving one is invisible until the one above it fails; the daily sweep that
+covers those, and the inline tap that removes a dead rung on the Owner's decision, are
+[#129](https://github.com/Jerome-Group/syrax/issues/129).
 
 Each unit is launched through a wrapper script rather than the binary, generated from the
 deployment by `src/cli/install-gateway-agent.ts` and `src/cli/install-search-agent.ts`. A wrapper

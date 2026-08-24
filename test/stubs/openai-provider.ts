@@ -18,6 +18,11 @@ export type ScriptedResponse =
   | { kind: "rateLimited"; code: string; message: string; retryAfterSeconds: number }
   /** The backend, not the allowance: a rung that was never served rather than one that refused. */
   | { kind: "overloaded"; message: string }
+  /**
+   * A rung answering to no such name: a 404 in the provider's own words. The words are the point —
+   * a model that is gone and one that has stopped being free wear the same code (ADR-0012).
+   */
+  | { kind: "vanished"; message: string }
   | { kind: "wall"; requestedTokens: number; limitTokens: number };
 
 export type ProviderRequest = { path: string; body: Record<string, unknown> };
@@ -131,6 +136,15 @@ export class ProviderStub {
       return json(response, 503, [
         { error: { code: 503, message: scripted.message, status: "UNAVAILABLE" } },
       ]);
+    }
+    if (scripted.kind === "vanished") {
+      return json(response, 404, {
+        error: {
+          message: scripted.message,
+          type: "invalid_request_error",
+          code: "model_not_found",
+        },
+      });
     }
     if (scripted.kind === "wall") {
       return json(response, 413, {

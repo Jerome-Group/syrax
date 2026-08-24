@@ -19,6 +19,7 @@ import { writePrivateFile } from "../adapter/private-state.ts";
 import type { DailyCounters } from "./counters.ts";
 import type { Source, TelemetrySources } from "./sources.ts";
 import type { StandDown } from "../adapter/stand-down-ledger.ts";
+import type { Rotted, Window } from "./rung-watch.ts";
 
 /** One lane, in the two things a report is asked for: what is left, and what is still in it. */
 export type LaneUsage = {
@@ -35,7 +36,15 @@ export type LaneUsage = {
   sources: Source[];
 };
 
-export type UsageReport = { at: string; lanes: LaneUsage[] };
+/**
+ * The report's second subject: rungs that have stopped answering to their own names, and the window
+ * the reader behind them actually covered. A vanished model has no allowance to be low on, and the
+ * two share a report because between them they answer one question — whether the lane can still be
+ * relied on.
+ */
+export type RungWatched = { rotted: Rotted[]; window: Window | null };
+
+export type UsageReport = { at: string; lanes: LaneUsage[]; watched: RungWatched };
 
 /**
  * What makes the report arrive unasked, and the whole of what does: everything else is silence,
@@ -61,10 +70,12 @@ export function usageReport(
   counters: DailyCounters,
   telemetry: TelemetrySources,
   standDowns: readonly StandDown[],
+  watched: RungWatched,
   now: Date = new Date(),
 ): UsageReport {
   return {
     at: now.toISOString(),
+    watched,
     lanes: [
       ...chainLanes.map((lane) => chainUsage(lane, telemetry, standDowns)),
       hatchUsage(counters, now),

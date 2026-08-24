@@ -10,15 +10,17 @@
  * restart is an allowance spent twice.
  */
 
-import { createServer, type Server } from "node:http";
+import { createServer, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Deployment } from "../adapter/deployment.ts";
+import { runtimeLogPath } from "../adapter/runtime-log.ts";
 import {
   monitorServerName,
   hatchToolName,
   mcpPath,
   reportToolName,
   standDownToolName,
+  watchPath,
 } from "../adapter/monitor-tools.ts";
 import { ensurePrivateDirectory } from "../adapter/private-state.ts";
 import type { Landed } from "../adapter/runtime-command.ts";
@@ -27,6 +29,7 @@ import { DailyCounters } from "./counters.ts";
 import { EscapeHatch, type HatchAsk } from "./hatch.ts";
 import { LaneMembership } from "./lane-membership.ts";
 import { mcpEndpoint, type Tool } from "./mcp.ts";
+import { RungWatch } from "./rung-watch.ts";
 import { type Source, TelemetrySources } from "./sources.ts";
 import type { StandDown } from "../adapter/stand-down-ledger.ts";
 import { AlreadyReturned, StandDowns } from "./stand-down.ts";
@@ -48,6 +51,7 @@ export class LaneMonitor {
   readonly telemetry: TelemetrySources;
   readonly hatch: EscapeHatch;
   readonly standDowns: StandDowns;
+  readonly rungs: RungWatch;
   #deployment: Deployment;
   #membership: LaneMembership;
 
@@ -59,6 +63,7 @@ export class LaneMonitor {
     this.hatch = new EscapeHatch(deployment, this.counters, this.telemetry);
     this.standDowns = new StandDowns(deployment.monitorState, now);
     this.#membership = new LaneMembership(deployment);
+    this.rungs = new RungWatch(deployment.monitorState, runtimeLogPath(deployment.logsDir));
   }
 
   /** Each lane's headroom and when the source behind it was last read successfully. */
@@ -68,7 +73,13 @@ export class LaneMonitor {
 
   /** The report, and the file that is its second audience: asking for one always leaves one. */
   report(now: Date = new Date()): UsageReport {
-    const report = usageReport(this.counters, this.telemetry, this.standDowns.active(now), now);
+    const report = usageReport(
+      this.counters,
+      this.telemetry,
+      this.standDowns.active(now),
+      { rotted: this.rungs.rotted(), window: this.rungs.window() },
+      now,
+    );
     writeUsageReport(this.#deployment.monitorState, report);
     return report;
   }
@@ -112,6 +123,19 @@ export class LaneMonitor {
       console.error(`syrax lane monitor: the lanes were written and not landed: ${landed.said}`);
     }
     return landed;
+  }
+
+  /**
+   * The rung watch, poked on a schedule rather than run on a turn: it reads the log the runtime
+   * writes anyway, and says what moved. Nothing is posted where nothing did.
+   */
+  async watchRungs(now: Date = new Date()): Promise<Transition[]> {
+    const moved = this.rungs.watch(
+      this.standDowns.active(now).map((held) => held.rung),
+      now,
+    );
+    for (const transition of moved) await this.announce(transition, now);
+    return moved;
   }
 
   /**
@@ -271,7 +295,12 @@ function reason(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** Loopback only: the agents are on this machine, and nothing else has business with the hatch. */
+/**
+ * Loopback only: the agents are on this machine, and nothing else has business with the hatch. Two
+ * paths are served — the MCP endpoint the agents connect to, and the poke launchd makes at the rung
+ * watch, which is a schedule rather than a tool because nothing a model does should decide when the
+ * runtime's log is read (ADR-0005).
+ */
 export async function serveLaneMonitor(
   deployment: Deployment,
 ): Promise<{ server: Server; port: number; monitor: LaneMonitor }> {
@@ -279,13 +308,25 @@ export async function serveLaneMonitor(
   await monitor.reconcile();
   const endpoint = mcpEndpoint(monitorServerName, monitor.tools());
   const server = createServer((request, response) => {
-    if ((request.url ?? "").split("?")[0] !== mcpPath) {
-      response.writeHead(404, { "content-type": "application/json" });
-      response.end(JSON.stringify({ error: "not found" }));
+    const path = (request.url ?? "").split("?")[0];
+    if (path === watchPath && request.method === "POST") {
+      void monitor
+        .watchRungs()
+        .then((moved) => send(response, 200, { moved }))
+        .catch((error: unknown) => send(response, 500, { error: reason(error) }));
+      return;
+    }
+    if (path !== mcpPath) {
+      send(response, 404, { error: "not found" });
       return;
     }
     void endpoint(request, response);
   });
   await new Promise<void>((resolve) => server.listen(deployment.monitorPort, "127.0.0.1", resolve));
   return { server, port: (server.address() as AddressInfo).port, monitor };
+}
+
+function send(response: ServerResponse, status: number, payload: unknown): void {
+  response.writeHead(status, { "content-type": "application/json" });
+  response.end(JSON.stringify(payload));
 }

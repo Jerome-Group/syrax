@@ -17,6 +17,8 @@ import {
   hatchLabel,
   launchAgentPath,
   monitorLaunchAgentPlist,
+  rungWatchLabel,
+  rungWatchPlist,
 } from "../supervision/launch-agent.ts";
 import { monitorWrapperScript } from "../supervision/monitor-wrapper.ts";
 
@@ -24,7 +26,7 @@ const executableMode = 0o700;
 
 export const checkout = resolve(import.meta.dirname, "..", "..");
 
-export type InstalledMonitorAgent = { wrapperPath: string; plistPath: string };
+export type InstalledMonitorAgent = { wrapperPath: string; plistPaths: string[] };
 
 export function installMonitorAgent(
   deployment: Deployment,
@@ -39,11 +41,18 @@ export function installMonitorAgent(
   );
   chmodSync(deployment.monitorWrapperPath, executableMode);
 
-  const plistPath = launchAgentPath(home, hatchLabel);
-  mkdirSync(dirname(plistPath), { recursive: true });
-  writeFileSync(plistPath, monitorLaunchAgentPlist(deployment));
+  const plists = {
+    [hatchLabel]: monitorLaunchAgentPlist(deployment),
+    [rungWatchLabel]: rungWatchPlist(deployment),
+  };
+  const plistPaths = Object.entries(plists).map(([label, contents]) => {
+    const path = launchAgentPath(home, label);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, contents);
+    return path;
+  });
 
-  return { wrapperPath: deployment.monitorWrapperPath, plistPath };
+  return { wrapperPath: deployment.monitorWrapperPath, plistPaths };
 }
 
 if (import.meta.filename === process.argv[1]) {
@@ -56,6 +65,8 @@ if (import.meta.filename === process.argv[1]) {
   const deployment = readDeployment(JSON.parse(await readFile(deploymentPath, "utf8")));
   const installed = installMonitorAgent(deployment, deploymentPath, homedir());
   console.log(installed.wrapperPath);
-  console.log(installed.plistPath);
-  console.log(`launchctl bootstrap gui/$(id -u) "${installed.plistPath}"`);
+  for (const path of installed.plistPaths) {
+    console.log(path);
+    console.log(`launchctl bootstrap gui/$(id -u) "${path}"`);
+  }
 }

@@ -25,7 +25,25 @@ export function usageReportLine(report: UsageReport, transition?: Transition): s
     transition === undefined
       ? `Usage at ${report.at}.`
       : `Usage — ${transition.kind}: ${transition.said}`;
-  return [opening, ...report.lanes.map(laneLines)].join("\n\n");
+  return [opening, ...report.lanes.map(laneLines), ...watched(report.watched)].join("\n\n");
+}
+
+/**
+ * The rotted rungs are listed rather than re-announced — a post repeating a condition nobody has
+ * acted on is the thing this report is defined not to be — and the window is stated only where it
+ * has a gap in it, because a reader who is told the window every time stops reading it.
+ */
+function watched(seen: UsageReport["watched"]): string[] {
+  const lines = [
+    ...seen.rotted.map(
+      (one) =>
+        `- ${one.rung} (${one.lane}) has answered to no such name since ${one.at}: "${one.said}"`,
+    ),
+    ...(seen.window?.unknown === undefined || seen.window.unknown === null
+      ? []
+      : [`- the rung watch did not cover everything: ${seen.window.unknown}`]),
+  ];
+  return lines.length === 0 ? [] : [["**rungs**", ...lines].join("\n")];
 }
 
 function laneLines(usage: LaneUsage): string {

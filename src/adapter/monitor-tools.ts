@@ -21,6 +21,9 @@ export const reportToolName = "report";
 export const standDownToolName = "stand-down";
 export const mcpPath = "/mcp";
 
+/** Where launchd pokes the rung watch. It is not a tool: a schedule decides when a log is read. */
+export const watchPath = "/watch";
+
 /** The names a model calls them by: the runtime prefixes each tool with its server. */
 export const hatchTool = `${monitorServerName}__${hatchToolName}`;
 export const reportTool = `${monitorServerName}__${reportToolName}`;
