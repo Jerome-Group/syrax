@@ -11,7 +11,14 @@ import { join } from "node:path";
 import { after, describe, it } from "node:test";
 import { buildRuntimeConfig } from "../src/adapter/build.ts";
 import { readDeployment, type Deployment } from "../src/adapter/deployment.ts";
-import { hatchTool, hatchToolName, mcpPath } from "../src/adapter/monitor-tools.ts";
+import {
+  hatchTool,
+  hatchToolName,
+  mcpPath,
+  monitorServerName,
+  reportToolName,
+  standDownToolName,
+} from "../src/adapter/monitor-tools.ts";
 import { hatchLane, rungId, silentProvider } from "../src/adapter/hatch-lane.ts";
 import { frontLane } from "../src/adapter/front-lane.ts";
 import { workerLane } from "../src/adapter/worker-lane.ts";
@@ -384,7 +391,7 @@ describe("the hatch over MCP", () => {
 
     assert.deepEqual(
       (listed.result as { tools: { name: string }[] }).tools.map((tool) => tool.name),
-      [hatchToolName],
+      [hatchToolName, reportToolName, standDownToolName],
     );
     const answered = (called.result as { structuredContent: { reached: boolean; answer: string } })
       .structuredContent;
@@ -393,7 +400,7 @@ describe("the hatch over MCP", () => {
   });
 
   it("answers a tool that throws rather than taking the unit down with it", async () => {
-    const endpoint = mcpEndpoint("syrax-hatch", [
+    const endpoint = mcpEndpoint(monitorServerName, [
       {
         name: hatchToolName,
         description: "one that fails",
@@ -430,7 +437,7 @@ describe("the hatch over MCP", () => {
 
     assert.equal(
       (initialized.result as { serverInfo: { name: string } }).serverInfo.name,
-      "syrax-hatch",
+      monitorServerName,
     );
     assert.equal((unknown.error as { code: number }).code, -32601);
   });
@@ -452,16 +459,15 @@ describe("the rationed lane's composition", () => {
 
   it("is reached from every chat, being a lane rather than one chat's capability", () => {
     const { deployment } = temporaryMachine();
-    const config = buildRuntimeConfig(readDeployment(deployment), {
-      general: 2,
-      academic: 3,
-      media: 4,
-      system: 5,
-    });
+    const config = buildRuntimeConfig(
+      readDeployment(deployment),
+      { general: 2, academic: 3, media: 4, system: 5 },
+      [],
+    );
     const servers = config.mcp.servers as Record<string, { url: string; transport: string }>;
 
-    assert.equal(servers["syrax-hatch"]!.url, `http://127.0.0.1:18791${mcpPath}`);
-    assert.equal(servers["syrax-hatch"]!.transport, "streamable-http");
+    assert.equal(servers[monitorServerName]!.url, `http://127.0.0.1:18791${mcpPath}`);
+    assert.equal(servers[monitorServerName]!.transport, "streamable-http");
     for (const agent of config.agents.list) {
       assert.ok(agent.tools.alsoAllow.includes(hatchTool), `${agent.id} cannot reach the hatch.`);
     }

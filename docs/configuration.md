@@ -28,7 +28,7 @@ gateway restarts; there is no partial edit of a live configuration.
 |---------|---------|--------------|
 | runtime | The selected adapter and executable entrypoint | Placeholder until a runtime is chosen |
 | model | Provider and model selection | Names only; credentials stay outside the file |
-| paths | Roots for private state, chat archives, the search index, its benchmark, the logs and the usage report | Absolute paths outside this repository |
+| paths | Roots for private state, chat archives, the search index, its benchmark, the logs and the lane monitor's own state | Absolute paths outside this repository |
 | security | Secret source and tool policy | Environment/private store plus explicit allowlist |
 | observability | Log and trace handling | Sanitised local output by default |
 
@@ -86,7 +86,7 @@ Its own three keys sit in the deployment beside the search unit's, and it is ins
 
 | Key | What it is |
 |-----|------------|
-| `monitorState` | Where the rationed lane's counters live — private runtime state, outside the checkout, and the reason the unit is separate: a restart that lost them would hand back an allowance already spent |
+| `monitorState` | Where the rationed lane's counters, the stand-down ledger and the usage report live — private runtime state, outside the checkout, and the reason the unit is separate: a restart that lost the counters would hand back an allowance already spent |
 | `monitorWrapperPath` | Its wrapper, in the gateway's shape. What the wrapper runs is **this repository's own source**, since the monitor is Syrax's code where the other two units are installed trees |
 | `monitorPort` | The loopback port the agents reach the escape hatch on; `18791` unless the deployment says otherwise |
 
@@ -101,7 +101,7 @@ rather than at each call the hatch makes.
 
 ## The escape hatch
 
-The rationed lane is reached through one MCP tool the monitor serves, `syrax-hatch__reach`, and
+The rationed lane is reached through one MCP tool the monitor serves, `syrax-monitor__reach`, and
 every chat carries the connection: the hatch is a **lane** rather than a capability, so a chat
 boundary is the wrong thing to draw around it — the Owner asking for it in Academic is asking about
 the question in front of them.
@@ -138,13 +138,22 @@ which then says when it was last understood rather than reading as a quiet day.
 
 ## The usage report
 
-The hatch unit writes the usage report to the `usage_report` path, and a launchd calendar job pokes
-it to refresh. It is written to a file as well as posted in chat because an agent working in the
-checkout cannot read the chat surface, and the counters it draws on are private runtime state that
-is never committed.
+The lane monitor writes the usage report to `usage-report.json` under its own state root, beside the
+counters it is drawn from. It is written to a file as well as posted in chat because an agent working
+in the checkout cannot read the chat surface, and the counters it draws on are private runtime state
+that is never committed. Every build of the report writes the file, whether or not anybody is told.
 
-It carries per-lane headroom with each provider's own telemetry beneath it, and **it states when it
-last successfully read each source**. That timestamp is not decoration: most of the telemetry is
+**It is asked for at any time and arrives unasked only on a transition.** The System chat calls
+`syrax-monitor__report` — the tool is System's alone, where the hatch is every chat's — and the same
+report is posted into System when something moved: a rung stood down or returned, a lane switched, a
+rationed call was spent, a rung found rotted or found working again. Nothing else posts it. A message
+that says the same thing every time trains the Owner to ignore it, and this is the one they must not.
+
+It carries per-lane headroom — the rung that answers next and what that provider has left — with
+each provider's own telemetry beneath it, and **it states when it last successfully read each
+source**. The rationed lane is the counted one, because its provider reports nothing; the two chain
+lanes are stated from what their own providers said, and never from the rationed lane's counts,
+which are an allowance the front lane does not draw on. That timestamp is not decoration: most of the telemetry is
 read out of the runtime's own internal state, so a change there would otherwise break the report
 silently — and a stale report is indistinguishable from a quiet day.
 
@@ -184,6 +193,34 @@ before a pass can be poked into it.
 Every wall-clock schedule — the index passes and the morning brief — is a launchd calendar job that
 pokes a loopback endpoint, rather than being split between launchd and the runtime's own scheduler.
 That keeps one auditable answer to *what can message me unprompted*.
+
+## Standing a rung down, and pinning one
+
+A **stand down** takes a rung out of its lane until a stated reset. It is `syrax-monitor__stand-down`
+in the System chat, and it is Syrax's rather than the runtime's because it changes a lane's
+**membership**, which is configuration. It refuses a rung no lane holds, a reset already past, and a
+lane's last rung — a lane with no rungs answers nothing.
+
+**The write alone is not the actuator.** A `channels` write lands itself; an `agents` write, which is
+what a chain is, is applied when written and landed only when a channel reloads — so the stand down
+is the write **plus** `openclaw gateway restart --safe`, which drains the turns in flight and drops
+the sessions. [ADR-0021](adr/0021-a-config-write-is-applied-when-it-is-written-and-landed-when-a-channel-reloads.md)
+has the measurements; what it means here is that the Owner is told the sessions went.
+
+**The return is owned, never awaited.** A config write has no expiry, so the rung is written back at
+the reset by a timer the unit holds, and the ledger it is kept in outlives that timer: a reset that
+passes while nothing is running is honoured on the way back in.
+
+**Startup re-derives the stand downs from that ledger and never from the configuration.** A redeploy
+regenerating the file from the authored contract would otherwise silently revert a live stand down,
+or silently restore one whose reset has passed; instead the monitor compares the lanes the file holds
+against the lanes the ledger implies, and writes and lands the difference. The ledger is
+`stand-downs.json` beside the counters.
+
+A **pin** is the apparent opposite and is not one. It forces a *selection* within a lane, it belongs
+to the runtime, and it is the Owner's own `/model <provider/model>` typed in the chat. Syrax neither
+issues it nor imitates it: standing a rung down to pin another one takes a lane apart to answer a
+question about one turn.
 
 ## The search unit
 

@@ -42,8 +42,23 @@ export function modelRef(rung: Rung): string {
   return `${rung.provider}/${rung.modelId}`;
 }
 
-/** A lane as the runtime takes it: the rung that is tried first, then the order it falls through. */
-export function laneChain(lane: Lane) {
-  const [primary, ...fallbacks] = lane.rungs;
-  return { primary: modelRef(primary!), fallbacks: fallbacks.map(modelRef) };
+/**
+ * A lane as the runtime takes it: the rung that is tried first, then the order it falls through,
+ * with any rung standing down left out — a stand down overrides *membership*, and membership is
+ * this (ADR-0009).
+ *
+ * A lane with nothing left in it is refused rather than written: the runtime would take a chain
+ * with no primary as a lane that answers nothing, which is the one thing a stand down must not be
+ * able to do.
+ */
+export function laneChain(lane: Lane, standingDown: readonly string[]) {
+  const [primary, ...fallbacks] = lane.rungs.filter(
+    (rung) => !standingDown.includes(modelRef(rung)),
+  );
+  if (primary === undefined) {
+    throw new Error(
+      `the ${lane.name} lane has no rung left: ${standingDown.join(", ")} stand down.`,
+    );
+  }
+  return { primary: modelRef(primary), fallbacks: fallbacks.map(modelRef) };
 }

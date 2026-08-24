@@ -18,10 +18,10 @@ import {
 import { agentTools } from "./agent-tools.ts";
 import { workerLane } from "./worker-lane.ts";
 
-export function agentDefaults(deployment: Deployment) {
+export function agentDefaults(deployment: Deployment, standingDown: readonly string[]) {
   return {
-    model: laneChain(frontLane),
-    subagents: subagentDefaults(),
+    model: laneChain(frontLane, standingDown),
+    subagents: subagentDefaults(standingDown),
     timeoutSeconds: turnCeilingSeconds,
     // Both catalogues off: the third-party allowlist ADR-0003 emptied, and the runtime's own
     // bundled 31 that ADR-0011 widened it to reach.
@@ -38,9 +38,9 @@ export function agentDefaults(deployment: Deployment) {
  * one place a chain other than `model` is expressed, so this is what keeps the lane that thinks off
  * the lane that talks — and keeps ADR-0016's promise that no model serves both.
  */
-function subagentDefaults() {
+function subagentDefaults(standingDown: readonly string[]) {
   return {
-    model: laneChain(workerLane),
+    model: laneChain(workerLane, standingDown),
     // The front lane stays responsive by delegating anything more involved than a direct reply.
     delegationMode: "prefer",
     // One user, one worker at a time: two concurrent workers would be two calls into one per-model
@@ -48,6 +48,21 @@ function subagentDefaults() {
     maxConcurrent: 1,
     runTimeoutSeconds: subagentRunTimeoutSeconds,
     announceTimeoutMs: subagentAnnounceTimeoutMs,
+  };
+}
+
+/**
+ * The two chains read back out of a written configuration, from the same two keys `agentDefaults`
+ * writes them to. It lives here so that moving a chain moves its reader with it: the lane monitor
+ * compares what a file holds against what the stand-down ledger implies, and a reader that drifted
+ * from the writer would compare nothing and report no difference for ever.
+ */
+export function chainsIn(config: unknown): { front: unknown; worker: unknown } {
+  const defaults = (config as { agents?: { defaults?: Record<string, unknown> } })?.agents
+    ?.defaults;
+  return {
+    front: defaults?.model,
+    worker: (defaults?.subagents as { model?: unknown } | undefined)?.model,
   };
 }
 

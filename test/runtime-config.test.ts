@@ -30,7 +30,7 @@ const deployment = readDeployment({
 /** What the wizard provisioned: one topic per chat, named in the map and never indexed. */
 const carriers = { general: 2, academic: 3, media: 4, system: 5 } as const;
 
-const config = buildRuntimeConfig(deployment, carriers);
+const config = buildRuntimeConfig(deployment, carriers, []);
 
 function everyStringIn(value: unknown, found: string[] = []): string[] {
   if (typeof value === "string") found.push(value);
@@ -157,7 +157,7 @@ describe("the generated runtime configuration", () => {
   it("tells every agent what opens the hatch, and what to do when it refuses", () => {
     for (const subject of everyChat) {
       const instruction = chatInstruction(subject);
-      assert.match(instruction, /syrax-hatch__reach/);
+      assert.match(instruction, /syrax-monitor__reach/);
       assert.match(instruction, /asked for it in so many words/);
       assert.match(instruction, /never call it twice for\s+one question/);
       assert.match(instruction, /Say what is left when it\s+answers/);
@@ -190,7 +190,7 @@ describe("the four chats", () => {
   });
 
   it("routes no topic at all where the map was lost, leaving the default agent to answer", () => {
-    const lost = buildRuntimeConfig(deployment, {});
+    const lost = buildRuntimeConfig(deployment, {}, []);
     assert.deepEqual(lost.channels.telegram.direct["100000000"]!.topics, {});
   });
 

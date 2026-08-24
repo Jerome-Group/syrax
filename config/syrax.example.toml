@@ -30,9 +30,11 @@ benchmark = "/absolute/path/outside/this/repository/search-index/benchmark"
 # Gateway logs carry chat content, so they are private runtime state like the rest of these roots.
 # Rotate them: a supervisor's append-only redirection grows without bound.
 logs = "/absolute/path/outside/this/repository/logs"
-# The usage report is written here as well as posted in chat, so that an agent working in the
-# checkout can read it. It holds provider telemetry, which is private runtime state.
-usage_report = "/absolute/path/outside/this/repository/usage-report"
+# The lane monitor's own state: the rationed lane's counters, the ledger of which rungs are
+# standing down, and the usage report written beside them. The report is a file as well as a chat
+# message so that an agent working in the checkout can read it; all three hold provider telemetry
+# or lane state, which is private runtime state.
+lane_monitor_state = "/absolute/path/outside/this/repository/lane-monitor"
 
 [search]
 # The unit is Python and resident, reached by the four agents over loopback rather than spawned per
@@ -55,9 +57,11 @@ empty_floor = -0.05
 idle_evict_after = "30m"
 
 [lane_monitor]
-# The third unit: the escape hatch over MCP, and the counters behind it. Which models the rationed
-# lane holds is `src/adapter/hatch-lane.ts` rather than this file, for the reason the chains are —
-# a rung is a provider and a model together, ordered (ADR-0006).
+# The third unit: the escape hatch, the usage report and the stand downs, over one MCP connection,
+# with the counters behind them. Which models the rationed lane holds is `src/adapter/hatch-lane.ts`
+# rather than this file, for the reason the chains are — a rung is a provider and a model together,
+# ordered (ADR-0006). A stand down is this unit's too: it changes a lane's membership, where a pin
+# forces a selection within one and belongs to the runtime (ADR-0009).
 port = 18791
 
 [security]

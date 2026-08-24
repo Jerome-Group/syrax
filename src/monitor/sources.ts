@@ -85,6 +85,16 @@ export class TelemetrySources {
         lastReadAt: now.toISOString(),
       };
     }
+    return this.reported(provider);
+  }
+
+  /**
+   * What a provider says about itself, with no local count standing in for it. It is what a lane
+   * the counters know nothing about is reported from: the rationed lane's counts are the rationed
+   * lane's, and reading them as the front lane's headroom would state a number about the wrong
+   * allowance entirely.
+   */
+  reported(provider: ProviderId): Source {
     if (!reportsItsOwnTelemetry(provider)) {
       return {
         provider,

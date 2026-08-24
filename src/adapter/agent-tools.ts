@@ -8,8 +8,8 @@
  * three delegation tools gone, which is a front lane that answers everything itself.
  */
 
-import type { Chat } from "./chats.ts";
-import { hatchTool } from "./monitor-tools.ts";
+import { type Chat, systemChat } from "./chats.ts";
+import { hatchTool, reportTool, standDownTool } from "./monitor-tools.ts";
 import { everySearchUnitTool, searchesTheCorpus, searchTool } from "./search-tools.ts";
 
 /** Without these the front lane cannot spawn, and the lane that thinks is unreachable (ADR-0022). */
@@ -22,11 +22,19 @@ export const delegationTools = ["sessions_spawn", "sessions_yield", "subagents"]
  */
 const messageTool = "message";
 
+/**
+ * The hatch is every chat's, being a lane. The report and the stand down are System's, being
+ * Syrax's own state — which is the one domain a chat here owns.
+ */
+function monitorTools(chat: Chat): string[] {
+  return chat.id === systemChat.id ? [hatchTool, reportTool, standDownTool] : [hatchTool];
+}
+
 export function agentTools(chat: Chat): string[] {
-  if (!searchesTheCorpus(chat)) return [...delegationTools, hatchTool];
+  if (!searchesTheCorpus(chat)) return [...delegationTools, ...monitorTools(chat)];
   return [
     ...delegationTools,
-    hatchTool,
+    ...monitorTools(chat),
     ...everySearchUnitTool.map((tool) => searchTool(chat, tool)),
     messageTool,
   ];
