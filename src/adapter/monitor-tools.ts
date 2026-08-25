@@ -34,6 +34,14 @@ export const watchPath = "/watch";
  */
 export const sweepPath = "/sweep";
 
+/**
+ * Where launchd pokes the delivery of the retrieval report. It is not a tool for the reason neither
+ * of the others is, and it reads rather than scores: the search unit scored the set on its own
+ * re-embed pass and wrote the numbers down, and what this beat adds is the bot token that unit does
+ * not hold (ADR-0007).
+ */
+export const retrievalPath = "/retrieval";
+
 /** The names a model calls them by: the runtime prefixes each tool with its server. */
 export const hatchTool = `${monitorServerName}__${hatchToolName}`;
 export const reportTool = `${monitorServerName}__${reportToolName}`;

@@ -18,6 +18,7 @@ import {
   monitorServerName,
   removeRungToolName,
   reportToolName,
+  retrievalPath,
   standDownToolName,
 } from "../src/adapter/monitor-tools.ts";
 import { hatchLane, rungId, silentProvider } from "../src/adapter/hatch-lane.ts";
@@ -441,6 +442,26 @@ describe("the hatch over MCP", () => {
       monitorServerName,
     );
     assert.equal((unknown.error as { code: number }).code, -32601);
+  });
+});
+
+describe("the retrieval report's delivering beat", () => {
+  it("is a path launchd can poke, and says nothing where no pass has scored", async () => {
+    const { deployment } = temporaryMachine();
+    const { server, port } = await serveLaneMonitor({
+      ...readDeployment(deployment),
+      monitorPort: 0,
+    });
+    after(() => new Promise((resolve) => server.close(() => resolve(undefined))));
+
+    const answered = await fetch(`http://127.0.0.1:${port}${retrievalPath}`, { method: "POST" });
+
+    assert.equal(answered.status, 200);
+    assert.deepEqual(await answered.json(), {
+      report: null,
+      posted: false,
+      said: "no scoring run has been written to read.",
+    });
   });
 });
 

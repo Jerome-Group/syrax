@@ -20,6 +20,7 @@ import {
   mcpPath,
   removeRungToolName,
   reportToolName,
+  retrievalPath,
   standDownToolName,
   sweepPath,
   watchPath,
@@ -32,6 +33,7 @@ import { EscapeHatch, type HatchAsk } from "./hatch.ts";
 import { LaneMembership } from "./lane-membership.ts";
 import { mcpEndpoint, type Tool } from "./mcp.ts";
 import { RemovalTaps } from "./removal-taps.ts";
+import { type Delivered, deliverScoredRetrieval } from "./retrieval-delivery.ts";
 import { Removals } from "./removals.ts";
 import { sweepChainRungs, type Swept } from "./rung-sweep.ts";
 import { RungWatch } from "./rung-watch.ts";
@@ -79,6 +81,7 @@ export class LaneMonitor {
   #deployment: Deployment;
   #membership: LaneMembership;
   #taps = new RemovalTaps();
+  #delivering: Promise<unknown> = Promise.resolve();
 
   constructor(deployment: Deployment, now: Date = new Date()) {
     ensurePrivateDirectory(deployment.monitorState);
@@ -158,6 +161,25 @@ export class LaneMonitor {
       console.error(`syrax lane monitor: the lanes were written and not landed: ${landed.said}`);
     }
     return landed;
+  }
+
+  /**
+   * The retrieval report's delivering beat. The numbers are the search unit's and the file is
+   * already written; what this unit adds is the chat surface, which is the half the scoring side
+   * cannot reach. Nothing is scored here, so a beat that fires more often than a pass does costs
+   * one file read and says nothing.
+   *
+   * **One at a time.** What keeps a run from being delivered twice is a ledger written after the
+   * post, so a beat firing while the post before it is still in flight would read the ledger as it
+   * stood before either of them — and a send has no deadline on it. Each waits for the one ahead,
+   * and finds the run already delivered.
+   */
+  async deliverRetrieval(now: Date = new Date()): Promise<Delivered> {
+    const delivering = this.#delivering
+      .catch(() => undefined)
+      .then(() => deliverScoredRetrieval(this.#deployment, now));
+    this.#delivering = delivering;
+    return await delivering;
   }
 
   /**
@@ -442,9 +464,10 @@ function reason(error: unknown): string {
 
 /**
  * Loopback only: the agents are on this machine, and nothing else has business with the hatch.
- * Three paths are served — the MCP endpoint the agents connect to, and the two pokes launchd makes:
- * the rung watch, and the daily sweep. Both are schedules rather than tools because nothing a model
- * does should decide when the runtime's log is read or when Syrax spends a request (ADR-0005).
+ * Four paths are served — the MCP endpoint the agents connect to, and the three pokes launchd
+ * makes: the rung watch, the daily sweep, and the retrieval report's delivery. All three are
+ * schedules rather than tools because nothing a model does should decide when the runtime's log is
+ * read, when Syrax spends a request, or when the Owner is written to unasked (ADR-0005).
  */
 export async function serveLaneMonitor(
   deployment: Deployment,
@@ -465,6 +488,13 @@ export async function serveLaneMonitor(
       void monitor
         .sweep()
         .then((sweep) => send(response, 200, sweep))
+        .catch((error: unknown) => send(response, 500, { error: reason(error) }));
+      return;
+    }
+    if (path === retrievalPath && request.method === "POST") {
+      void monitor
+        .deliverRetrieval()
+        .then((delivered) => send(response, 200, delivered))
         .catch((error: unknown) => send(response, 500, { error: reason(error) }));
       return;
     }

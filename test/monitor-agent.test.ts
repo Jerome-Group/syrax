@@ -11,8 +11,14 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 import { promisify } from "node:util";
 import { readDeployment } from "../src/adapter/deployment.ts";
+import { retrievalPath } from "../src/adapter/monitor-tools.ts";
 import { checkout, installMonitorAgent } from "../src/cli/install-monitor-agent.ts";
-import { hatchLabel, rungSweepLabel, rungWatchLabel } from "../src/supervision/launch-agent.ts";
+import {
+  hatchLabel,
+  retrievalReportLabel,
+  rungSweepLabel,
+  rungWatchLabel,
+} from "../src/supervision/launch-agent.ts";
 import { temporaryMachine, writePrivateSecretsStore } from "./machine.ts";
 
 const run = promisify(execFile);
@@ -55,6 +61,7 @@ describe("installing the lane monitor's LaunchAgent", () => {
       join(home, "Library", "LaunchAgents", `${hatchLabel}.plist`),
       join(home, "Library", "LaunchAgents", `${rungWatchLabel}.plist`),
       join(home, "Library", "LaunchAgents", `${rungSweepLabel}.plist`),
+      join(home, "Library", "LaunchAgents", `${retrievalReportLabel}.plist`),
     ]);
     assert.equal(hatchLabel, "com.jerome-group.syrax.hatch");
   });
@@ -73,6 +80,27 @@ describe("installing the lane monitor's LaunchAgent", () => {
     assert.match(plist, new RegExp(`http://127.0.0.1:${deployment.monitorPort}/watch`));
     assert.match(plist, /<key>StartCalendarInterval<\/key>/);
     assert.equal(plist.includes("KeepAlive"), false, "a poke that is kept alive is a loop.");
+  });
+
+  it("delivers the report from a beat beside the others, and never scores from one", () => {
+    const { home, deployment } = machine();
+    const retrieval = readFileSync(
+      join(home, "Library", "LaunchAgents", `${retrievalReportLabel}.plist`),
+      "utf8",
+    );
+
+    assert.match(
+      retrieval,
+      new RegExp(`http://127.0.0.1:${deployment.monitorPort}${retrievalPath}`),
+      "the beat pokes a path the unit does not serve.",
+    );
+    assert.match(retrieval, /<key>StartCalendarInterval<\/key>/);
+    assert.equal(retrieval.includes("KeepAlive"), false, "a poke that is kept alive is a loop.");
+    assert.equal(
+      retrieval.includes(`:${deployment.searchPort}`),
+      false,
+      "the beat pokes the unit that scores rather than the one that delivers.",
+    );
   });
 
   it("writes the wrapper private and executable, since it is what launchd runs", () => {

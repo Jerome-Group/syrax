@@ -5,13 +5,14 @@
  *   node src/cli/report-retrieval.ts <deployment.json>
  *
  * The report is written to a file by the search unit whatever this prints, so a run whose post was
- * refused is still a run that left its numbers behind.
+ * refused is still a run that left its numbers behind. It posts through the same delivery the
+ * unattended beat uses, so a run posted here is not posted a second time when that beat next fires.
  */
 
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { readDeployment } from "../adapter/deployment.ts";
-import { isWorthPosting, reportRetrieval } from "../surface/retrieval-report.ts";
+import { scoreAndDeliverRetrieval } from "../monitor/retrieval-delivery.ts";
 
 const source = process.argv[2];
 if (source === undefined) {
@@ -20,6 +21,6 @@ if (source === undefined) {
 }
 
 const deployment = readDeployment(JSON.parse(await readFile(resolve(source), "utf8")));
-const report = await reportRetrieval(deployment);
-console.log(JSON.stringify(report, null, 2));
-if (!isWorthPosting(report)) console.error("nothing moved, so System was not posted into.");
+const delivered = await scoreAndDeliverRetrieval(deployment);
+console.log(JSON.stringify(delivered.report, null, 2));
+if (!delivered.posted) console.error(delivered.said);

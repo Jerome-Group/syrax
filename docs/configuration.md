@@ -63,7 +63,7 @@ split is **one unit per resident thing that must exist exactly once**.
 |------|--------------|------------------------|
 | `com.jerome-group.syrax.gateway` | The agent runtime | It holds the sessions and carries every chat |
 | `com.jerome-group.syrax.search` | The resident search service | One embedder in memory regardless of how many agents connect |
-| `com.jerome-group.syrax.hatch` | The **lane monitor**: the escape-hatch tool, the usage report, the rung watch and the daily sweep | Its counters must be single-instance and must survive a restart of anything else |
+| `com.jerome-group.syrax.hatch` | The **lane monitor**: the escape-hatch tool, the usage report, the rung watch, the daily sweep and the retrieval report's delivery | Its counters must be single-instance and must survive a restart of anything else |
 
 The second is the one that is easy to get wrong. The usual MCP transport has each client spawn the
 server as a child process, which would put one resident embedding model behind **every** agent. The
@@ -86,7 +86,7 @@ Its own three keys sit in the deployment beside the search unit's, and it is ins
 
 | Key | What it is |
 |-----|------------|
-| `monitorState` | Where the rationed lane's counters, the stand-down ledger and the usage report live — private runtime state, outside the checkout, and the reason the unit is separate: a restart that lost the counters would hand back an allowance already spent |
+| `monitorState` | Where the rationed lane's counters, the stand-down ledger, the usage report and the stamp of the last retrieval report delivered live — private runtime state, outside the checkout, and the reason the unit is separate: a restart that lost the counters would hand back an allowance already spent |
 | `monitorWrapperPath` | Its wrapper, in the gateway's shape. What the wrapper runs is **this repository's own source**, since the monitor is Syrax's code where the other two units are installed trees |
 | `monitorPort` | The loopback port the agents reach the escape hatch on; `18791` unless the deployment says otherwise |
 
@@ -211,9 +211,10 @@ a narrower search but no search at all, and fetching one here would make an unat
 a network. It **warns and proceeds** when there is no index yet, because the unit has to be up
 before a pass can be poked into it.
 
-Every wall-clock schedule — the index passes and the morning brief — is a launchd calendar job that
-pokes a loopback endpoint, rather than being split between launchd and the runtime's own scheduler.
-That keeps one auditable answer to *what can message me unprompted*.
+Every wall-clock schedule — the index passes, the rung watch and sweep, the retrieval report's
+delivery, and the morning brief — is a launchd calendar job that pokes a loopback endpoint, rather
+than being split between launchd and the runtime's own scheduler. That keeps one auditable answer to
+*what can message me unprompted*, and `ls ~/Library/LaunchAgents` is that answer in full.
 
 ## Standing a rung down, and pinning one
 
@@ -427,6 +428,22 @@ configuration is a person's act with a pull request behind it. It is written to
 `<search_index>/benchmark/retrieval-report.json` every run, and posted into System only when a
 number moved or a run failed.
 
+**The posting half is the lane monitor's, and it arrives unasked.** The two halves are split by what
+each can reach: the search unit holds the numbers and no bot token, and the lane monitor holds the
+chat surface and no numbers at all. So `com.jerome-group.syrax.retrieval-report` pokes
+`POST /retrieval` on the monitor's loopback port at 57 minutes past the hour, and that beat **reads
+the file the pass wrote** rather than scoring anything — a second scoring run would ask a different
+index a different question and post a number no pass produced. Nothing new is named in the
+deployment for it: the report is found under `searchIndex`, on the layout the search unit's own
+configuration derives from that same key.
+
+The beat is hourly because the run it delivers lands whenever a re-embed pass finishes rather than
+at an hour a schedule can name. **One scoring run is delivered once, however often it fires**: the
+monitor keeps the stamp of the last run it delivered in `retrieval-delivered.json` beside the
+counters, and a run already delivered — or one older than it — costs the beat a file read and
+nothing else. The stamp is written *after* the post, so a chat surface that could not be reached
+leaves the run for the next hour rather than losing it.
+
 ```
 node src/cli/report-retrieval.ts <deployment.json>
 <searchRoot>/bin/python -m syrax_search poke <deployment.json> full
@@ -434,7 +451,8 @@ node src/cli/report-retrieval.ts <deployment.json>
 
 The first scores the set and posts the report if it is worth posting; the second asks the running
 unit for a re-embed, which is the same pass the three-day schedule pokes and needs no unit of its
-own. Give the benchmark directory a local `git init` and never push it: nothing else tracks a file
+own. The command posts through the same delivery the beat uses, so a report it posted is not posted
+a second time when the next beat fires. Give the benchmark directory a local `git init` and never push it: nothing else tracks a file
 whose entries cannot be reproduced, and the data cannot leave the machine by construction.
 
 ### Filling the fixture half

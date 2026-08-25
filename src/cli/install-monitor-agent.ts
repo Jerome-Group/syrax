@@ -17,6 +17,8 @@ import {
   hatchLabel,
   launchAgentPath,
   monitorLaunchAgentPlist,
+  retrievalReportLabel,
+  retrievalReportPlist,
   rungSweepLabel,
   rungSweepPlist,
   rungWatchLabel,
@@ -47,6 +49,7 @@ export function installMonitorAgent(
     [hatchLabel]: monitorLaunchAgentPlist(deployment),
     [rungWatchLabel]: rungWatchPlist(deployment),
     [rungSweepLabel]: rungSweepPlist(deployment),
+    [retrievalReportLabel]: retrievalReportPlist(deployment),
   };
   const plistPaths = Object.entries(plists).map(([label, contents]) => {
     const path = launchAgentPath(home, label);

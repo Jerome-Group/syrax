@@ -394,7 +394,10 @@ dashboard, which suggests a surface that is always on display
 
 **Retrieval report**:
 What the System chat says about how the search index is scoring against the retrieval benchmark:
-posted only when a number moved or a run failed, and written to a file either way. Its subject is
+posted only when a number moved or a run failed, and written to a file either way. It arrives
+without being asked for, and one scoring run is delivered once however often the beat that carries
+it fires — the search unit scores the set on its re-embed pass and writes the numbers down, and the
+lane monitor, which is where the bot token is, posts what that pass wrote. Its subject is
 retrieval quality where the *usage report*'s is lane headroom — the two arrive in the same chat
 under the same exceptions-only discipline, which is the whole reason both are named here. It states
 what the confident floor would be if it were re-fitted against the benchmark as it now stands, and
