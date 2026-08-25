@@ -1,6 +1,6 @@
 /**
- * The retrieval report as the System chat gets it: asked of the resident search unit, and posted
- * only when a number moved or the run failed.
+ * The retrieval report as the System chat gets it: the run the search unit scored, posted only when
+ * a number moved or the run failed.
  *
  * The halves are split by what each can reach. The search unit holds the index, the benchmark set
  * and the arithmetic, and writes its report to a file whatever it finds; it holds no bot token and
@@ -9,6 +9,9 @@
  *
  * Exceptions-only is the whole discipline: if neither the index nor the set moved, the numbers are
  * identical, and a message that says the same thing every time trains the Owner to ignore it.
+ *
+ * Whose run this is and whether it has been posted before is not decided here:
+ * `src/monitor/retrieval-delivery.ts` reads what the re-embed pass wrote and delivers it once.
  */
 
 import type { Deployment } from "../adapter/deployment.ts";
@@ -16,6 +19,11 @@ import { ChatSurface } from "./chat-surface.ts";
 
 /** The unit's own reply, read in the shape it writes it rather than renamed on the way through. */
 export type RetrievalReport = {
+  /**
+   * When the set was scored, which is this run's name: what a delivery is counted against. Empty
+   * where the unit never scored anything, so nothing this side invented is counted as a run.
+   */
+  scored_at: string;
   numbers: Record<string, number | null>;
   confident_floor: {
     /** Null only where the run never reached the unit that holds it. */
@@ -44,19 +52,18 @@ export async function scoreRetrieval(deployment: Deployment): Promise<RetrievalR
   try {
     const response = await fetch(endpoint, { method: "POST" });
     if (!response.ok) throw new Error(`it answered ${response.status}`);
-    return (await response.json()) as RetrievalReport;
+    return stamped((await response.json()) as RetrievalReport);
   } catch (error) {
     return didNotRun(`the search unit did not score the set: ${reason(error)}`);
   }
 }
 
-/** Pokes the unit, and posts the report where it is worth posting. Writing the file is the unit's. */
-export async function reportRetrieval(deployment: Deployment): Promise<RetrievalReport> {
-  const report = await scoreRetrieval(deployment);
-  if (isWorthPosting(report)) {
-    await ChatSurface.open(deployment).post("system", retrievalReportLine(report));
-  }
-  return report;
+/** The post itself: one line into System. What decided it was worth posting is the caller's. */
+export async function postRetrievalReport(
+  deployment: Deployment,
+  report: RetrievalReport,
+): Promise<void> {
+  await ChatSurface.open(deployment).post("system", retrievalReportLine(report));
 }
 
 /**
@@ -91,8 +98,17 @@ function moved(report: RetrievalReport): string {
   return `Moved since the last report: ${report.moved.join(", ")}.`;
 }
 
+/**
+ * The one field this side reads rather than relays: a reply that named no run is treated as naming
+ * none, so what is counted as a scoring run is never an `undefined` written into a ledger.
+ */
+function stamped(report: RetrievalReport): RetrievalReport {
+  return typeof report.scored_at === "string" ? report : { ...report, scored_at: "" };
+}
+
 function didNotRun(failed: string): RetrievalReport {
   return {
+    scored_at: "",
     numbers: {},
     confident_floor: {
       pinned: null,

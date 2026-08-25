@@ -29,6 +29,9 @@ export const rungWatchLabel = "com.jerome-group.syrax.rung-watch";
 
 export const rungSweepLabel = "com.jerome-group.syrax.rung-sweep";
 
+/** The retrieval report's delivering beat, which posts what a re-embed pass scored and never scores. */
+export const retrievalReportLabel = "com.jerome-group.syrax.retrieval-report";
+
 export const incrementalIndexLabel = "com.jerome-group.syrax.index-incremental";
 export const fullIndexLabel = "com.jerome-group.syrax.index-full";
 
@@ -61,6 +64,15 @@ const hourlyOffPeak: Calendar = { Minute: 47 };
  * full index pass at 04:30, which is hours of work rather than seven calls.
  */
 const daily: Calendar = { Hour: 6, Minute: 7 };
+
+/**
+ * The retrieval delivery, ten minutes behind the rung watch. Hourly because the run it delivers
+ * lands whenever a re-embed pass finishes rather than at an hour anything here can name, and an
+ * hourly beat is how a report scored at 09:41 reaches the Owner that morning. It costs one file
+ * read on the hours there is nothing to say: a run already delivered is held by the unit's own
+ * ledger rather than by the calendar, which is why this can be frequent and still silent.
+ */
+const hourlyBehindTheWatch: Calendar = { Minute: 57 };
 
 const everyThirdDay: Calendar = { Day: [1, 4, 7, 10, 13, 16, 19, 22, 25, 28], Hour: 4, Minute: 30 };
 
@@ -112,6 +124,20 @@ export function rungWatchPlist(deployment: Deployment): string {
  */
 export function rungSweepPlist(deployment: Deployment): string {
   return pokePlist(rungSweepLabel, `http://127.0.0.1:${deployment.monitorPort}/sweep`, daily);
+}
+
+/**
+ * The delivery is a poke at the resident unit because that unit holds the bot token and the ledger
+ * of what has already been delivered. It reads the file the search unit wrote and scores nothing:
+ * a second scoring run would ask a different index a different question, and post a number no pass
+ * produced (ADR-0007).
+ */
+export function retrievalReportPlist(deployment: Deployment): string {
+  return pokePlist(
+    retrievalReportLabel,
+    `http://127.0.0.1:${deployment.monitorPort}/retrieval`,
+    hourlyBehindTheWatch,
+  );
 }
 
 function residentUnitPlist(label: string, wrapperPath: string): string {

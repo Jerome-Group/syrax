@@ -62,6 +62,11 @@ idle_evict_after = "30m"
 # rather than this file, for the reason the chains are — a rung is a provider and a model together,
 # ordered (ADR-0006). A stand down is this unit's too: it changes a lane's membership, where a pin
 # forces a selection within one and belongs to the runtime (ADR-0009).
+#
+# It also delivers the retrieval report: the search unit scores the benchmark on its own re-embed
+# pass and writes the numbers down, and this unit is the one holding a bot token, so the beat that
+# posts them is launchd poking this port. Nothing new is named for it — the report is read from the
+# `benchmark` root above, and what has already been delivered is kept beside the counters.
 port = 18791
 
 [security]
