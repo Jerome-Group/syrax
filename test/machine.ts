@@ -28,6 +28,16 @@ export function temporaryMachine(overrides: Record<string, unknown> = {}) {
       searchWrapperPath: join(root, "bin", "start-search.sh"),
       monitorState: join(root, "lane-monitor"),
       monitorWrapperPath: join(root, "bin", "start-monitor.sh"),
+      academicWrapperPath: join(root, "bin", "start-academic.sh"),
+      // The academic pair, stood where a machine holding both checkouts would name them. A suite
+      // that drives the desk writes stand-in products at these paths; one that does not never runs
+      // them, and the generator only asks that they are named.
+      academicOsRoot: join(root, "academic-os"),
+      academicOsConfig: join(root, "academic-os", "academic-os.config.json"),
+      academicOsState: join(root, "academic-state"),
+      ntulearnRoot: join(root, "ntulearn"),
+      ntulearnState: join(root, "ntulearn-state"),
+      academicState: join(root, "academic-desk"),
       // A machine with an Academic chat is a machine that has told the search unit where its
       // modules live; the generator refuses to write a chat a scope with no root behind it.
       searchScopes: { academic: join(root, "corpus", "modules") },

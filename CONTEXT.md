@@ -419,9 +419,31 @@ The message a chat posts each morning without being asked: the day ahead, what a
 and how the overnight jobs went. It is posted whether or not anything happened, and it mentions
 everything new without detailing any of it. **One per chat, not one per system**: it is posted in
 the chat whose corpus it draws on, so the follow-up question lands where the context to answer it
-already is. Only the academic chat has one at v1.
+already is. Only the academic chat has one at v1, where the *academic desk* composes it from what
+the overnight jobs left behind and posts it — never a model's turn, since a heartbeat that depends
+on a free tier stops when the free tier does.
 _Avoid_: digest, notification, alert — a digest may be skipped on an empty day, which is the thing
 this is defined not to do, and the other two are per-event where this is per-day
+
+**Academic desk**:
+The resident unit that holds the academic pair as Syrax reaches it: the tools the academic chat
+calls, and the *daily brief* it posts each morning. It is named for the counter rather than for
+either job because it is neither — it is the one place *refresh-then-read* happens, and both the
+tools and the brief follow from that. Like the *lane monitor* it is a unit of Syrax's rather than a
+capability's own product, and for the opposite reason: the monitor holds state no product has, and
+this holds none at all — it asks, reads, and forgets.
+_Avoid_: academic agent — that is the chat's agent, which is the runtime's; academic service, which
+suggests something the products call rather than something that calls them
+
+**Refresh-then-read**:
+How Syrax reaches every capability whose product owns its own credentials: trigger the product's own
+refresh, then read the output that refresh wrote. It is a boundary rather than a technique — Syrax
+holds no credential of the product's and builds no capability functionality — and it is what makes a
+capability's own tool layer the authority on its domain. A *confirmed write* attaches to consequence
+and never to the word: a pull-only refresh that caches is a read, and only a write to something the
+Owner would notice waits for a tap.
+_Avoid_: sync, polling — the first names one product's own command and the second a schedule, where
+this is about who holds what
 
 Two terms are Organisation-wide and mean the same thing in every repository:
 

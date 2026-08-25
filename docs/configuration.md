@@ -64,6 +64,7 @@ split is **one unit per resident thing that must exist exactly once**.
 | `com.jerome-group.syrax.gateway` | The agent runtime | It holds the sessions and carries every chat |
 | `com.jerome-group.syrax.search` | The resident search service | One embedder in memory regardless of how many agents connect |
 | `com.jerome-group.syrax.hatch` | The **lane monitor**: the escape-hatch tool, the usage report, the rung watch, the daily sweep and the retrieval report's delivery | Its counters must be single-instance and must survive a restart of anything else |
+| `com.jerome-group.syrax.academic` | The **academic desk**: the academic pair's tools, and the morning brief | It listens for the brief's poke and writes into the chat after the turn that asked is over |
 
 The second is the one that is easy to get wrong. The usual MCP transport has each client spawn the
 server as a child process, which would put one resident embedding model behind **every** agent. The
@@ -98,6 +99,80 @@ Its pre-flight has this unit's own two checks. It **refuses to start** when the 
 cannot be made private, and when the secrets store is missing or the machine has left it readable —
 [ADR-0010](adr/0010-one-secrets-store-reached-by-file-backed-refs.md)'s refusal met once at start
 rather than at each call the hatch makes.
+
+## The academic desk
+
+The Academic chat's tool layer is a unit of Syrax's because neither academic product has one to
+lend: both expose a CLI with a versioned `--json` report, and turning one of those into a tool is
+what **refresh-then-read** is —
+[ADR-0030](adr/0030-the-academic-desk-composes-the-brief-and-the-writes-wait-for-a-tap.md) carries
+the reasoning. Syrax triggers each product's own refresh and reads what it wrote; it holds no Google
+and no NTULearn credential, and every command it runs names that product's own configuration.
+
+Its keys sit in the deployment beside the other units', and it is installed the same way:
+
+| Key | What it is |
+|-----|------------|
+| `academicWrapperPath` | Its wrapper, in the gateway's shape. What the wrapper runs is **this repository's own source**, as the lane monitor's does |
+| `academicPort` | The loopback port the Academic agent reaches the desk on and launchd pokes the brief on; `18792` unless the deployment says otherwise |
+| `academicOsRoot` | The `academic-os` checkout. Its CLI is `dist/src/cli.js`, which means the Owner has run `npm ci && npm run build` there |
+| `academicOsConfig` | That product's own gitignored local configuration — where **its** credentials are named, and never read here |
+| `academicOsState` | That product's private `stateRoot`: the calendar mirrors a Refresh writes live under it, and reading them is the *read* half |
+| `ntulearnRoot` | The `ntulearn` checkout, whose CLI is `src/cli.mjs` |
+| `ntulearnState` | Its state directory — the parent of its configured `statePath` — holding the `latest.json` its watchdog writes |
+| `academicState` | The desk's own private scratch, holding one thing: the Proposal input it writes for `academic-os` to read back |
+
+All six product paths are named together or not at all: half a pair is a machine configured while
+somebody was interrupted. A deployment naming none of them **cannot be generated at all** — the
+Academic chat would carry seven tools with nothing behind them.
+
+```
+node src/cli/install-academic-agent.ts <deployment.json>
+```
+
+Its pre-flight refuses to start on a scratch it cannot make private and on a secrets store the
+machine has left readable — it reads the bot token to post the brief. It **warns and proceeds** on a
+product whose entrypoint is not there, which is the one place this unit's asymmetry differs from the
+others': refusing would turn an unbuilt checkout into a silent morning, and the brief is the daily
+heartbeat.
+
+### What it answers, and what it writes
+
+| Question | Where the answer comes from |
+|---|---|
+| What's due | The calendar Refresh, then the **Academic and Commitments** mirrors it wrote. Routine is never read — it is sleep, meals and exercise |
+| Did the sync run | `latest.json`'s verdict, `green`, `yellow` or `red`, as its watchdog wrote it |
+| Anything new | The announcements a sync already wrote under the modules root |
+| Is the folder conforming | `audit --json`, on demand only: nothing schedules an audit, so there is never a fresh observation to volunteer drift from |
+| Content questions | Scoped search, bounded to the modules root by `searchScopes.academic` — the same root the announcements are read under |
+
+Two operations write, and each stands behind an **in-chat confirmation**: `ntulearn sync`, which
+spends the saved SSO session and puts files on disk, and calendar **Promotion**. The desk mints a
+value, the Owner taps the button carrying it, and the write happens on that value and on no other
+input — the same shape as a rotted rung's removal tap. A tap is spent when it resolves and forgotten
+when the unit restarts, so a second tap and an old one both answer *expired*.
+
+A calendar **Refresh** and a **Proposal** are not confirmed: the first is pull-only and never
+touches Live, the second is private and trivially discarded. Confirmation attaches to consequence
+rather than to the word *refresh*. And some things have no tool at all and are not going to get one
+— `ntulearn login`, `renumber`, `seed`, `repair` — so the chat says what is needed and stops.
+
+### The morning brief
+
+At 07:00 launchd pokes `/brief` and the desk composes one, from the day ahead, what arrived
+overnight, and how the overnight jobs went — in that order, because the day ahead is the part with a
+decision attached. It is posted **whether or not anything happened**: its absence is the signal, and
+a morning with no brief means Syrax is down. A `yellow` or `red` sync verdict carries the one line
+only the Owner can act on, which is that the saved NTULearn session needs re-opening.
+
+It is composed here rather than asked of a model for the same reason: a brief that is a free-tier
+turn is a heartbeat that stops when a provider does, and the day ahead is exactly the list of times
+and titles the front lane is told never to state without a tool.
+
+The calendar mirror keeps recurring masters compact, so the desk expands `FREQ=DAILY` and
+`FREQ=WEEKLY` rules — `INTERVAL`, `BYDAY`, `COUNT` and `UNTIL` — and returns anything else as
+`unexpanded` with the rule itself. A morning it cannot see fully never reads as a morning with
+nothing in it.
 
 ## The escape hatch
 

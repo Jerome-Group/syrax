@@ -8,8 +8,13 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { readDeployment, type Deployment } from "../adapter/deployment.ts";
+import { academicWrapperScript } from "../supervision/academic-wrapper.ts";
 import { gatewayWrapperScript } from "../supervision/gateway-wrapper.ts";
 import {
+  academicLabel,
+  academicLaunchAgentPlist,
+  briefLabel,
+  briefPlist,
   gatewayLabel,
   gatewayLaunchAgentPlist,
   hatchLabel,
@@ -55,6 +60,13 @@ export function publicExamples(deployment: Deployment): Record<string, string> {
       exampleCheckoutLocation,
     ),
     [join(configDirectory, `${hatchLabel}.example.plist`)]: monitorLaunchAgentPlist(deployment),
+    [join(configDirectory, "start-academic.example.sh")]: academicWrapperScript(
+      deployment,
+      exampleDeploymentLocation,
+      exampleCheckoutLocation,
+    ),
+    [join(configDirectory, `${academicLabel}.example.plist`)]: academicLaunchAgentPlist(deployment),
+    [join(configDirectory, `${briefLabel}.example.plist`)]: briefPlist(deployment),
     ...Object.fromEntries(schedules),
   };
 }

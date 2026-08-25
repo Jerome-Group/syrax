@@ -21,7 +21,7 @@ const checkout = resolve(import.meta.dirname, "..", "..");
 
 /** Placement is the control, not the ignore rule: a root inside the checkout is committable. */
 function assertOutsideCheckout(deployment: Deployment): void {
-  for (const [key, value] of Object.entries(deployment)) {
+  for (const [key, value] of Object.entries({ ...deployment, ...deployment.academic })) {
     if (typeof value !== "string" || !value.startsWith("/")) continue;
     const inside = relative(checkout, value);
     if (!inside.startsWith("..")) {
@@ -58,9 +58,25 @@ function absentRungs(deployment: Deployment): string[] {
   ];
 }
 
+/**
+ * A machine that names no academic products is a machine whose Academic chat would carry seven tools
+ * with nothing behind them — every call answering *this machine names no academic products* at the
+ * moment the Owner asked, which is ADR-0019's refusal exactly: refuse before the write rather than
+ * come up and be wrong.
+ */
+function assertTheAcademicPairIsConfigured(deployment: Deployment): void {
+  if (deployment.academic !== undefined) return;
+  throw new Error(
+    "the deployment names no academic products, so the Academic chat's tools would answer nothing. " +
+      "Add academicOsRoot, academicOsConfig, academicOsState, ntulearnRoot, ntulearnState and " +
+      "academicState, each an absolute path outside this checkout.",
+  );
+}
+
 export function generateConfig(deployment: Deployment, carriers: CarrierMap): void {
   assertOutsideCheckout(deployment);
   assertEveryScopeIsConfigured(deployment);
+  assertTheAcademicPairIsConfigured(deployment);
   assertSecretsStoreIsPrivate(deployment.secretsStore);
 
   for (const directory of [

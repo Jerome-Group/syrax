@@ -36,6 +36,16 @@ export type Deployment = {
   monitorWrapperPath: string;
   /** The loopback port the agents reach the lane monitor's three tools on. */
   monitorPort: number;
+  /** The academic desk's own wrapper, in the gateway's shape. */
+  academicWrapperPath: string;
+  /** The loopback port the Academic agent reaches the desk's tools on, and launchd the brief. */
+  academicPort: number;
+  /**
+   * The two academic products as this machine holds them, or absent on a machine that has not been
+   * told where they are. Absent is refused by the generator rather than here, so the Owner meets it
+   * at a deploy with the keys named, and never as an Academic chat that answers nothing (ADR-0019).
+   */
+  academic?: AcademicProducts;
   /**
    * The named scopes the search unit maps to roots. The unit reads them from this same file; the
    * adapter reads them only to refuse a chat whose scope no machine configured.
@@ -51,6 +61,30 @@ export type Deployment = {
   providerBaseUrls: Record<ProviderId, string>;
 };
 
+/**
+ * Where the academic pair lives, and the private roots each product writes its output to. Syrax
+ * triggers each product's own refresh and reads what it wrote: no Google and no NTULearn credential
+ * is named here, because neither is Syrax's to hold.
+ */
+export type AcademicProducts = {
+  /** The `academic-os` checkout. Its CLI is `dist/src/cli.js`, built there by the Owner. */
+  academicOsRoot: string;
+  /** Its gitignored local configuration, which is where its own credentials are named. */
+  academicOsConfig: string;
+  /** Its private `stateRoot`: the calendar mirrors a Refresh writes live under it. */
+  academicOsState: string;
+  /** The `ntulearn` checkout, whose CLI is `src/cli.mjs`. */
+  ntulearnRoot: string;
+  /** Its state directory — the parent of the configured `statePath`, holding `latest.json`. */
+  ntulearnState: string;
+  /**
+   * The desk's own private scratch, which holds one thing: the Proposal input it writes for
+   * `academic-os` to read back. It is Syrax's rather than either product's because a unit writing
+   * into another product's state root is a unit that owns what it did not build.
+   */
+  academicState: string;
+};
+
 export const telegramApiRoot = "https://api.telegram.org";
 
 /** The runtime's own default, stated so two gateways on one machine collide visibly (ADR-0017). */
@@ -61,6 +95,9 @@ export const searchPort = 18790;
 
 /** One above the search unit's, for the same reason. */
 export const monitorPort = 18791;
+
+/** One above the lane monitor's, for the same reason. */
+export const academicPort = 18792;
 
 export const providerBaseUrls: Record<ProviderId, string> = {
   "syrax-gemini": "https://generativelanguage.googleapis.com/v1beta/openai",
@@ -87,6 +124,18 @@ const requiredPaths = [
   "searchWrapperPath",
   "monitorState",
   "monitorWrapperPath",
+] as const;
+
+/** Every path an academic product is reached by. Half a pair is refused: it names a machine that
+ * was configured while somebody was interrupted, and a tool that reads one of two products is a
+ * chat answering half its questions without saying which half. */
+const academicPaths = [
+  "academicOsRoot",
+  "academicOsConfig",
+  "academicOsState",
+  "ntulearnRoot",
+  "ntulearnState",
+  "academicState",
 ] as const;
 
 export function readDeployment(source: unknown): Deployment {
@@ -124,10 +173,42 @@ export function readDeployment(source: unknown): Deployment {
     monitorState: input.monitorState as string,
     monitorWrapperPath: input.monitorWrapperPath as string,
     monitorPort: readPort(input.monitorPort, monitorPort),
+    academicWrapperPath: readAbsolutePath(input.academicWrapperPath, "academicWrapperPath"),
+    academicPort: readPort(input.academicPort, academicPort),
+    ...readAcademicProducts(input),
     searchScopes: readSearchScopes(input.searchScopes),
     ownerTelegramUserId: ownerTelegramUserId as number,
     telegramApiRoot: readUrl(input.telegramApiRoot, "telegramApiRoot") ?? telegramApiRoot,
     providerBaseUrls: readProviderBaseUrls(input.providerBaseUrls),
+  };
+}
+
+/**
+ * The desk's wrapper defaults beside the other two rather than being required: a machine that never
+ * installed the unit still reads its deployment, and the installer is what names the path in anger.
+ */
+function readAbsolutePath(value: unknown, key: string): string {
+  if (value === undefined) return "";
+  if (typeof value !== "string" || !value.startsWith("/")) {
+    throw new InvalidDeployment(`${key} must be an absolute path.`);
+  }
+  return value;
+}
+
+function readAcademicProducts(input: Record<string, unknown>): { academic?: AcademicProducts } {
+  if (academicPaths.every((key) => input[key] === undefined)) return {};
+  for (const key of academicPaths) {
+    const value = input[key];
+    if (typeof value !== "string" || !value.startsWith("/")) {
+      throw new InvalidDeployment(
+        `${key} must be an absolute path: an academic product is named by all of ${academicPaths.join(", ")} or by none of them.`,
+      );
+    }
+  }
+  return {
+    academic: Object.fromEntries(
+      academicPaths.map((key) => [key, input[key] as string]),
+    ) as unknown as AcademicProducts,
   };
 }
 

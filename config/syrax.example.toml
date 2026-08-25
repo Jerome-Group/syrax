@@ -69,6 +69,21 @@ idle_evict_after = "30m"
 # `benchmark` root above, and what has already been delivered is kept beside the counters.
 port = 18791
 
+[academic]
+# The fourth unit: the academic pair's tools, and the 07:00 brief. It holds no Google and no
+# NTULearn credential — it runs each product's own command, naming that product's own configuration,
+# and reads what the command wrote (ADR-0030). Where the two checkouts and their state roots are is
+# machine-local and lives in the deployment file above rather than here, as the search roots do.
+port = 18792
+# The two writes, and there are no others. Each stands behind a button the Owner taps: the desk
+# mints the value, and the write happens on that value and on no other input.
+confirmed_writes = ["ntulearn-sync", "calendar-promotion"]
+# Read every morning at seven, after the products' own overnight jobs, and posted whether or not
+# anything happened: the brief's absence is how a dead Syrax is noticed.
+brief_at = "07:00"
+# Which calendars a commitment can sit on. Routine — sleep, meals, exercise — is not read at all.
+due_calendars = ["Academic", "Commitments"]
+
 [security]
 # One JSON store, reached by file-backed SecretRefs, and refused rather than used when the machine
 # has left it readable (ADR-0010). Nothing resolved is written down: the runtime's generated

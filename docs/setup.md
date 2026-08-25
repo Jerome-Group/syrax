@@ -98,7 +98,23 @@ commit.
    again. Its pre-flight **refuses to start** when the counters' directory cannot be made private,
    and when the secrets store is missing or the machine has left it readable.
 
-10. Before committing a change, inspect the staged file list and search it for credentials, private
+10. **Stand up the academic desk.** It is the fourth unit: the academic pair's tools, and the 07:00
+    brief. Both academic products must already be on the machine and working — `academic-os` built
+    (`npm ci && npm run build`, so `dist/src/cli.js` exists) with its calendars set up, and
+    `ntulearn` configured with a live saved session. Syrax holds no credential of either.
+
+    ```sh
+    node src/cli/install-academic-agent.ts "$DEPLOYMENT"
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jerome-group.syrax.academic.plist
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jerome-group.syrax.brief.plist
+    ```
+
+    The second plist is the brief's schedule, and it is the only thing that posts into Academic
+    unasked. Its pre-flight **refuses to start** on a scratch it cannot make private or a readable
+    secrets store, and **warns and proceeds** on a product that is not there — the brief still goes
+    out, and it says what did not run.
+
+11. Before committing a change, inspect the staged file list and search it for credentials, private
     conversations, machine-specific paths, and provider responses.
 
 ## When a chat comes back empty
