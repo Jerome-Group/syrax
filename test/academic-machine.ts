@@ -26,8 +26,17 @@ export type StandInProducts = {
   writeMirror(role: string, mirror: unknown): void;
   /** Writes the digest ntulearn's watchdog leaves behind. */
   writeVerdict(digest: unknown): void;
-  /** Writes one announcement under the modules root, with the moment it arrived. */
-  writeAnnouncement(where: string, title: string, at: Date): void;
+  /**
+   * Writes one announcement under the modules root, in the shape `ntulearn` writes it: a filename
+   * carrying the day it was posted, and a `Created:` line in the body carrying the moment. The two
+   * dates are separate arguments from `written`, because a sync catching up writes an old
+   * announcement now — which is the case the brief has to tell apart (#182).
+   */
+  writeAnnouncement(
+    where: string,
+    title: string,
+    dates: { posted?: Date; day?: string; created?: Date | null; written?: Date },
+  ): void;
   /** Takes academic-os away, which is what a checkout nobody has built yet looks like. */
   breakAcademicOs(): void;
 };
@@ -98,12 +107,36 @@ export function standInProducts(
     writeVerdict: (digest) =>
       write(join(products.ntulearnState, "latest.json"), JSON.stringify(digest)),
     breakAcademicOs: () => rmSync(academicOsEntrypoint(products)),
-    writeAnnouncement: (where, title, at) => {
-      const path = join(deployment.searchScopes.academic!, where, "Announcements", `${title}.md`);
-      write(path, `# ${title}\n`);
-      utimesSync(path, at, at);
+    writeAnnouncement: (where, title, dates) => {
+      const posted = dates.posted ?? new Date();
+      const day = dates.day ?? isoDay(posted);
+      const created = dates.created === undefined ? posted : dates.created;
+      const written = dates.written ?? posted;
+      const name = day === "" ? title : `${day} ${title}`;
+      const path = join(deployment.searchScopes.academic!, where, "Announcements", `${name}.md`);
+      write(
+        path,
+        [
+          `# ${title}`,
+          "",
+          ...(created === null ? [] : [`- Created: ${created.toISOString()}`]),
+          `- Modified: ${written.toISOString()}`,
+          "",
+          "The body of the announcement.",
+          "",
+        ].join("\n"),
+      );
+      utimesSync(path, written, written);
     },
   };
+}
+
+function isoDay(when: Date): string {
+  return `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())}`;
+}
+
+function pad(value: number): string {
+  return String(value).padStart(2, "0");
 }
 
 function runs(log: string): string[][] {

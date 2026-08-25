@@ -20,7 +20,11 @@ import {
 } from "../src/adapter/academic-tools.ts";
 import { AcademicDesk, serveAcademicDesk } from "../src/academic/desk.ts";
 import type { Due } from "../src/academic/calendar.ts";
-import type { SyncVerdict, Announcement } from "../src/academic/ntulearn.ts";
+import {
+  announcementsSince,
+  type Announcement,
+  type SyncVerdict,
+} from "../src/academic/ntulearn.ts";
 import { freePort, standInProducts, type StandInProducts } from "./academic-machine.ts";
 import { TelegramStub } from "./stubs/telegram-bot-api.ts";
 
@@ -339,26 +343,130 @@ describe("how the overnight jobs went", () => {
 });
 
 describe("what arrived", () => {
-  it("names the module and the title of everything written inside the window", async () => {
+  it("names the module and the title of everything posted inside the window", async () => {
     const products = standInProducts();
     const now = Date.now();
-    products.writeAnnouncement(
-      "Y2S1/MH2100/NTULearn",
-      "01 Quiz 2 postponed",
-      new Date(now - 3600_000),
-    );
-    products.writeAnnouncement(
-      "Y2S1/CC0006/NTULearn",
-      "07 Old news",
-      new Date(now - 5 * 86_400_000),
-    );
+    products.writeAnnouncement("Y2S1/MH2100/NTULearn", "Quiz 2 postponed", {
+      posted: new Date(now - 3600_000),
+    });
+    products.writeAnnouncement("Y2S1/CC0006/NTULearn", "Old news", {
+      posted: new Date(now - 5 * 86_400_000),
+    });
     const desk = new AcademicDesk(products.deployment);
 
     const arrived = (await call(desk, announcementsToolName, { hours: 24 })) as Announcement[];
 
-    assert.deepEqual(arrived, [
-      { module: "MH2100", title: "01 Quiz 2 postponed", at: arrived[0]!.at },
-    ]);
+    assert.deepEqual(
+      arrived.map((one) => [one.module, one.title, one.dated]),
+      [["MH2100", "Quiz 2 postponed", "its own Created line"]],
+    );
+  });
+
+  it("reads the announcement's own date, so a sync catching up is not overnight news", async () => {
+    const products = standInProducts();
+    // A sync that has just caught up after a gap: written now, posted a year and a half ago.
+    products.writeAnnouncement("Y2S1/ML0004/NTULearn", "ICC Pre-Course Self-Reflection", {
+      posted: new Date("2025-01-18T02:00:00.000Z"),
+      written: new Date(),
+    });
+    const desk = new AcademicDesk(products.deployment);
+
+    const arrived = (await call(desk, announcementsToolName, { hours: 24 })) as Announcement[];
+
+    assert.deepEqual(arrived, []);
+  });
+
+  it("falls back to the filename's day where the document carries no Created line", async () => {
+    const products = standInProducts();
+    products.writeAnnouncement("Y2S1/MH2500/NTULearn", "Tutorial 4 uploaded", {
+      posted: new Date(),
+      created: null,
+      written: new Date(),
+    });
+    const desk = new AcademicDesk(products.deployment);
+
+    const arrived = (await call(desk, announcementsToolName, { hours: 24 })) as Announcement[];
+
+    assert.deepEqual(
+      arrived.map((one) => [one.title, one.dated]),
+      [["Tutorial 4 uploaded", "the day in its filename"]],
+    );
+  });
+
+  it("reports a file carrying neither date rather than dropping it, and says so", async () => {
+    const products = standInProducts();
+    products.writeAnnouncement("Y2S1/MH3210/NTULearn", "Group sign-up", {
+      day: "",
+      created: null,
+      written: new Date(),
+    });
+    const desk = new AcademicDesk(products.deployment);
+
+    const arrived = (await call(desk, announcementsToolName, { hours: 24 })) as Announcement[];
+
+    assert.deepEqual(
+      arrived.map((one) => [one.title, one.dated]),
+      [["Group sign-up", "when the sync wrote it"]],
+    );
+  });
+
+  it("reads a filename's day as the UTC one it was written from, not this machine's", async () => {
+    const products = standInProducts();
+    // Named for its UTC day, as ntulearn names it, and posted late enough in that day that a clock
+    // ahead of UTC would have called the day over hours before the window even opened.
+    products.writeAnnouncement("Y2S1/MH2100/NTULearn", "Late notice", {
+      day: "2026-08-24",
+      created: null,
+      written: new Date("2026-08-24T20:00:00.000Z"),
+    });
+
+    const arrived = await announcementsSince(
+      products.deployment.searchScopes.academic!,
+      new Date("2026-08-24T17:00:00.000Z"),
+    );
+
+    assert.deepEqual(
+      arrived.map((one) => [one.title, one.at, one.dated]),
+      [["Late notice", "2026-08-24T00:00:00.000Z", "the day in its filename"]],
+    );
+  });
+
+  it("does not repeat the date the entry already carries in the title", async () => {
+    const products = standInProducts();
+    products.writeAnnouncement("Y2S1/MH2100/NTULearn", "In-Lecture Quizzes Commence", {
+      posted: new Date(),
+    });
+    const desk = new AcademicDesk(products.deployment);
+
+    const arrived = (await call(desk, announcementsToolName, { hours: 24 })) as Announcement[];
+
+    assert.equal(arrived[0]?.title, "In-Lecture Quizzes Commence");
+  });
+
+  it("surfaces only the window's own out of a backfill dated across months", async () => {
+    const products = standInProducts();
+    const written = new Date();
+    for (const [module, months] of [
+      ["MH2100", 0],
+      ["CC0006", 1],
+      ["MH2500", 7],
+      ["ML0004", 19],
+    ] as const) {
+      const posted = new Date();
+      posted.setMonth(posted.getMonth() - months);
+      products.writeAnnouncement(`Y2S1/${module}/NTULearn`, `${module} notice`, {
+        posted,
+        written,
+      });
+    }
+    const desk = new AcademicDesk(products.deployment);
+
+    const arrived = (await call(desk, announcementsToolName, { hours: 24 })) as Announcement[];
+
+    assert.deepEqual(
+      arrived.map((one) => one.module),
+      ["MH2100"],
+    );
   });
 });
 

@@ -106,8 +106,10 @@ export class AcademicDesk {
         name: announcementsToolName,
         description:
           "What arrived: the announcements a sync has already written under the modules root, " +
-          "newest last. It names the module and the title; call `read` from the search tools for " +
-          "what one of them says.",
+          "newest last, dated by **when they were posted** rather than by when a sync wrote them. " +
+          "It names the module and the title; call `read` from the search tools for what one of " +
+          "them says. `dated` says where the date came from — where it is *when the sync wrote it*, " +
+          "the document carried no date of its own, so say that rather than stating it as posted.",
         inputSchema: {
           type: "object",
           properties: {
