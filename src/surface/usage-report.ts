@@ -10,14 +10,20 @@
 import type { Deployment } from "../adapter/deployment.ts";
 import type { Headroom, Source } from "../monitor/sources.ts";
 import type { LaneUsage, Transition, UsageReport } from "../monitor/usage-report.ts";
+import type { Button } from "./bot-api.ts";
 import { ChatSurface } from "./chat-surface.ts";
 
+/**
+ * The buttons are passed in rather than derived from the report, because what a tap has to resolve
+ * back to is held by the unit that minted it and not by the message it rides on (ADR-0012).
+ */
 export async function postUsageReport(
   deployment: Deployment,
   report: UsageReport,
   transition: Transition,
+  buttons: readonly Button[] = [],
 ): Promise<void> {
-  await ChatSurface.open(deployment).post("system", usageReportLine(report, transition));
+  await ChatSurface.open(deployment).post("system", usageReportLine(report, transition), buttons);
 }
 
 export function usageReportLine(report: UsageReport, transition?: Transition): string {
@@ -76,12 +82,20 @@ function laneHeadroom(left: Headroom): string {
   return `${remaining} of ${allowance} calls left today`;
 }
 
+/**
+ * A removed rung is stated beside the stand downs and never as one: the two read alike and are
+ * opposites underneath, since a stand down is written back at its reset and a removal is the Owner
+ * saying there is nothing to come back.
+ */
 function membership(usage: LaneUsage): string {
-  if (usage.standDowns.length === 0) return `${usage.serving.length} rungs, none standing down.`;
-  const out = usage.standDowns
-    .map((held) => `${held.rung} until ${held.until} (${held.why})`)
-    .join("; ");
-  return `${usage.serving.length} rungs serving; standing down: ${out}.`;
+  const out = usage.standDowns.map((held) => `${held.rung} until ${held.until} (${held.why})`);
+  const gone = usage.removed.map((held) => `${held.rung}, removed ${held.at}`);
+  const lines = [
+    ...(out.length === 0 ? [] : [`standing down: ${out.join("; ")}`]),
+    ...(gone.length === 0 ? [] : [`taken out for good: ${gone.join("; ")}`]),
+  ];
+  if (lines.length === 0) return `${usage.serving.length} rungs, none standing down.`;
+  return `${usage.serving.length} rungs serving; ${lines.join("; ")}.`;
 }
 
 function sourceLine(source: Source): string {

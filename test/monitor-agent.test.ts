@@ -12,7 +12,7 @@ import { describe, it } from "node:test";
 import { promisify } from "node:util";
 import { readDeployment } from "../src/adapter/deployment.ts";
 import { checkout, installMonitorAgent } from "../src/cli/install-monitor-agent.ts";
-import { hatchLabel, rungWatchLabel } from "../src/supervision/launch-agent.ts";
+import { hatchLabel, rungSweepLabel, rungWatchLabel } from "../src/supervision/launch-agent.ts";
 import { temporaryMachine, writePrivateSecretsStore } from "./machine.ts";
 
 const run = promisify(execFile);
@@ -54,6 +54,7 @@ describe("installing the lane monitor's LaunchAgent", () => {
     assert.deepEqual(installed.plistPaths, [
       join(home, "Library", "LaunchAgents", `${hatchLabel}.plist`),
       join(home, "Library", "LaunchAgents", `${rungWatchLabel}.plist`),
+      join(home, "Library", "LaunchAgents", `${rungSweepLabel}.plist`),
     ]);
     assert.equal(hatchLabel, "com.jerome-group.syrax.hatch");
   });

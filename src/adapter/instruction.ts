@@ -9,7 +9,7 @@
  */
 
 import { everyChat, systemChat, type Chat } from "./chats.ts";
-import { hatchTool, reportTool, standDownTool } from "./monitor-tools.ts";
+import { hatchTool, removeRungTool, reportTool, standDownTool } from "./monitor-tools.ts";
 import { searchesTheCorpus, searchTool } from "./search-tools.ts";
 
 /** Without this a fast answer is a fabricated one (ADR-0016). */
@@ -66,6 +66,13 @@ reset. Call it only when the Owner asks. It needs the \`provider/model\` the rep
 last rung. **It answers before the lane is rebuilt**, because this turn ending is what lets the
 rebuild happen: say the rung is written out and takes effect in a moment, and that System will say
 what it cost. Never call it twice waiting for that.
+
+A report may carry a rung that **answers to no such name**, with a button beneath it. A message
+reading \`callback_data: <value>\` is the Owner tapping that button: pass the value to
+\`${removeRungTool}\` and relay what it says. Never work out what was tapped yourself, never call it
+with a value they did not tap, and never offer to remove a rung any other way — a rotted rung is
+reported and removed only on the tap. If it answers that the value expired, say the button has gone
+stale, call \`${reportTool}\` and offer the fresh one. A removed rung does not come back.
 
 A **pin** is the runtime's own \`/model <provider/model>\`, which the Owner types themselves and
 which forces a choice within a lane for their session. It is not yours to call and not yours to

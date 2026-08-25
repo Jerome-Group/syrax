@@ -13,6 +13,7 @@ import { chatInstruction } from "./instruction.ts";
 import type { Deployment } from "./deployment.ts";
 import { ensurePrivateDirectory, writePrivateFile } from "./private-state.ts";
 import { unconfiguredScopes } from "./search-tools.ts";
+import { removedRungs } from "./removal-ledger.ts";
 import { standingDown } from "./stand-down-ledger.ts";
 import { assertSecretsStoreIsPrivate } from "./secrets-store.ts";
 
@@ -45,10 +46,16 @@ function assertEveryScopeIsConfigured(deployment: Deployment): void {
 
 /**
  * Every write of the file goes through here, which is what keeps a stand down from being reverted
- * by one: the ledger is asked rather than the file the last write left behind (ADR-0009).
+ * by one: the ledgers are asked rather than the file the last write left behind (ADR-0009). Both
+ * are asked, because a chain is composed without a rung whether it is out until a reset or out for
+ * good (ADR-0012), and the difference between the two is which ledger holds it rather than what the
+ * generated file says.
  */
-function standingRungs(deployment: Deployment): string[] {
-  return standingDown(deployment.monitorState).map((held) => held.rung);
+function absentRungs(deployment: Deployment): string[] {
+  return [
+    ...standingDown(deployment.monitorState).map((held) => held.rung),
+    ...removedRungs(deployment.monitorState).map((held) => held.rung),
+  ];
 }
 
 export function generateConfig(deployment: Deployment, carriers: CarrierMap): void {
@@ -73,6 +80,6 @@ export function generateConfig(deployment: Deployment, carriers: CarrierMap): vo
   // root. It is private runtime state by this repository's own definition, so it is written like it.
   writePrivateFile(
     deployment.configPath,
-    `${JSON.stringify(buildRuntimeConfig(deployment, carriers, standingRungs(deployment)), null, 2)}\n`,
+    `${JSON.stringify(buildRuntimeConfig(deployment, carriers, absentRungs(deployment)), null, 2)}\n`,
   );
 }

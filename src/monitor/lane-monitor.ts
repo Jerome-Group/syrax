@@ -18,8 +18,10 @@ import {
   monitorServerName,
   hatchToolName,
   mcpPath,
+  removeRungToolName,
   reportToolName,
   standDownToolName,
+  sweepPath,
   watchPath,
 } from "../adapter/monitor-tools.ts";
 import { ensurePrivateDirectory } from "../adapter/private-state.ts";
@@ -29,8 +31,12 @@ import { DailyCounters } from "./counters.ts";
 import { EscapeHatch, type HatchAsk } from "./hatch.ts";
 import { LaneMembership } from "./lane-membership.ts";
 import { mcpEndpoint, type Tool } from "./mcp.ts";
+import { RemovalTaps } from "./removal-taps.ts";
+import { Removals } from "./removals.ts";
+import { sweepChainRungs, type Swept } from "./rung-sweep.ts";
 import { RungWatch } from "./rung-watch.ts";
 import { type Source, TelemetrySources } from "./sources.ts";
+import type { Removed } from "../adapter/removal-ledger.ts";
 import type { StandDown } from "../adapter/stand-down-ledger.ts";
 import { AlreadyReturned, StandDowns } from "./stand-down.ts";
 import {
@@ -52,14 +58,27 @@ const longestTimer = 2147483647;
  */
 export type StoodDown = { standDown: StandDown; landing: Promise<Landed> };
 
+/**
+ * A tap, answered. `removed` is null where the value resolved to nothing, which is the one outcome
+ * that is not a failure: an expired tap is a report the Owner has kept longer than this process has
+ * been up, and the answer is to ask for a fresh one.
+ */
+export type Removal = {
+  removed: Removed | null;
+  said: string;
+  landing?: Promise<Landed>;
+};
+
 export class LaneMonitor {
   readonly counters: DailyCounters;
   readonly telemetry: TelemetrySources;
   readonly hatch: EscapeHatch;
   readonly standDowns: StandDowns;
   readonly rungs: RungWatch;
+  readonly removals: Removals;
   #deployment: Deployment;
   #membership: LaneMembership;
+  #taps = new RemovalTaps();
 
   constructor(deployment: Deployment, now: Date = new Date()) {
     ensurePrivateDirectory(deployment.monitorState);
@@ -70,6 +89,7 @@ export class LaneMonitor {
     this.standDowns = new StandDowns(deployment.monitorState, now);
     this.#membership = new LaneMembership(deployment);
     this.rungs = new RungWatch(deployment.monitorState, runtimeLogPath(deployment.logsDir));
+    this.removals = new Removals(deployment.monitorState);
   }
 
   /** Each lane's headroom and when the source behind it was last read successfully. */
@@ -83,6 +103,7 @@ export class LaneMonitor {
       this.counters,
       this.telemetry,
       this.standDowns.active(now),
+      this.removals.removed(),
       { rotted: this.rungs.rotted(), window: this.rungs.window() },
       now,
     );
@@ -94,11 +115,20 @@ export class LaneMonitor {
    * The unprompted half. A chat surface that cannot be reached loses the message and keeps the
    * file: the report is written before the post is attempted, and a failed post is not allowed to
    * fail the thing that moved.
+   *
+   * **Every post carries a removal button per rotted rung**, whatever moved. A rung the Owner has
+   * not acted on is listed rather than re-announced (ADR-0012), and a listing they cannot act on
+   * from where they are reading it is a listing that sends them to the mini with a JSON editor.
    */
   async announce(transition: Transition, now: Date = new Date()): Promise<void> {
     const report = this.report(now);
     try {
-      await postUsageReport(this.#deployment, report, transition);
+      await postUsageReport(
+        this.#deployment,
+        report,
+        transition,
+        this.#taps.offer(report.watched.rotted),
+      );
     } catch (error) {
       console.error(`syrax lane monitor: the usage report was not posted: ${reason(error)}`);
     }
@@ -121,9 +151,7 @@ export class LaneMonitor {
         now,
       );
     }
-    if (!this.#membership.differsFrom(this.standDowns.active(now).map((held) => held.rung))) {
-      return null;
-    }
+    if (!this.#membership.differsFrom(this.#absent(now))) return null;
     this.#membership.write();
     const landed = await this.#membership.land();
     if (!landed.landed) {
@@ -137,12 +165,70 @@ export class LaneMonitor {
    * writes anyway, and says what moved. Nothing is posted where nothing did.
    */
   async watchRungs(now: Date = new Date()): Promise<Transition[]> {
-    const moved = this.rungs.watch(
+    const moved = this.rungs.watch(this.#absent(now), now);
+    for (const transition of moved) await this.announce(transition, now);
+    return moved;
+  }
+
+  /**
+   * The sweep, which is the half the log cannot do: a chain whose first rung answers every turn
+   * says nothing at all about the rungs beneath it, so they are asked. Chain rungs only — the
+   * rationed lane is 20 requests a day a rung and observes its own failures beside its counters.
+   *
+   * It is poked on a schedule for the same reason the watch is, and one more: it spends.
+   */
+  async sweep(now: Date = new Date()): Promise<{ swept: Swept[]; moved: Transition[] }> {
+    const swept = await sweepChainRungs(this.#deployment, this.removals.rungs());
+    const moved = this.rungs.swept(swept, now);
+    for (const transition of moved) await this.announce(transition, now);
+    return { swept, moved };
+  }
+
+  /**
+   * The tap, and the only thing that removes a rung. The value is resolved by the unit that minted
+   * it — a value this process never minted is *expired* and removes nothing, which is what keeps a
+   * model from asking for a removal it was never handed (ADR-0012, ADR-0026).
+   *
+   * Like a stand down it **answers before it has landed**, because this answer is what ends the
+   * turn the land is waiting for; what the landing cost arrives in System behind it. A second tap
+   * on the same button writes nothing and lands nothing: the rung is already out, and a landing
+   * reloads the channel, which is a cost the Owner would be paying for tapping twice.
+   */
+  removeRung(value: string, now: Date = new Date()): Removal {
+    const rung = this.#taps.resolve(value);
+    if (rung === undefined) {
+      return {
+        removed: null,
+        said: "that tap is not one this monitor can resolve, so nothing was removed: ask for the report again and tap the button on the message it posts.",
+      };
+    }
+    if (this.removals.holds(rung)) {
+      return { removed: null, said: `${rung} is already out of its lane; nothing was written.` };
+    }
+    const said = this.rungs.rotted().find((one) => one.rung === rung)?.said ?? "it was tapped out";
+    const removed = this.removals.remove(
+      rung,
+      said,
       this.standDowns.active(now).map((held) => held.rung),
       now,
     );
-    for (const transition of moved) await this.announce(transition, now);
-    return moved;
+    this.rungs.forget(rung);
+    this.#membership.write();
+    const landing = this.#landAndSay(
+      "a rung removed",
+      `${removed.rung} is out of the ${removed.lane} lane for good — the Owner tapped it out, and nothing brings it back but a decision to put it there again.`,
+      now,
+    );
+    return {
+      removed,
+      said: `${removed.rung} is written out of the ${removed.lane} lane.`,
+      landing,
+    };
+  }
+
+  /** Every rung a chain is composed without: out until a reset, or out for good. */
+  #absent(now: Date): string[] {
+    return [...this.standDowns.active(now).map((held) => held.rung), ...this.removals.rungs()];
   }
 
   /**
@@ -155,7 +241,7 @@ export class LaneMonitor {
    * waiting for. What the landing did arrives in System behind it.
    */
   standDown(asked: { rung: string; until: Date; why: string }, now: Date = new Date()): StoodDown {
-    const standDown = this.standDowns.stand(asked, now);
+    const standDown = this.standDowns.stand(asked, now, this.removals.rungs());
     this.#membership.write();
     this.#scheduleReturn(standDown);
     const landing = this.#landAndSay(
@@ -250,6 +336,40 @@ export class LaneMonitor {
           });
         },
       },
+      {
+        name: removeRungToolName,
+        description:
+          "Take a rotted rung out of its lane for good. Call it **only** with a value the Owner " +
+          "tapped — a message reading `callback_data: <value>` — and never with one you worked " +
+          "out or remembered: this is the only thing that removes a rung, and nothing removes, " +
+          "replaces or skips one on its own. A value it cannot resolve is expired and removes " +
+          "nothing; say so and offer to fetch the report again. Nothing brings a removed rung " +
+          "back. Relay what it says.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            value: {
+              type: "string",
+              description: "The tapped `callback_data` value, verbatim.",
+            },
+          },
+          required: ["value"],
+        },
+        // The landing is neither awaited nor returned, for the reason a stand down's is not: this
+        // answer is what ends the turn the landing waits for, and System gets what it settled to.
+        call: (given) => {
+          const { removed, said } = this.removeRung(String(given.value ?? ""));
+          return Promise.resolve({
+            removed,
+            said,
+            ...(removed === null
+              ? {}
+              : {
+                  landing: "the lane is rebuilt once this turn is over; System says what it cost",
+                }),
+          });
+        },
+      },
     ];
   }
 
@@ -321,10 +441,10 @@ function reason(error: unknown): string {
 }
 
 /**
- * Loopback only: the agents are on this machine, and nothing else has business with the hatch. Two
- * paths are served — the MCP endpoint the agents connect to, and the poke launchd makes at the rung
- * watch, which is a schedule rather than a tool because nothing a model does should decide when the
- * runtime's log is read (ADR-0005).
+ * Loopback only: the agents are on this machine, and nothing else has business with the hatch.
+ * Three paths are served — the MCP endpoint the agents connect to, and the two pokes launchd makes:
+ * the rung watch, and the daily sweep. Both are schedules rather than tools because nothing a model
+ * does should decide when the runtime's log is read or when Syrax spends a request (ADR-0005).
  */
 export async function serveLaneMonitor(
   deployment: Deployment,
@@ -338,6 +458,13 @@ export async function serveLaneMonitor(
       void monitor
         .watchRungs()
         .then((moved) => send(response, 200, { moved }))
+        .catch((error: unknown) => send(response, 500, { error: reason(error) }));
+      return;
+    }
+    if (path === sweepPath && request.method === "POST") {
+      void monitor
+        .sweep()
+        .then((sweep) => send(response, 200, sweep))
         .catch((error: unknown) => send(response, 500, { error: reason(error) }));
       return;
     }

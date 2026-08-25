@@ -17,6 +17,7 @@ import { writePrivateFile } from "../adapter/private-state.ts";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Cursor, type Decision, readDecisions } from "./fallback-log.ts";
+import type { Swept } from "./rung-sweep.ts";
 import type { Transition } from "./usage-report.ts";
 
 /** A rung that answered to no such name, and the words the provider refused it in. */
@@ -63,14 +64,39 @@ export class RungWatch {
     const before = { serving: { ...this.serving(standingDown) }, rotted: this.#held.rotted };
     const after = decided(before, reading.decisions);
 
-    this.#held = {
+    this.#hold({
       cursor: reading.cursor,
       serving: after.serving,
       rotted: after.rotted,
       window: reading.window,
-    };
-    writePrivateFile(this.#path, `${JSON.stringify(this.#held, null, 2)}\n`);
+    });
     return moved(before, after);
+  }
+
+  #hold(watched: Watched): void {
+    this.#held = watched;
+    writePrivateFile(this.#path, `${JSON.stringify(this.#held, null, 2)}\n`);
+  }
+
+  /**
+   * What the sweep found, folded into the same set the log feeds, so a rung is announced once
+   * however it was discovered. Only two of the three answers are evidence: a rung that answered
+   * exists, and a **404** is a name nothing answers to. Everything else — a 429, a 5xx, a timeout —
+   * is a living rung refusing a request, and it leaves what is believed about the rung alone.
+   */
+  swept(findings: readonly Swept[], now: Date = new Date()): Transition[] {
+    const before = { serving: this.#held.serving, rotted: this.#held.rotted };
+    const after = { serving: before.serving, rotted: sweptRotted(before.rotted, findings, now) };
+    this.#hold({ ...this.#held, rotted: after.rotted });
+    return moved(before, after);
+  }
+
+  /**
+   * A rung the Owner has taken out of its chain. It is dropped rather than kept as recovered: what
+   * a rotted entry is for is telling them there is a removal to make, and this one is made.
+   */
+  forget(rung: string): void {
+    this.#hold({ ...this.#held, rotted: this.#held.rotted.filter((one) => one.rung !== rung) });
   }
 
   /** The rung each lane answers on as far as anything knows: what was seen, else its primary. */
@@ -113,6 +139,27 @@ function decided(before: State, decisions: readonly Decision[]): State {
     if (decision.decision === "candidate_succeeded") serving[lane.name] = decision.candidate;
   }
   return { serving, rotted };
+}
+
+/**
+ * The sweep's findings against what is already believed. A rung that answered is taken out of the
+ * set whatever put it there, and one that 404'd goes in with the words it 404'd in — the sweep is
+ * the same reading as the log's, taken by asking rather than by waiting.
+ */
+function sweptRotted(held: readonly Rotted[], findings: readonly Swept[], now: Date): Rotted[] {
+  let rotted = [...held];
+  for (const found of findings) {
+    if (found.answered) {
+      rotted = rotted.filter((one) => one.rung !== found.rung);
+      continue;
+    }
+    if (found.status !== 404) continue;
+    rotted = [
+      ...rotted.filter((one) => one.rung !== found.rung),
+      { rung: found.rung, lane: found.lane, said: found.said, at: now.toISOString() },
+    ];
+  }
+  return rotted;
 }
 
 function moved(before: State, after: State): Transition[] {

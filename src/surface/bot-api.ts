@@ -30,6 +30,20 @@ export function isMissingCarrier(error: unknown): boolean {
 
 export type Message = { messageId: number };
 
+/**
+ * One inline button, in the two fields a tap needs: what it says and the value it carries back.
+ * The value is minted by whatever will have to resolve it — sixty-four bytes is all a tap carries,
+ * and a value composed at the surface is a value nothing can turn back into a decision.
+ */
+export type Button = { text: string; value: string };
+
+/** One button per row: a rung's name is long, and two of them side by side truncate to nothing. */
+function keyboard(buttons: readonly Button[]) {
+  return {
+    inline_keyboard: buttons.map((button) => [{ text: button.text, callback_data: button.value }]),
+  };
+}
+
 export class BotApi {
   readonly #apiRoot: string;
   readonly #token: string;
@@ -39,11 +53,17 @@ export class BotApi {
     this.#token = token;
   }
 
-  async sendMessage(chatId: number, text: string, carrier?: number): Promise<Message> {
+  async sendMessage(
+    chatId: number,
+    text: string,
+    carrier?: number,
+    buttons: readonly Button[] = [],
+  ): Promise<Message> {
     const sent = await this.#call<{ message_id: number }>("sendMessage", {
       chat_id: chatId,
       text,
       ...(carrier === undefined ? {} : { message_thread_id: carrier }),
+      ...(buttons.length === 0 ? {} : { reply_markup: keyboard(buttons) }),
     });
     return { messageId: sent.message_id };
   }

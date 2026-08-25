@@ -17,6 +17,8 @@ import {
   hatchLabel,
   launchAgentPath,
   monitorLaunchAgentPlist,
+  rungSweepLabel,
+  rungSweepPlist,
   rungWatchLabel,
   rungWatchPlist,
 } from "../supervision/launch-agent.ts";
@@ -44,6 +46,7 @@ export function installMonitorAgent(
   const plists = {
     [hatchLabel]: monitorLaunchAgentPlist(deployment),
     [rungWatchLabel]: rungWatchPlist(deployment),
+    [rungSweepLabel]: rungSweepPlist(deployment),
   };
   const plistPaths = Object.entries(plists).map(([label, contents]) => {
     const path = launchAgentPath(home, label);
