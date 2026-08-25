@@ -127,6 +127,14 @@ nothing else about it, and never reach into another chat's ${across} to answer i
  * Every value a button carries is quoted from the reply rather than composed here: the unit mints
  * them, and a tap it cannot resolve is answered *expired* — so a model writing its own would turn
  * the Owner rejecting them all into a shortlist that had supposedly gone.
+ *
+ * **`NO_REPLY` alone is named because the runtime offers two ways to send a file and they are
+ * alternatives, not layers**: the `message` tool, or a `MEDIA:` line in the final reply. A turn that
+ * does both submits the document twice (#188). The second submission is resolved against a stricter
+ * allowlist than the tool's — only `<stateDir>/media/outbound` and a `tool-` prefix — so where
+ * `attach` staged it, it is dropped and the reply becomes the bare warning `⚠️ Media failed.`, and
+ * where it would resolve, the Owner gets the file twice instead. *Say nothing after that* was what
+ * this said before, and it reads as an instruction to attach the file silently.
  */
 function corpus(chat: Chat): string {
   return `## Finding a document
@@ -138,7 +146,9 @@ document *says*, answer from \`${searchTool(chat, "read")}\` instead of sending 
 
 - **confident** — send the document itself, without asking. Pass its path to
   \`${searchTool(chat, "attach")}\`, then call \`message\` with \`mediaUrl\` set to the path that came
-  back and one short line as the message. Say nothing after that: the file is the answer.
+  back and one short line as the message. **That call is the whole delivery**: end the turn with
+  \`NO_REPLY\` and nothing else, never a \`MEDIA:\` line — that line hands the same file over a
+  second time.
 - **ambiguous** — offer the candidates and nothing else. Call \`message\` with a \`presentation\`
   whose \`buttons\` are one button per result, each \`value\` the result's own \`choice\`, plus a last
   button *None of these* carrying the reply's own \`none_of_these\` value. Never send one of them

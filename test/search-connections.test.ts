@@ -121,6 +121,11 @@ describe("what a chat that searches is told", () => {
     assert.match(instruction, /syrax-search-general__attach/);
   });
 
+  it("ends a delivery at the tool, so the same file is not handed over twice", () => {
+    assert.match(instruction, /That call is the whole delivery/);
+    assert.match(instruction, /`NO_REPLY` and nothing else, never a `MEDIA:` line/);
+  });
+
   it("lets the Owner's own wording override the verdict's shape", () => {
     assert.match(instruction, /the Owner's own wording asks for something else, which always wins/);
   });
