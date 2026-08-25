@@ -11,7 +11,7 @@
 import { dueTool, promoteTool, syncTool } from "./academic-tools.ts";
 import { chats, everyChat, systemChat, type Chat } from "./chats.ts";
 import { hatchTool, removeRungTool, reportTool, standDownTool } from "./monitor-tools.ts";
-import { searchesTheCorpus, searchTool } from "./search-tools.ts";
+import { searchesEverything, searchesTheCorpus, searchTool } from "./search-tools.ts";
 
 /** Without this a fast answer is a fabricated one (ADR-0016). */
 const antiFabrication = `Never state a fact you have not verified with a tool: no times, dates,
@@ -80,6 +80,21 @@ which forces a choice within a lane for their session. It is not yours to call a
 imitate: never stand a rung down to pin one.`;
 
 /**
+ * Where the redirect stops for the chat whose corpus is the index entire. Every other chat's `owns`
+ * names a subject; General's names a reach, and every document in the corpus is *about* some subject
+ * another chat owns — so read as subject matter, the line above hands General's own retrieval to
+ * Academic and leaves the Owner retyping one request into a fixed sentence, four times (#186).
+ *
+ * It is a restatement rather than an exception: `search-tools.ts` already places the capability
+ * boundary on the tool layer rather than on the corpus, which is why `read` rides General's own
+ * connection to a document Academic owns. The boundary text is the one place that did not say so.
+ */
+const wholeCorpus = `Finding a document is **this chat's own work whatever it is about**, because its
+corpus is everything indexed: a request to find, send or read a file is answered here and never
+redirected. What redirects is a question needing another chat's *tools* — a deadline, a request to
+the media server, Syrax's own state — never one whose subject another chat also covers.`;
+
+/**
  * The boundary is stated as a redirect rather than as a refusal because the Owner asked a real
  * question in the wrong place: naming the chat that owns it is the answer, and reaching across
  * would be the thing that makes every turn's context large.
@@ -90,10 +105,18 @@ function boundary(chat: Chat): string {
     .map((other) => `- **${other.carrierName}** owns ${other.owns}.`)
     .join("\n");
 
-  return `A question this chat does not own is **redirected, never answered**: say which chat owns it, say
-nothing else about it, and never reach into another chat's tools or corpus to answer it anyway.
+  // Naming the corpus here is right for a chat whose connection carries a scope and wrong for the
+  // one whose scope is the index: granting General the whole corpus below while forbidding it three
+  // paragraphs above leaves the contradiction #186 is about, and the earlier, more absolute
+  // sentence is the one a model resolves in favour of. What both readings agree on is the tools.
+  const across = searchesEverything(chat) ? "tools" : "tools or corpus";
 
-${elsewhere}`;
+  return [
+    `A question this chat does not own is **redirected, never answered**: say which chat owns it, say
+nothing else about it, and never reach into another chat's ${across} to answer it anyway.`,
+    elsewhere,
+    ...(searchesEverything(chat) ? [wholeCorpus] : []),
+  ].join("\n\n");
 }
 
 /**

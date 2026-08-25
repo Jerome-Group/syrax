@@ -29,6 +29,11 @@ export function searchesOneScope(chat: Chat): boolean {
   return chat.searches === "this chat's own scope";
 }
 
+/** Its corpus is the index entire, which is what the redirect has to be told not to reach into. */
+export function searchesEverything(chat: Chat): boolean {
+  return chat.searches === "everything indexed";
+}
+
 /** What the unit serves, in the order a turn reaches them. */
 export type SearchUnitTool = "search" | "choose" | "capture" | "attach" | "read";
 
