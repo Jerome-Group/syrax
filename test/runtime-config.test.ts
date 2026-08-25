@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { describe, it } from "node:test";
 import { buildRuntimeConfig } from "../src/adapter/build.ts";
 import { readDeployment } from "../src/adapter/deployment.ts";
-import { everyChat } from "../src/adapter/chats.ts";
+import { chats, everyChat } from "../src/adapter/chats.ts";
 import { chatInstruction } from "../src/adapter/instruction.ts";
 import { generateConfig } from "../src/adapter/generator.ts";
 import { runtimeEntrypoint, runtimeIsInstalled } from "./gateway.ts";
@@ -206,10 +206,46 @@ describe("the four chats", () => {
     for (const subject of everyChat) {
       const instruction = chatInstruction(subject);
       assert.match(instruction, /redirected, never answered/);
-      assert.match(instruction, /never reach into another chat's tools or corpus/);
+      assert.match(instruction, /never reach into another chat's tools/);
       for (const other of everyChat) {
         assert.match(instruction, new RegExp(other.carrierName), `${subject.id} omits ${other.id}`);
       }
+    }
+  });
+
+  it("keeps the redirect off the corpus of the chat whose corpus is all of it", () => {
+    const general = chatInstruction(chats.general);
+
+    assert.match(general, /this chat's own work whatever it is about/);
+    assert.match(general, /find, send or read a file is answered here and never\s+redirected/);
+    assert.match(
+      general,
+      /a question needing another chat's \*tools\*/,
+      "the redirect stopped binding General altogether, which is the other way to get this wrong.",
+    );
+  });
+
+  it("does not forbid the corpus it just granted, in the same instruction", () => {
+    assert.doesNotMatch(
+      chatInstruction(chats.general),
+      /another chat's tools or corpus/,
+      "General is told the whole corpus is its own and that a corpus is not to be reached at once.",
+    );
+  });
+
+  it("leaves the boundary alone for a chat that searches one scope or none", () => {
+    for (const subject of everyChat.filter((one) => one.id !== chats.general.id)) {
+      const instruction = chatInstruction(subject);
+      assert.doesNotMatch(
+        instruction,
+        /own work whatever it is about/,
+        `${subject.id} was handed General's reach.`,
+      );
+      assert.match(
+        instruction,
+        /another chat's tools or corpus/,
+        `${subject.id} lost the corpus half of its boundary, which its scope alone does not carry.`,
+      );
     }
   });
 });
