@@ -49,6 +49,18 @@ export type Window = { from: Date; to: Date };
 /** Eleven years of daily steps: a master older than that is a rule nobody is still keeping. */
 const mostSteps = 4000;
 
+/**
+ * An all-day entry has a day rather than a moment, so it is inside a window that opened **during**
+ * that day: a deadline dated today is still due at four in the afternoon, and asking *what's due*
+ * after midnight must not lose it. A timed entry is held to the window as it stands — a lecture that
+ * started this morning is over, not due.
+ */
+function opensFor(occurrence: Occurrence, window: Window): Date {
+  if (!occurrence.allDay) return window.from;
+  const from = window.from;
+  return new Date(from.getFullYear(), from.getMonth(), from.getDate());
+}
+
 export function occurrencesIn(
   items: readonly MirroredItem[],
   window: Window,
@@ -63,7 +75,9 @@ export function occurrencesIn(
     const role = item.actualCalendarRole ?? "";
     if (event.recurrence === undefined || event.recurrence.length === 0) {
       const one = at(event, event.start, role);
-      if (one !== null && inside(one.startsAt, window)) occurrences.push(one);
+      if (one !== null && inside(one.startsAt, { ...window, from: opensFor(one, window) })) {
+        occurrences.push(one);
+      }
       continue;
     }
     const rule = weeklyOrDaily(event.recurrence);
@@ -182,7 +196,7 @@ function expand(
     if (rule.onWeekdays !== null && !inCycle(first.startsAt, startsAt, rule.everyDays)) continue;
     counted += 1;
     if (rule.count !== null && counted > rule.count) break;
-    if (!inside(startsAt, window)) continue;
+    if (!inside(startsAt, { ...window, from: opensFor(first, window) })) continue;
     if (overridden.has(`${first.id}@${+startsAt}`)) continue;
     occurrences.push({ ...first, startsAt });
   }

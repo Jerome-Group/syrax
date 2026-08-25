@@ -40,6 +40,34 @@ function atLocal(day: string, time: string): string {
 }
 
 describe("what's due", () => {
+  it("carries an all-day deadline dated today, whatever hour it is asked at", async () => {
+    const products = standInProducts();
+    products.writeMirror("academic", {
+      freshness: "fresh",
+      items: [
+        item("Academic", {
+          id: "due-today",
+          summary: "MH2500 problem set",
+          start: { date: isoDay(new Date()) },
+        }),
+        // A lecture that has already started today is not something still due.
+        item("Academic", {
+          id: "this-morning",
+          summary: "MH2500 lecture",
+          start: { dateTime: atLocal(isoDay(new Date()), "00:01:00") },
+        }),
+      ],
+    });
+    const desk = new AcademicDesk(products.deployment);
+
+    const due = (await call(desk, dueToolName, { days: 1 })) as Due;
+
+    assert.deepEqual(
+      due.due.map((one) => one.summary),
+      ["MH2500 problem set"],
+    );
+  });
+
   it("refreshes the product's own calendar and reads what that Refresh wrote", async () => {
     const products = standInProducts();
     products.writeMirror("academic", {
@@ -49,7 +77,7 @@ describe("what's due", () => {
         item("Academic", {
           id: "one",
           summary: "MH2100 assignment 3",
-          start: { date: "2026-08-26" },
+          start: { date: isoDay(new Date()) },
         }),
       ],
     });
@@ -70,12 +98,18 @@ describe("what's due", () => {
     const products = standInProducts();
     products.writeMirror("routine", {
       freshness: "fresh",
-      items: [item("Routine", { id: "sleep", summary: "Sleep", start: { date: "2026-08-26" } })],
+      items: [
+        item("Routine", { id: "sleep", summary: "Sleep", start: { date: isoDay(new Date()) } }),
+      ],
     });
     products.writeMirror("commitments", {
       freshness: "fresh",
       items: [
-        item("Commitments", { id: "dentist", summary: "Dentist", start: { date: "2026-08-26" } }),
+        item("Commitments", {
+          id: "dentist",
+          summary: "Dentist",
+          start: { date: isoDay(plusOneDay(new Date())) },
+        }),
       ],
     });
     const desk = new AcademicDesk(products.deployment);
