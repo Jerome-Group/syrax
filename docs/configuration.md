@@ -142,7 +142,7 @@ heartbeat.
 |---|---|
 | What's due | The calendar Refresh, then the **Academic and Commitments** mirrors it wrote. Routine is never read — it is sleep, meals and exercise |
 | Did the sync run | `latest.json`'s verdict, `green`, `yellow` or `red`, as its watchdog wrote it |
-| Anything new | The announcements a sync already wrote under the modules root |
+| Anything new | The announcements a sync already wrote under the modules root, dated by when each was **posted** — its own `Created:` line, or the day in its filename — rather than by when the sync wrote it, so a run catching up after a gap does not read as a night's news ([#182](https://github.com/Jerome-Group/syrax/issues/182)) |
 | Is the folder conforming | `audit --json`, on demand only: nothing schedules an audit, so there is never a fresh observation to volunteer drift from |
 | Content questions | Scoped search, bounded to the modules root by `searchScopes.academic` — the same root the announcements are read under |
 

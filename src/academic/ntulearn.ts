@@ -8,6 +8,7 @@
  * produced.
  */
 
+import type { Dirent } from "node:fs";
 import { lstat, readFile, readdir } from "node:fs/promises";
 import { basename, join, relative, sep } from "node:path";
 import { Products, writeTimeoutMs } from "./products.ts";
@@ -119,7 +120,16 @@ export function unplacedLine(runLog: string | null): string {
 export const reLoginLine =
   "The saved NTULearn session may have lapsed: `npm run login` in the ntulearn checkout is the only thing that clears this, and only you can do it.";
 
-export type Announcement = { module: string; title: string; at: string };
+export type Announcement = {
+  module: string;
+  title: string;
+  /** When it was posted, as the document itself dates it. */
+  at: string;
+  /** Which of the three the date came from, so a fallback is never read as the real thing. */
+  dated: Dated;
+};
+
+export type Dated = "its own Created line" | "the day in its filename" | "when the sync wrote it";
 
 /** How far below the modules root an `Announcements/` folder is looked for: semester, module, importer root. */
 const mostDepth = 6;
@@ -128,6 +138,11 @@ const mostDepth = 6;
  * What arrived, read off the disk a sync already wrote to rather than by asking NTULearn again. The
  * modules root is the one configuration binds to the Academic chat's search scope, so *what Syrax
  * reads* and *what Syrax searches* cannot drift apart into two roots.
+ *
+ * **What arrived is when it was posted, never when a sync got round to writing it** (#182). On an
+ * ordinary morning the two agree — a run over a course with nothing new writes nothing at all — and
+ * they come apart exactly when a sync catches up after a gap, which is the morning a brief would
+ * otherwise offer a year-old announcement as overnight news.
  */
 export async function announcementsSince(
   modulesRoot: string,
@@ -135,19 +150,95 @@ export async function announcementsSince(
 ): Promise<Announcement[]> {
   const arrived: Announcement[] = [];
   for await (const folder of announcementFolders(modulesRoot, mostDepth)) {
-    for (const file of await entries(folder)) {
+    for (const file of await files(folder)) {
       if (file.startsWith(".")) continue;
-      const path = join(folder, file);
-      const when = await modifiedAt(path);
-      if (when === null || when < since) continue;
+      const posted = await postedAt(join(folder, file), since);
+      if (posted === null) continue;
       arrived.push({
         module: moduleOf(modulesRoot, folder),
-        title: withoutExtension(file),
-        at: when.toISOString(),
+        title: titleOf(file),
+        at: posted.at.toISOString(),
+        dated: posted.dated,
       });
     }
   }
   return arrived.sort((one, other) => one.at.localeCompare(other.at));
+}
+
+/** `ntulearn` names each announcement for the day it was posted, and the rest is its title. */
+const dayInName = /^(\d{4}-\d{2}-\d{2}) (.+)$/;
+
+/** The precise moment, written into the document's own header beside `Modified:`. */
+const createdInBody = /^-\s*Created:\s*(\S+)\s*$/m;
+
+/**
+ * How far into a document that header is looked for. It sits under the title, and an announcement's
+ * title can run to a paragraph — so this is sized for a long one rather than for a typical one, and
+ * a document whose header is further in than this falls back to the day in its filename and says so.
+ */
+const headerBytes = 4096;
+
+/**
+ * When one announcement was posted, or null where it was posted before the window. The document's
+ * own `Created:` line is the authority; its filename's day stands in where there is none, and only a
+ * file carrying neither falls back to when the sync wrote it — reported as such rather than as a
+ * date, since it is the one case where the answer is Syrax's rather than the document's.
+ *
+ * The filename is read before the body so that a corpus of hundreds is not opened to answer a
+ * question about one day: a file whose own day ended before the window began is skipped unread.
+ */
+async function postedAt(path: string, since: Date): Promise<{ at: Date; dated: Dated } | null> {
+  const day = dayInName.exec(basename(path))?.[1];
+  if (day !== undefined && endOfDay(day) < since) return null;
+
+  const created = await createdAt(path);
+  if (created !== null)
+    return created >= since ? { at: created, dated: "its own Created line" } : null;
+  if (day !== undefined) return { at: startOfDay(day), dated: "the day in its filename" };
+
+  const written = await modifiedAt(path);
+  if (written === null || written < since) return null;
+  return { at: written, dated: "when the sync wrote it" };
+}
+
+async function createdAt(path: string): Promise<Date | null> {
+  const created = createdInBody.exec(await head(path))?.[1];
+  if (created === undefined) return null;
+  const at = new Date(created);
+  return Number.isNaN(+at) ? null : at;
+}
+
+/**
+ * A day rather than a moment, so a filename-dated entry is placed at the start of its day and is
+ * still inside a window that opened during it. A brief that repeats an entry once is cheaper than
+ * one that drops it: the day is all the filename knows.
+ *
+ * **Read as UTC, because that is how it was written.** `ntulearn` names a file from the UTC date of
+ * the announcement's own creation (`src/sync/expected.mjs`), so reading it on this machine's clock
+ * would put a day's end eight hours early here — and an announcement posted after that would be
+ * skipped unread as older than a window it is actually inside.
+ */
+function startOfDay(day: string): Date {
+  const [year, month, date] = day.split("-").map(Number) as [number, number, number];
+  return new Date(Date.UTC(year, month - 1, date));
+}
+
+function endOfDay(day: string): Date {
+  return new Date(+startOfDay(day) + 86_399_999);
+}
+
+/** The title as the Owner reads it: without the day the entry already carries, and without `.md`. */
+function titleOf(file: string): string {
+  const name = withoutExtension(file);
+  return dayInName.exec(name)?.[2] ?? name;
+}
+
+async function head(path: string): Promise<string> {
+  try {
+    return (await readFile(path, "utf8")).slice(0, headerBytes);
+  } catch {
+    return "";
+  }
 }
 
 /**
@@ -180,19 +271,21 @@ function withoutExtension(file: string): string {
   return file.replace(/\.[^.]+$/, "");
 }
 
-async function entries(path: string): Promise<string[]> {
-  try {
-    return await readdir(path);
-  } catch {
-    return [];
-  }
+/** Files that are files themselves: a directory or a link inside `Announcements/` is not an entry. */
+async function files(path: string): Promise<string[]> {
+  return await named(path, (entry) => entry.isFile());
 }
 
 /** Directories that are directories themselves, rather than links to somewhere that is one. */
 async function directories(path: string): Promise<string[]> {
+  return await named(path, (entry) => entry.isDirectory());
+}
+
+async function named(path: string, wanted: (entry: Dirent) => boolean): Promise<string[]> {
   try {
-    const found = await readdir(path, { withFileTypes: true });
-    return found.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+    return (await readdir(path, { withFileTypes: true }))
+      .filter((entry) => wanted(entry))
+      .map((entry) => entry.name);
   } catch {
     return [];
   }

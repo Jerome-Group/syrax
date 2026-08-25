@@ -72,11 +72,9 @@ describe("the morning brief", () => {
         },
       ],
     });
-    products.writeAnnouncement(
-      "Y2S1/MH2100/NTULearn",
-      "03 Tutorial 4 uploaded",
-      new Date(+now - 3600_000),
-    );
+    products.writeAnnouncement("Y2S1/MH2100/NTULearn", "Tutorial 4 uploaded", {
+      posted: new Date(+now - 3600_000),
+    });
     products.writeVerdict({
       verdict: "green",
       message: "synced, 2 new files",
@@ -87,7 +85,7 @@ describe("the morning brief", () => {
 
     const { text } = posted(telegram);
     assert.match(text, /Today:\n- 10:00 — MH2500 lecture/);
-    assert.match(text, /Overnight:\n- MH2100: 03 Tutorial 4 uploaded/);
+    assert.match(text, /Overnight:\n- MH2100: Tutorial 4 uploaded/);
     assert.match(text, /Sync: green — synced, 2 new files\./);
     assert.ok(
       text.indexOf("Today:") < text.indexOf("Overnight:"),
