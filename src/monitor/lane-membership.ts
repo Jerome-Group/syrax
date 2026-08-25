@@ -30,26 +30,27 @@ export class LaneMembership {
   }
 
   /**
-   * Whether the file holds the lanes the ledger implies. Only the two chains are compared:
-   * unrelated drift in a machine's own file is not this unit's to correct, and a machine with no
-   * file at all is not either — the generator runs before the gateway (ADR-0019), and a monitor
+   * Whether the file holds the lanes the ledgers imply — what is standing down and what has been
+   * taken out for good, which compose a chain the same way and differ only in what puts a rung
+   * back. Only the two chains are compared: unrelated drift in a machine's own file is not this
+   * unit's to correct, and a machine with no file at all is not either — the generator runs before the gateway (ADR-0019), and a monitor
    * that wrote the first configuration would be standing in for an install. A file that is there
    * and will not parse is a file to write again, since nothing can be said about what it holds.
    */
-  differsFrom(standingDown: readonly string[]): boolean {
+  differsFrom(absent: readonly string[]): boolean {
     if (!existsSync(this.#deployment.configPath)) return false;
     const written = this.#read();
     if (written === null) return true;
     const held = chainsIn(written);
     return (
-      JSON.stringify(held.front) !== JSON.stringify(laneChain(frontLane, standingDown)) ||
-      JSON.stringify(held.worker) !== JSON.stringify(laneChain(workerLane, standingDown))
+      JSON.stringify(held.front) !== JSON.stringify(laneChain(frontLane, absent)) ||
+      JSON.stringify(held.worker) !== JSON.stringify(laneChain(workerLane, absent))
     );
   }
 
   /**
    * The write, which is applied and not landed: the next turn still uses the chain the gateway last
-   * built from. The stand downs are read from the ledger by the generator itself.
+   * built from. Both ledgers are read by the generator itself.
    */
   write(): void {
     generateConfig(this.#deployment, readCarrierMap(this.#deployment.carrierMap));

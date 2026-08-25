@@ -27,6 +27,8 @@ export const hatchLabel = "com.jerome-group.syrax.hatch";
 
 export const rungWatchLabel = "com.jerome-group.syrax.rung-watch";
 
+export const rungSweepLabel = "com.jerome-group.syrax.rung-sweep";
+
 export const incrementalIndexLabel = "com.jerome-group.syrax.index-incremental";
 export const fullIndexLabel = "com.jerome-group.syrax.index-full";
 
@@ -53,6 +55,13 @@ const hourlyOffPeak: Calendar = { Minute: 47 };
  * days in most months and three in a leap February. The pass costs hours, so a day of drift ten
  * times a year is cheaper than the calendar job a truer schedule would need.
  */
+/**
+ * The sweep, once a day and in the small hours: it spends a real request on every chain rung, and
+ * seven a day is the figure ADR-0012 weighed against a rung's allowance. It sits well clear of the
+ * full index pass at 04:30, which is hours of work rather than seven calls.
+ */
+const daily: Calendar = { Hour: 6, Minute: 7 };
+
 const everyThirdDay: Calendar = { Day: [1, 4, 7, 10, 13, 16, 19, 22, 25, 28], Hour: 4, Minute: 30 };
 
 export function launchAgentPath(home: string, label: string): string {
@@ -95,6 +104,14 @@ export function rungWatchPlist(deployment: Deployment): string {
     `http://127.0.0.1:${deployment.monitorPort}/watch`,
     hourlyOffPeak,
   );
+}
+
+/**
+ * The sweep is a poke at the resident unit for the reason the watch is: what a sweep changes is the
+ * rotted set, and a second process finding a dead rung would announce one the unit does not hold.
+ */
+export function rungSweepPlist(deployment: Deployment): string {
+  return pokePlist(rungSweepLabel, `http://127.0.0.1:${deployment.monitorPort}/sweep`, daily);
 }
 
 function residentUnitPlist(label: string, wrapperPath: string): string {

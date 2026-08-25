@@ -48,9 +48,16 @@ export class StandDowns {
   /**
    * Refuses rather than writes wherever the stand down would not be one: a rung no lane holds, a
    * reset already behind us, and — the one that matters — the last rung of a lane, which is a lane
-   * that answers nothing rather than a lane that is short of one.
+   * that answers nothing rather than a lane that is short of one. The rungs the Owner has removed
+   * for good count against that last one: they are missing from the same chain, and a lane emptied
+   * between the two ledgers is one the generator would refuse to compose after this had been
+   * written (ADR-0012).
    */
-  stand(asked: { rung: string; until: Date; why: string }, now: Date = new Date()): StandDown {
+  stand(
+    asked: { rung: string; until: Date; why: string },
+    now: Date = new Date(),
+    removed: readonly string[] = [],
+  ): StandDown {
     const lane = laneHolding(asked.rung);
     if (lane === undefined) {
       throw new Error(
@@ -65,7 +72,7 @@ export class StandDowns {
     if (this.active(now).some((held) => held.rung === asked.rung)) {
       throw new Error(`${asked.rung} is already standing down.`);
     }
-    const out = new Set([...this.active(now).map((held) => held.rung), asked.rung]);
+    const out = new Set([...this.active(now).map((held) => held.rung), ...removed, asked.rung]);
     if (lane.rungs.every((rung) => out.has(modelRef(rung)))) {
       throw new Error(
         `${asked.rung} is the ${lane.name} lane's last rung, and a lane with none answers nothing.`,

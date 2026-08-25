@@ -63,7 +63,7 @@ split is **one unit per resident thing that must exist exactly once**.
 |------|--------------|------------------------|
 | `com.jerome-group.syrax.gateway` | The agent runtime | It holds the sessions and carries every chat |
 | `com.jerome-group.syrax.search` | The resident search service | One embedder in memory regardless of how many agents connect |
-| `com.jerome-group.syrax.hatch` | The **lane monitor**: the escape-hatch tool, the usage report, and the rung watch | Its counters must be single-instance and must survive a restart of anything else |
+| `com.jerome-group.syrax.hatch` | The **lane monitor**: the escape-hatch tool, the usage report, the rung watch and the daily sweep | Its counters must be single-instance and must survive a restart of anything else |
 
 The second is the one that is easy to get wrong. The usual MCP transport has each client spawn the
 server as a child process, which would put one resident embedding model behind **every** agent. The
@@ -161,8 +161,8 @@ It also reports **rotted rungs** — chain members whose model no longer answers
 calls it by. That is a different subject from headroom, a vanished model having no allowance left to
 measure, and it arrives in the same report because the two answer one question between them: whether
 the lane can still be relied on. A rung is reported when it changes state and listed in between, with
-the provider's own message passed through verbatim. Nothing is ever replaced or removed
-automatically. [ADR-0012](adr/0012-a-rotted-rung-is-reported-and-never-repaired.md) carries the
+the provider's own message passed through verbatim, and every post carries a **removal button** per
+rotted rung. Nothing is ever replaced automatically, and nothing is removed except on the tap. [ADR-0012](adr/0012-a-rotted-rung-is-reported-and-never-repaired.md) carries the
 reasoning.
 
 For this the unit reads the gateway's own log, where the runtime already classifies a
@@ -175,10 +175,20 @@ quiet day. launchd pokes `POST /watch` on the loopback port hourly, at 47 minute
 read is what notices a **lane switch**: the lane answering on a rung below the one it was last seen
 on.
 
-Two halves of ADR-0012 are not built yet. The log speaks only once something has already gone wrong,
-so a rung *beneath* the serving one is invisible until the one above it fails; the daily sweep that
-covers those, and the inline tap that removes a dead rung on the Owner's decision, are
-[#129](https://github.com/Jerome-Group/syrax/issues/129).
+The log speaks only once something has already gone wrong, so a rung *beneath* the serving one is
+invisible until the one above it fails. Those are covered by the **daily sweep**: one minimal
+completion through each chain rung, poked at `POST /sweep` at 06:07, which is seven real requests a
+day spent to observe an absence. A catalogue read would be cheaper and worse than nothing, both
+catalogues having been measured lying in both directions. The rationed lane is excluded — one probe
+is 5% of a 20-a-day rung — and observes its own failures beside its counters instead.
+
+**Removal is the Owner's, and it happens on the tap and only on the tap.** The button carries a
+value the monitor minted and only the monitor can resolve, so a value a model composed removes
+nothing; the tap arrives in System as a `callback_data:` message, the agent passes it back, and the
+rung is written out of its lane and landed once the turn is over. It is kept in its own ledger
+beside the stand downs, so a redeploy from the authored contract cannot put it back — and unlike a
+stand down, nothing is scheduled to return it. A tap on a report older than the unit's own uptime
+answers *expired*, and the Owner asks for a fresh report.
 
 Each unit is launched through a wrapper script rather than the binary, generated from the
 deployment by `src/cli/install-gateway-agent.ts` and `src/cli/install-search-agent.ts`. A wrapper

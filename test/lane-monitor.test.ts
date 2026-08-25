@@ -16,6 +16,7 @@ import {
   hatchToolName,
   mcpPath,
   monitorServerName,
+  removeRungToolName,
   reportToolName,
   standDownToolName,
 } from "../src/adapter/monitor-tools.ts";
@@ -391,7 +392,7 @@ describe("the hatch over MCP", () => {
 
     assert.deepEqual(
       (listed.result as { tools: { name: string }[] }).tools.map((tool) => tool.name),
-      [hatchToolName, reportToolName, standDownToolName],
+      [hatchToolName, reportToolName, standDownToolName, removeRungToolName],
     );
     const answered = (called.result as { structuredContent: { reached: boolean; answer: string } })
       .structuredContent;

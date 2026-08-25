@@ -13,7 +13,7 @@ import { chats, everyChat, systemChat, type Chat, type ChatId } from "../adapter
 import type { Deployment } from "../adapter/deployment.ts";
 import { generateConfig } from "../adapter/generator.ts";
 import { readSecret, secretPaths } from "../adapter/secrets-store.ts";
-import { BotApi, isMissingCarrier } from "./bot-api.ts";
+import { BotApi, type Button, isMissingCarrier } from "./bot-api.ts";
 
 /** One chat and the topic now carrying it, as this run either created it or found it missing. */
 export type Carrier = { chat: Chat; id: number };
@@ -51,13 +51,14 @@ export class ChatSurface {
   }
 
   /**
-   * Posts into a chat, recreating its carrier if the send finds it gone, and announcing every
+   * Posts into a chat, with any buttons the message carries, recreating its carrier if the send
+   * finds it gone, and announcing every
    * recreation in System with its new id. Announcing can itself recreate System, so announcements
    * are drained from a queue rather than sent in one pass — and the queue empties, because a chat
    * that has just been recreated is there to be written into.
    */
-  async post(id: ChatId, text: string): Promise<Carrier[]> {
-    const recreated = await this.#deliver(chats[id], text);
+  async post(id: ChatId, text: string, buttons: readonly Button[] = []): Promise<Carrier[]> {
+    const recreated = await this.#deliver(chats[id], text, buttons);
     const announced: Carrier[] = [];
     for (const carrier of recreated) {
       announced.push(carrier);
@@ -66,11 +67,11 @@ export class ChatSurface {
     return announced;
   }
 
-  async #deliver(chat: Chat, text: string): Promise<Carrier[]> {
+  async #deliver(chat: Chat, text: string, buttons: readonly Button[] = []): Promise<Carrier[]> {
     const carrier = this.#carriers[chat.id];
     if (carrier !== undefined) {
       try {
-        await this.#api.sendMessage(this.#deployment.ownerTelegramUserId, text, carrier);
+        await this.#api.sendMessage(this.#deployment.ownerTelegramUserId, text, carrier, buttons);
         return [];
       } catch (error) {
         if (!isMissingCarrier(error)) throw error;
@@ -78,7 +79,7 @@ export class ChatSurface {
     }
 
     const recreated = await this.#recreate(chat);
-    await this.#api.sendMessage(this.#deployment.ownerTelegramUserId, text, recreated.id);
+    await this.#api.sendMessage(this.#deployment.ownerTelegramUserId, text, recreated.id, buttons);
     return [recreated];
   }
 

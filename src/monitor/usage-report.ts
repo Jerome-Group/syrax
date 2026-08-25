@@ -18,6 +18,7 @@ import { join } from "node:path";
 import { writePrivateFile } from "../adapter/private-state.ts";
 import type { DailyCounters } from "./counters.ts";
 import type { Source, TelemetrySources } from "./sources.ts";
+import type { Removed } from "../adapter/removal-ledger.ts";
 import type { StandDown } from "../adapter/stand-down-ledger.ts";
 import type { Rotted, Window } from "./rung-watch.ts";
 
@@ -32,6 +33,8 @@ export type LaneUsage = {
    */
   answersNext: { rung: string; provider: ProviderId } | null;
   standDowns: StandDown[];
+  /** Rungs the Owner has taken out of this lane for good, which no reset brings back. */
+  removed: Removed[];
   /** Each provider the lane reaches, with its own telemetry beneath the lane's headline. */
   sources: Source[];
 };
@@ -50,10 +53,10 @@ export type UsageReport = { at: string; lanes: LaneUsage[]; watched: RungWatched
  * What makes the report arrive unasked, and the whole of what does: everything else is silence,
  * which is what separates this from a daily brief.
  *
- * Three of the six are stated by the reader of the runtime's own fallback-decision log — a lane
- * switching, and a rung found rotted or found working again (ADR-0012) — which this unit does not
- * hold yet. They are named here because the set is the report's contract rather than a list of
- * today's producers, and a reader meeting a new kind should find it already spelled.
+ * Three of the seven are stated by the rung watch — a lane switching, and a rung found rotted or
+ * found working again — off the runtime's own decision log and off the daily sweep alike, and the
+ * seventh is the Owner tapping one of them out of its chain (ADR-0012). They are named here because
+ * the set is the report's contract rather than a list of today's producers.
  */
 export type Transition = {
   kind:
@@ -62,7 +65,8 @@ export type Transition = {
     | "a lane switch"
     | "a rationed spend"
     | "a rotted rung"
-    | "a recovered rung";
+    | "a recovered rung"
+    | "a rung removed";
   said: string;
 };
 
@@ -70,6 +74,7 @@ export function usageReport(
   counters: DailyCounters,
   telemetry: TelemetrySources,
   standDowns: readonly StandDown[],
+  removed: readonly Removed[],
   watched: RungWatched,
   now: Date = new Date(),
 ): UsageReport {
@@ -77,7 +82,7 @@ export function usageReport(
     at: now.toISOString(),
     watched,
     lanes: [
-      ...chainLanes.map((lane) => chainUsage(lane, telemetry, standDowns)),
+      ...chainLanes.map((lane) => chainUsage(lane, telemetry, standDowns, removed)),
       hatchUsage(counters, now),
     ],
   };
@@ -87,15 +92,19 @@ function chainUsage(
   lane: (typeof chainLanes)[number],
   telemetry: TelemetrySources,
   standDowns: readonly StandDown[],
+  removed: readonly Removed[],
 ): LaneUsage {
   const out = standDowns.filter((held) => held.lane === lane.name);
-  const serving = lane.rungs.filter((rung) => !out.some((held) => held.rung === modelRef(rung)));
+  const gone = removed.filter((held) => held.lane === lane.name);
+  const missing = [...out, ...gone].map((held) => held.rung);
+  const serving = lane.rungs.filter((rung) => !missing.includes(modelRef(rung)));
   const next = serving[0];
   return {
     lane: lane.name,
     serving: serving.map(modelRef),
     answersNext: next === undefined ? null : { rung: modelRef(next), provider: next.provider },
     standDowns: [...out],
+    removed: [...gone],
     sources: providersOf(lane).map((provider) => telemetry.reported(provider)),
   };
 }
@@ -108,6 +117,7 @@ function hatchUsage(counters: DailyCounters, now: Date): LaneUsage {
     serving: hatchLane.rungs.map(rungId),
     answersNext: next === undefined ? null : { rung: rungId(next), provider: next.provider },
     standDowns: [],
+    removed: [],
     sources: [
       {
         provider: silentProvider,

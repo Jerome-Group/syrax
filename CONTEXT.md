@@ -330,6 +330,29 @@ would file a permanent loss as a temporary one; outage, which is the provider be
 the model being gone; deprecated — the provider's word for an announcement, where this is the state
 after the model has already stopped answering
 
+**Sweep**:
+Asking every chain rung, on a schedule, whether it still answers to its name — one minimal
+completion each, spending a real request to observe an absence. It exists because a healthy chain is
+*silent*: the runtime logs a decision only once something has already failed, so the rung being
+served is the only one a passive read can speak for and the rungs beneath it are invisible until the
+day they are needed. It is deliberately **not** a catalogue read: both catalogues have been measured
+lying in both directions, so a free `GET` produces false alarms as well as false silence. The
+rationed lane is never swept, one probe there being 5% of a rung's day.
+_Avoid_: health check — it suggests a free liveness probe, where this spends the same allowance a
+turn does; poll, which names the schedule and not the cost; probe — the runtime's own word for a
+per-provider credential check, which this is not
+
+**Removal**:
+Taking a rotted rung out of its lane for good, on the Owner's tap and on nothing else. It is the
+opposite of a *stand down* in the way a *rotted rung* is: a stand down is written back at its reset,
+where a removal has no reset to return at, so nothing schedules its return and nothing is owed one.
+Syrax is the actuator and the Owner is the decision — a 404 cannot be told apart from a transient
+unrouting, and neither can it be *repaired*, since choosing a replacement needs a catalogue already
+measured wrong. The report carries the button so that acting costs a tap rather than a JSON editor.
+_Avoid_: replacement — the thing Syrax refuses to do, and naming this that hides the refusal;
+stand down — bounded by a reset this has none of; disable, which reads as a setting that can be
+unset rather than a rung written out of a chain
+
 **Pre-emptive switch**:
 Leaving a provider *before* it refuses, on what its telemetry already says rather than on a failure
 that has happened. It is reserved for where being refused is expensive, and expense is measured

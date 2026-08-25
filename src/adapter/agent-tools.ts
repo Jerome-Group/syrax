@@ -9,7 +9,7 @@
  */
 
 import { type Chat, systemChat } from "./chats.ts";
-import { hatchTool, reportTool, standDownTool } from "./monitor-tools.ts";
+import { hatchTool, removeRungTool, reportTool, standDownTool } from "./monitor-tools.ts";
 import { everySearchUnitTool, searchesTheCorpus, searchTool } from "./search-tools.ts";
 
 /** Without these the front lane cannot spawn, and the lane that thinks is unreachable (ADR-0022). */
@@ -23,11 +23,15 @@ export const delegationTools = ["sessions_spawn", "sessions_yield", "subagents"]
 const messageTool = "message";
 
 /**
- * The hatch is every chat's, being a lane. The report and the stand down are System's, being
- * Syrax's own state — which is the one domain a chat here owns.
+ * The hatch is every chat's, being a lane. The report, the stand down and the removal are System's,
+ * being Syrax's own state — which is the one domain a chat here owns. The removal is System's for a
+ * second reason too: the report that carries its buttons is posted there and nowhere else, so no
+ * other chat can be holding a tap to pass back (ADR-0012).
  */
 function monitorTools(chat: Chat): string[] {
-  return chat.id === systemChat.id ? [hatchTool, reportTool, standDownTool] : [hatchTool];
+  return chat.id === systemChat.id
+    ? [hatchTool, reportTool, standDownTool, removeRungTool]
+    : [hatchTool];
 }
 
 export function agentTools(chat: Chat): string[] {
