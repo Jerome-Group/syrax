@@ -21,6 +21,7 @@ import {
   announcementsSince,
   reLoginLine,
   syncVerdict,
+  unplacedLine,
   type Announcement,
   type SyncVerdict,
 } from "./ntulearn.ts";
@@ -83,7 +84,17 @@ function overnight(arrived: readonly Announcement[]): string {
   return ["Overnight:", ...arrived.map((one) => `- ${one.module}: ${one.title}`)].join("\n");
 }
 
+/**
+ * The verdict, then what to do about it — and what to do about it follows what the digest says
+ * failed rather than what colour it is (#180). A red the digest blames on a mount is relayed and
+ * left there: the message already names its own remedy, and adding an instruction of Syrax's own
+ * would be an instruction about a cause nothing observed.
+ */
 function verdictLine(verdict: SyncVerdict): string {
   const stated = `Sync: ${verdict.verdict}${verdict.message === "" ? "" : ` — ${verdict.message}`}.`;
-  return verdict.needsLogin ? `${stated} ${reLoginLine}` : stated;
+  if (verdict.failed === "the session") return `${stated} ${reLoginLine}`;
+  if (verdict.failed === "unclear" && verdict.verdict !== "unknown") {
+    return `${stated} ${unplacedLine(verdict.runLog)}`;
+  }
+  return stated;
 }

@@ -94,9 +94,11 @@ export class AcademicDesk {
         name: syncStatusToolName,
         description:
           "How the overnight NTULearn job went, read from the digest its own watchdog wrote: a " +
-          "verdict of green, yellow or red with the run's own message. When `needsLogin` is true, " +
-          "say that the saved session needs re-opening and that only the Owner can do it — there " +
-          "is no tool for it, and never offer one.",
+          "verdict of green, yellow or red with the run's own message. `failed` says what the " +
+          "digest blames, and it decides what to say next: on *the session*, say it needs " +
+          "re-opening and that only the Owner can do it — there is no tool for it, and never offer " +
+          "one. On *something else*, relay the message and never send them to log in. On " +
+          "*unclear*, say the cause is not one you can place and point at `runLog`.",
         inputSchema: { type: "object", properties: {} },
         call: () => syncVerdict(this.#products),
       },

@@ -96,17 +96,50 @@ describe("the morning brief", () => {
     assert.ok(text.indexOf("Overnight:") < text.indexOf("Sync:"));
   });
 
-  it("carries the one line only the Owner can act on when the verdict is not green", async () => {
+  it("carries the one line only the Owner can act on when the session is what lapsed", async () => {
     const { telegram, products, desk } = await machine();
     products.writeVerdict({
       verdict: "red",
-      message: "the saved session has lapsed",
+      message: "session lapsed — run `npm run login`",
       timestamp: new Date().toISOString(),
     });
 
     await desk.brief();
 
     assert.ok(posted(telegram).text.endsWith(reLoginLine));
+  });
+
+  it("relays a red the digest blames elsewhere without sending the Owner to log in", async () => {
+    const { telegram, products, desk } = await machine();
+    products.writeVerdict({
+      verdict: "red",
+      message:
+        "Destination /one/MH2100/NTULearn is unreachable — expected Drive root /one/My Drive; set driveMountPath and the destination to the mounted Drive, then run: npm run watchdog",
+      timestamp: new Date().toISOString(),
+    });
+
+    await desk.brief();
+
+    const { text } = posted(telegram);
+    assert.match(text, /Destination \/one\/MH2100\/NTULearn is unreachable/);
+    assert.doesNotMatch(text, /npm run login/);
+  });
+
+  it("says a red it cannot place is unclear, and points at the run log that holds it", async () => {
+    const { telegram, products, desk } = await machine();
+    products.writeVerdict({
+      verdict: "red",
+      message: "the moon was in the wrong phase",
+      timestamp: new Date().toISOString(),
+      runLog: "logs/2026-08-25T05-00-01-234Z-abc.json",
+    });
+
+    await desk.brief();
+
+    const { text } = posted(telegram);
+    assert.match(text, /what failed is not something Syrax can place/i);
+    assert.match(text, /logs\/2026-08-25T05-00-01-234Z-abc\.json/);
+    assert.doesNotMatch(text, /npm run login/);
   });
 
   it("still posts when a product cannot be run at all", async () => {

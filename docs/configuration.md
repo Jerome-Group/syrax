@@ -162,8 +162,15 @@ rather than to the word *refresh*. And some things have no tool at all and are n
 At 07:00 launchd pokes `/brief` and the desk composes one, from the day ahead, what arrived
 overnight, and how the overnight jobs went — in that order, because the day ahead is the part with a
 decision attached. It is posted **whether or not anything happened**: its absence is the signal, and
-a morning with no brief means Syrax is down. A `yellow` or `red` sync verdict carries the one line
-only the Owner can act on, which is that the saved NTULearn session needs re-opening.
+a morning with no brief means Syrax is down.
+
+**What a failed verdict is told to do about it follows what the digest blames, never its colour**
+([#180](https://github.com/Jerome-Group/syrax/issues/180)). `ntulearn`'s watchdog writes a small
+closed set of sentences and each names its own cause, so the desk recognises that wording: a lapsed
+session carries the one line only the Owner can act on — re-opening it, which no tool can do — and a
+red the digest blames on a mount, a destination or a permission is relayed and left there, since it
+already names its own remedy. A sentence the desk does not recognise is called **unclear** and
+points at the run log, rather than being assigned to the likelier of the two.
 
 It is composed here rather than asked of a model for the same reason: a brief that is a free-tier
 turn is a heartbeat that stops when a provider does, and the day ahead is exactly the list of times

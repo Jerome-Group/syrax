@@ -193,11 +193,97 @@ describe("how the overnight jobs went", () => {
     assert.deepEqual(products.ntulearnRuns(), []);
   });
 
-  it("says the session needs re-opening on a red verdict, which only the Owner can do", async () => {
+  it("says the session needs re-opening where the digest says the session lapsed", async () => {
+    const products = standInProducts();
+    // The watchdog's own sentence for this case, which is the one thing only the Owner can clear.
+    products.writeVerdict({
+      verdict: "red",
+      message: "session lapsed — run `npm run login`",
+      timestamp: "2026-08-25T05:00:01.234Z",
+    });
+    const desk = new AcademicDesk(products.deployment);
+
+    const verdict = (await call(desk, syncStatusToolName)) as SyncVerdict;
+
+    assert.equal(verdict.needsLogin, true);
+    assert.equal(verdict.failed, "the session");
+  });
+
+  it("does not blame the session for a red the digest blames on the mount", async () => {
+    const products = standInProducts();
+    // Captured from the mini on 2026-08-24, which is the red that named this rule (#180).
+    products.writeVerdict({
+      verdict: "red",
+      message:
+        "crash/timeout after 3 attempts; stderr tail: EACCES: permission denied, mkdir '/Users/one/Library/CloudStorage/GoogleDrive-one/My Drive'; inspect the run log for the captured attempts",
+      timestamp: "2026-08-24T21:30:41.582Z",
+      runLog: "logs/2026-08-24T21-30-41-582Z-3ab8e5fd.json",
+    });
+    const desk = new AcademicDesk(products.deployment);
+
+    const verdict = (await call(desk, syncStatusToolName)) as SyncVerdict;
+
+    assert.equal(verdict.needsLogin, false);
+    assert.equal(verdict.failed, "something else");
+  });
+
+  it("does not blame the session for a destination the digest says is unreachable", async () => {
     const products = standInProducts();
     products.writeVerdict({
       verdict: "red",
-      message: "the saved session has lapsed",
+      message:
+        "Destination /one/MH2100/NTULearn is unreachable — permission denied at /one/My Drive; correct driveMountPath or destination permissions, then run: npm run watchdog",
+      timestamp: "2026-08-25T05:00:01.234Z",
+    });
+    const desk = new AcademicDesk(products.deployment);
+
+    const verdict = (await call(desk, syncStatusToolName)) as SyncVerdict;
+
+    assert.equal(verdict.needsLogin, false);
+    assert.equal(verdict.failed, "something else");
+  });
+
+  it("says a red it cannot place is unclear rather than guessing at either cause", async () => {
+    const products = standInProducts();
+    products.writeVerdict({
+      verdict: "red",
+      message: "the moon was in the wrong phase",
+      timestamp: "2026-08-25T05:00:01.234Z",
+      runLog: "logs/2026-08-25T05-00-01-234Z-abc.json",
+    });
+    const desk = new AcademicDesk(products.deployment);
+
+    const verdict = (await call(desk, syncStatusToolName)) as SyncVerdict;
+
+    assert.equal(verdict.needsLogin, false);
+    assert.equal(verdict.failed, "unclear");
+    assert.equal(verdict.runLog, "logs/2026-08-25T05-00-01-234Z-abc.json");
+  });
+
+  it("calls a crash that captured nothing unclear, since it names no cause at all", async () => {
+    const products = standInProducts();
+    // `(none)` is the watchdog's own placeholder for a crash it captured no stderr from.
+    products.writeVerdict({
+      verdict: "red",
+      message:
+        "crash/timeout after 3 attempts; stderr tail: (none); inspect the run log for the captured attempts",
+      timestamp: "2026-08-25T05:00:01.234Z",
+      runLog: "logs/2026-08-25T05-00-01-234Z-abc.json",
+    });
+    const desk = new AcademicDesk(products.deployment);
+
+    const verdict = (await call(desk, syncStatusToolName)) as SyncVerdict;
+
+    assert.equal(verdict.needsLogin, false);
+    assert.equal(verdict.failed, "unclear");
+  });
+
+  it("blames the session where a crash's own tail says the session is gone", async () => {
+    const products = standInProducts();
+    products.writeVerdict({
+      verdict: "red",
+      message:
+        "crash/timeout after 3 attempts; stderr tail: the saved session is no longer signed in; inspect the run log for the captured attempts",
       timestamp: "2026-08-25T05:00:01.234Z",
     });
     const desk = new AcademicDesk(products.deployment);
@@ -214,6 +300,7 @@ describe("how the overnight jobs went", () => {
 
     assert.equal(verdict.verdict, "unknown");
     assert.equal(verdict.at, null);
+    assert.equal(verdict.needsLogin, false);
   });
 });
 
