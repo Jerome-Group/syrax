@@ -89,8 +89,43 @@ CORPUS = {
     "notes/exam 2025-2026 semester 2.md": (
         "past year paper questions covering continuity differentiability and integration"
     ),
+    # The shape a scan takes in the index, and the one the fusion loses. Its name accounts for the
+    # whole of `mh1300 midterm 2025`; its body is what an OCR pass got off a photographed page, so
+    # it reaches neither the text arm nor the vector arm with anything.
+    "notes/mh1300 midterm 2025 questions.md": (
+        "photographed pages tilted in the frame with smudged margins mostly unreadable"
+    ),
+    # Bookkeeping rather than documents, and the reason a shortlist fills up with them: each names
+    # every paper a module has, so both hit the text arm and the vector arm for any query about one.
+    # Their own names account for a third of such a query at most, which is under the majority the
+    # exemption asks for — so they are fused hits and never named ones, which is the whole of the
+    # asymmetry #187 is about. Two of them, because in the corpus this was measured against there
+    # were four, and one alone leaves the ranking too easy to read as a tie.
+    "notes/mh1300 register.md": (
+        "curated source ntulearn destination assessments midterms mh1300 midterm 2025 questions "
+        "mh1300 midterm 2024 solutions decided precedent digest superseded parked"
+    ),
+    "notes/mh2100 register.md": (
+        "curated source drive destination learning past papers mh1300 midterm 2025 solutions "
+        "mh2100 midterm 2025 questions decided procedure digest withdrawn appended"
+    ),
     "scanned/hardware store receipt.pdf": None,
 }
+
+# Counted from the corpus rather than written beside it: a document added for one verdict's sake
+# should not send somebody hunting through three pass assertions for the number that moved.
+EXTRACTED = len([one for one in CORPUS if one.startswith("notes/")])
+"""Inside `extractionScope` **and yielding text**, which is not the same as being inside it.
+
+The two come apart for a document written to be unreadable, which is a thing a verdict fixture wants
+— a body of one word extracts to nothing, lands in the failure ledger as `empty`, and is then seen
+without being extracted. The scan below is worded to stay above that line for exactly this reason.
+Give a `notes/` entry a body too slight to read and this count is wrong, and it is `test_building`
+rather than the test you were writing that says so.
+"""
+
+SEEN = len(CORPUS)
+"""Named, which the PDF outside the scope is too."""
 
 
 @pytest.fixture
