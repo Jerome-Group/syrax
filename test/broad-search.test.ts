@@ -10,7 +10,8 @@
  */
 
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { agentWorkspace } from "../src/adapter/agent-defaults.ts";
@@ -81,6 +82,7 @@ describe("General answering with the corpus", { skip: !runtimeIsInstalled() }, (
   }
 
   it("answers a described document with the document itself", async () => {
+    const documents = syrax.telegram.matching("sendDocument", () => true).length;
     const sent = await turn(
       "the notes about semisimple rings",
       { action: "send", message: "Wedderburn.", mediaUrl: handedOver },
@@ -90,6 +92,94 @@ describe("General answering with the corpus", { skip: !runtimeIsInstalled() }, (
     assert.equal(sent.body.document, "wedderburn.md");
     assert.equal(sent.body.caption, "Wedderburn.");
     assert.equal(sent.body.message_thread_id, syrax.carriers.general);
+
+    // The tool on its own is the clean delivery the instruction now asks for: one document, and no
+    // warning trailing it. The two tests below are what happens when a turn does not stop here.
+    await syrax.telegram.quiet();
+    assert.equal(
+      syrax.telegram.matching("sendDocument", () => true).length - documents,
+      1,
+      "one `message` call put the file on the wire more than once.",
+    );
+    assert.equal(
+      syrax.telegram.matching("sendMessage", (call) => call.body.text === "⚠️ Media failed.")
+        .length,
+      0,
+      "the tool route warns about media of its own accord, which the Owner would see every time.",
+    );
+  });
+
+  /**
+   * Why the standing instruction ends a delivery at the tool (#188). The runtime offers two ways to
+   * send a file — the `message` tool, or a `MEDIA:` line in the final reply — and they are
+   * alternatives rather than layers, which is not something a model reads off either one's
+   * description. What that costs is measured here rather than assumed: a turn doing both puts the
+   * document on the wire twice where the line resolves, and a bare `⚠️ Media failed.` where it does
+   * not, since `NO_REPLY` on its own line is not exactly the token that suppresses a reply.
+   *
+   * It is scripted, so it proves the runtime rather than the model. Should a runtime bump make a
+   * second submission a no-op, this goes red and the instruction has a line it can give back.
+   */
+  it("hands the same file over twice when a MEDIA line follows the tool that sent it", async () => {
+    const sent = syrax.telegram.matching("sendDocument", () => true).length;
+    syrax.provider.script(
+      {
+        kind: "toolCall",
+        name: "message",
+        arguments: { action: "send", message: "Wedderburn.", mediaUrl: handedOver },
+      },
+      { kind: "reply", text: `MEDIA:${handedOver}\nNO_REPLY` },
+    );
+    syrax.telegram.inject({
+      fromUserId: ownerTelegramUserId,
+      text: "the notes about semisimple rings, again",
+      messageThreadId: syrax.carriers.general,
+    });
+    // Both of them, not the first: this turn is still in flight while the second submission is
+    // resolved, and a test that scripts its own reply into that gap gets the standing one instead.
+    await syrax.telegram.waitFor("sendDocument", () => true, 60_000, sent + 1);
+    await syrax.telegram.quiet();
+
+    assert.equal(
+      syrax.telegram.matching("sendDocument", () => true).length - sent,
+      2,
+      "the MEDIA line stopped costing a second delivery, so the instruction may give the line back.",
+    );
+  });
+
+  it("reports a MEDIA line it cannot resolve as a message with nothing else in it", async () => {
+    await syrax.telegram.quiet();
+    const outside = join(mkdtempSync(join(tmpdir(), "syrax-unowned-")), "wedderburn.md");
+    writeFileSync(outside, "artin wedderburn theorem semisimple rings");
+    const failed = (call: OutboundCall) => call.body.text === "⚠️ Media failed.";
+    const already = syrax.telegram.matching("sendMessage", failed).length;
+    const documents = syrax.telegram.matching("sendDocument", () => true).length;
+
+    syrax.provider.script({ kind: "reply", text: `MEDIA:${outside}\nNO_REPLY` });
+    syrax.telegram.inject({
+      fromUserId: ownerTelegramUserId,
+      text: "the notes, from somewhere the runtime does not own",
+      messageThreadId: syrax.carriers.general,
+    });
+    const warned = await syrax.telegram.waitFor("sendMessage", failed, 60_000, already);
+    await syrax.telegram.quiet();
+
+    // `waitFor` matched on that text, so restating it proves nothing. What is worth asserting is
+    // that the warning arrived *instead of* the file and carries nothing but itself: the Owner sees
+    // a bare line with no document and no clue which path the runtime would not take.
+    assert.equal(
+      syrax.telegram.matching("sendDocument", () => true).length,
+      documents,
+      "the file crossed the wire as well, so the warning is not what the Owner is left with.",
+    );
+    for (const carrying of ["document", "photo", "video", "audio", "caption"]) {
+      assert.equal(
+        warned.body[carrying],
+        undefined,
+        `the warning carries ${carrying}, so it is not the bare line the Owner reported.`,
+      );
+    }
+    assert.equal(warned.body.message_thread_id, syrax.carriers.general);
   });
 
   it("offers three tappable candidates and a way to want none of them", async () => {
