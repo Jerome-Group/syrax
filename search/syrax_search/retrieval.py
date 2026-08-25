@@ -63,6 +63,13 @@ NAME_POOL = 40
 # times as many documents a way past the floor, silently.
 NAMING_POOL = 10
 
+# `_named_first` offers what `naming` holds, and may only *reorder* the fusion because every named
+# document is already in it — which is true exactly while this pool sits inside the one the whole
+# name arm is drawn from. The two are argued for different reasons above and neither implies the
+# other, so the relation is stated here rather than left to be rediscovered: crossing it would put
+# documents nothing ranked in front of the Owner, against ADR-0028's one claim about a shortlist.
+assert NAMING_POOL <= NAME_POOL
+
 # How much of the pool a close call offers. Three was the number ADR-0004 chose and ADR-0026 built a
 # keyboard for, and #151 left the answer at rank 5, 6 and 8 for three phrasings of one query —
 # inside the pool the fusion ranked, outside the shortlist drawn from it, and unreachable by any
@@ -162,7 +169,53 @@ def search(
     cleared = scores.get(top, EMPTY_FLOOR - 1) >= CONFIDENT_FLOOR
     if cleared and arms_agree(top, vector, text + names):
         return _decided("confident", database, ranked[:1], scores, best)
-    return _decided("ambiguous", database, ranked[:SHORTLIST], scores, best)
+    return _decided("ambiguous", database, _named_first(naming, ranked), scores, best)
+
+
+def _named_first(naming: list[int], ranked: list[int]) -> list[int]:
+    """The fusion's own first, then the documents the query *named*, then the rest of the fusion.
+
+    The fusion reads position and nothing else, so a document two arms rank at middling depth scores
+    twice where one the query names scores once: at `RRF_K` 60, a text hit and a vector hit at rank
+    five together are worth `2/66` against `1/61` for a name at rank zero. That is the right
+    arithmetic for two *kinds* of evidence and the wrong one here, because the bookkeeping a corpus
+    accumulates — a register naming every paper a module has — is exactly the document that hits
+    both arms for any query about one of them. #187 offered ten candidates for `MH1300 2025 Midterm`
+    and neither of the two files named by it was among them; five of the ten were registers and
+    status notes. The paper itself was a scan carrying 941 characters, so the name was all it had.
+
+    This is not ADR-0027 reopened. Flat fusion measured better than nested and still does; what is
+    added is a precedence *below its first result*, and the precedence is one this module already
+    grants elsewhere. ADR-0025 and ADR-0004 let a name match override the vector arm's judgement —
+    it is what excuses a document from the empty floor, and why *Dummit and Foote* is a correct
+    answer at -0.17. Evidence strong enough to lift a document off the floor is strong enough to
+    keep it in the ten.
+
+    **The first result is the fusion's and stays the fusion's, which is measured rather than
+    conceded.** Naming everything ahead of it scored 13 of 27 benchmark queries led by their own
+    answer against the fused 16, because more than one document passes `NAME_MATCH_MAJORITY` for an
+    ordinary query — every year of a paper shares its module code and its word — so a name-ordered
+    block at the head displaces the one position both arms' agreement has been fitted against.
+    Below that position the benchmark scores nothing, and that is exactly where naming should win:
+    the same run puts the query's own answer second where the fusion had it nowhere in the ten, and
+    leaves `found` and `first` where they were.
+
+    Rescuing only when the fusion buried *every* named document was measured too and fixes nothing —
+    the 2023 and 2024 papers are named by the same query, so the rescue never fires while the one
+    that was asked for stays out.
+
+    `naming` is read as `_keyword_arm` already built it, over the same `NAMING_POOL` of ten. That
+    guard's reach does not move: widening it to lift a buried answer would hand four times as many
+    documents a way past the floor, which is the trade its own comment refuses.
+
+    **Every named document is already in `ranked`, and this may only reorder.** `naming` is drawn
+    from the first `NAMING_POOL` name hits and the whole name arm is one of the three `fuse()`
+    consumes, so the containment holds as long as `NAMING_POOL <= NAME_POOL`. It is asserted rather
+    than assumed because the two are argued separately above and neither mentions the other: raise
+    the first past the second and this would start offering documents nothing ranked, which is the
+    one claim ADR-0028 makes about what a shortlist contains.
+    """
+    return _first_seen([(one,) for one in (*ranked[:1], *naming, *ranked)])[:SHORTLIST]
 
 
 def arms_agree(top: int, vector: list[int], keyword: list[int]) -> bool:

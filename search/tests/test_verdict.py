@@ -32,6 +32,55 @@ def test_a_query_spread_across_documents_offers_a_shortlist(machine, embedder):
     assert 1 <= len(verdict.candidates) <= SHORTLIST
 
 
+def test_a_document_the_query_names_is_offered_before_one_it_does_not(machine, embedder):
+    """The failure #187 was filed for: two weaker arms outranking one exact name.
+
+    RRF reads position alone, so a document that hits the text and the vector arm at middling rank
+    scores twice where a document the query *names* scores once. A register that lists every paper
+    the module has does exactly that, and the paper itself is a scan with nothing to match on but
+    its name — which is the one thing the query gave. Unfixed, both registers and a note about a
+    different exam are offered above the paper the query spelled out.
+    """
+    verdict = answer(machine, embedder, "mh1300 midterm 2025", scope=machine.scopes["notes"])
+    offered = [one.name for one in verdict.candidates]
+    named = offered.index("mh1300 midterm 2025 questions.md")
+
+    assert verdict.state == "ambiguous"
+    for unnamed in ["mh2100 register.md", "exam 2025-2026 semester 2.md"]:
+        assert named < offered.index(unnamed), f"{unnamed} is offered above the paper named."
+
+
+def test_the_first_result_is_still_the_fusions_own(machine, embedder):
+    """Measured rather than conceded: naming everything ahead of it cost three benchmark queries.
+
+    More than one document passes the name-match majority for an ordinary query — every year of a
+    paper shares its module code and its word — so a name-ordered block at the head displaces the
+    one position both arms' agreement was fitted against. Below it the benchmark scores nothing,
+    which is what makes that the safe place to prefer a name.
+    """
+    verdict = answer(machine, embedder, "mh1300 midterm 2025", scope=machine.scopes["notes"])
+
+    assert verdict.candidates[0].name == "mh1300 register.md"
+
+
+def test_a_shortlist_offers_no_document_twice(machine, embedder):
+    """The named ones are placed ahead of the fusion, which ranked them too."""
+    verdict = answer(machine, embedder, "mh1300 midterm 2025", scope=machine.scopes["notes"])
+    paths = [one.path for one in verdict.candidates]
+
+    assert len(paths) == len(set(paths))
+
+
+def test_naming_a_document_does_not_make_a_verdict_confident(machine, embedder):
+    """`confident` sends a file without asking, and a filename is not grounds for that.
+
+    ADR-0025: it is decided on the fused ranking's own first result, before any of this reordering.
+    """
+    verdict = answer(machine, embedder, "mh1300 midterm 2025", scope=machine.scopes["notes"])
+
+    assert verdict.state != "confident"
+
+
 def test_a_verdict_never_carries_a_score(machine, embedder):
     reply = answer(machine, embedder, "artin wedderburn theorem semisimple rings").as_reply()
     assert reply["floor"] == CONFIDENT_FLOOR
