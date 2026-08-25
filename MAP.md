@@ -18,7 +18,8 @@ Start here: `README.md`, then `AGENTS.md`.
 | Runtime adapter | Syrax's decisions as one generated runtime configuration | `src/adapter/build.ts` |
 | Chat surface | Syrax's own writes into the four chats, and the recreation a failed one triggers | `src/surface/chat-surface.ts` |
 | Lane monitor | The rationed lane's counters, which rungs stand down or have rotted, the daily sweep and the removal tap, the usage report, the retrieval report's delivery, and the four tools served over MCP | `src/monitor/lane-monitor.ts` |
-| Supervision | The two LaunchAgents and the index schedules, and the wrappers' pre-flights that refuse to start wrong | `src/supervision/launch-agent.ts` |
+| Academic desk | The academic pair as Syrax reaches it — each product's own refresh triggered and its output read, the two writes behind a tap, and the morning brief | `src/academic/desk.ts` |
+| Supervision | The LaunchAgents and the schedules, and the wrappers' pre-flights that refuse to start wrong | `src/supervision/launch-agent.ts` |
 | Search unit | The file-search index and the tools it serves over MCP — the one part of Syrax that is Python | `search/syrax_search/server.py` |
 | Retrieval loop | The one benchmark set a captured miss lands in, and the report scored from it | `search/syrax_search/report.py` |
 | Runtime pin | The exact runtime version, installed outside the checkout | `runtime/package.json` |

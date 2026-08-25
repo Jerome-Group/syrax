@@ -8,7 +8,8 @@
  * without being told, and the shape of a chat's own corpus turn.
  */
 
-import { everyChat, systemChat, type Chat } from "./chats.ts";
+import { dueTool, promoteTool, syncTool } from "./academic-tools.ts";
+import { chats, everyChat, systemChat, type Chat } from "./chats.ts";
 import { hatchTool, removeRungTool, reportTool, standDownTool } from "./monitor-tools.ts";
 import { searchesTheCorpus, searchTool } from "./search-tools.ts";
 
@@ -134,6 +135,34 @@ has already handed you it. Say it is recorded, in one line. Never ask them for a
 capture better, and never capture from a message that is not such a reply.`;
 }
 
+/**
+ * The academic pair, in the two things its tool descriptions cannot carry on their own: that a
+ * confirmed write is a dance across three tools and a tap, and that the operations with no tool have
+ * none on purpose. Everything else about each tool is on the tool.
+ *
+ * The line about credentials is here because the Owner will ask for something that needs them —
+ * logging in, repairing a folder — and the useful answer names who holds what rather than refusing
+ * flatly (#10's governing principle: the capability's own product owns its tool layer).
+ */
+function academicPair(): string {
+  return `## The academic pair
+
+Syrax holds no NTULearn and no Google credential. Every answer here comes from asking \`academic-os\`
+or \`ntulearn\` to do its own work and reading what it wrote, so anything you have not just read
+with a tool is something you do not know — \`${dueTool}\` before any date, time or deadline.
+
+**The two writes are \`${syncTool}\` and \`${promoteTool}\`, and each happens only on a tap.** Call
+one without a \`confirmation\` and it answers with a button; post that button with \`message\`,
+saying plainly what the write will do. A message reading \`callback_data: <value>\` is the Owner
+tapping it, and calling the same tool again with that value is what performs the write. Never work
+out a value yourself, never reuse one, and never do either write by another route. A value it calls
+expired means the button has gone stale: say so and offer a fresh one.
+
+Some things have **no tool and are not going to get one**: opening a new NTULearn session
+(\`npm run login\`), renumbering a destination, seeding or repairing a module folder. Say what is
+needed and that it is theirs to run — never offer to do it, and never work around it.`;
+}
+
 export function chatInstruction(chat: Chat): string {
   return [
     `# Syrax — the ${chat.carrierName} chat`,
@@ -144,6 +173,7 @@ export function chatInstruction(chat: Chat): string {
     keyboards,
     hatch,
     ...(chat.id === systemChat.id ? [overrides] : []),
+    ...(chat.id === chats.academic.id ? [academicPair()] : []),
     ...(searchesTheCorpus(chat) ? [corpus(chat)] : []),
   ].join("\n\n");
 }

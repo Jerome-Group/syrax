@@ -8,7 +8,8 @@
  * three delegation tools gone, which is a front lane that answers everything itself.
  */
 
-import { type Chat, systemChat } from "./chats.ts";
+import { everyAcademicTool } from "./academic-tools.ts";
+import { chats, type Chat, systemChat } from "./chats.ts";
 import { hatchTool, removeRungTool, reportTool, standDownTool } from "./monitor-tools.ts";
 import { everySearchUnitTool, searchesTheCorpus, searchTool } from "./search-tools.ts";
 
@@ -34,12 +35,17 @@ function monitorTools(chat: Chat): string[] {
     : [hatchTool];
 }
 
+/**
+ * The academic pair's tools are the Academic chat's alone, which is what makes the chat a capability
+ * boundary rather than a label: General reads a document the Academic corpus holds without ever
+ * being able to trigger a sync or write to the Owner's calendar.
+ */
+function capabilityTools(chat: Chat): string[] {
+  return chat.id === chats.academic.id ? everyAcademicTool : [];
+}
+
 export function agentTools(chat: Chat): string[] {
-  if (!searchesTheCorpus(chat)) return [...delegationTools, ...monitorTools(chat)];
-  return [
-    ...delegationTools,
-    ...monitorTools(chat),
-    ...everySearchUnitTool.map((tool) => searchTool(chat, tool)),
-    messageTool,
-  ];
+  const standing = [...delegationTools, ...monitorTools(chat), ...capabilityTools(chat)];
+  if (!searchesTheCorpus(chat)) return standing;
+  return [...standing, ...everySearchUnitTool.map((tool) => searchTool(chat, tool)), messageTool];
 }

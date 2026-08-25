@@ -32,6 +32,12 @@ export const rungSweepLabel = "com.jerome-group.syrax.rung-sweep";
 /** The retrieval report's delivering beat, which posts what a re-embed pass scored and never scores. */
 export const retrievalReportLabel = "com.jerome-group.syrax.retrieval-report";
 
+/** The academic desk: the tool layer the Academic chat reaches, resident like the other two. */
+export const academicLabel = "com.jerome-group.syrax.academic";
+
+/** The morning brief, which is a poke at the desk and the system's daily heartbeat (ADR-0005). */
+export const briefLabel = "com.jerome-group.syrax.brief";
+
 export const incrementalIndexLabel = "com.jerome-group.syrax.index-incremental";
 export const fullIndexLabel = "com.jerome-group.syrax.index-full";
 
@@ -74,6 +80,13 @@ const daily: Calendar = { Hour: 6, Minute: 7 };
  */
 const hourlyBehindTheWatch: Calendar = { Minute: 57 };
 
+/**
+ * Seven in the morning, which is after ntulearn's ~05:00 watchdog and academic-os's 05:00 calendar
+ * Refresh and before the Owner's day (#10). The brief is composed from what those two left behind,
+ * so it sits behind both rather than racing them.
+ */
+const morning: Calendar = { Hour: 7, Minute: 0 };
+
 const everyThirdDay: Calendar = { Day: [1, 4, 7, 10, 13, 16, 19, 22, 25, 28], Hour: 4, Minute: 30 };
 
 export function launchAgentPath(home: string, label: string): string {
@@ -90,6 +103,19 @@ export function searchLaunchAgentPlist(deployment: Deployment): string {
 
 export function monitorLaunchAgentPlist(deployment: Deployment): string {
   return residentUnitPlist(hatchLabel, deployment.monitorWrapperPath);
+}
+
+export function academicLaunchAgentPlist(deployment: Deployment): string {
+  return residentUnitPlist(academicLabel, deployment.academicWrapperPath);
+}
+
+/**
+ * The brief is a poke at the resident desk rather than a job that composes one itself: the desk
+ * holds the products, the modules root and the chat surface, and a second composer would post a
+ * morning that disagreed with the one the tools answer.
+ */
+export function briefPlist(deployment: Deployment): string {
+  return pokePlist(briefLabel, `http://127.0.0.1:${deployment.academicPort}/brief`, morning);
 }
 
 /** The hourly incremental pass and the three-day full one, each a poke at the resident unit. */

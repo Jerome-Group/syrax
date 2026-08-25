@@ -1,5 +1,5 @@
 {
-  "_comment": "Public example only. What one machine supplies to the runtime adapter. Copy it outside this repository, replace every path, and keep the copy beside the private roots it names — never in the checkout. src/cli/generate-config.ts reads this and writes the runtime's own configuration, and src/cli/install-gateway-agent.ts reads it and writes the wrapper, the LaunchAgent and the rotation entry; it refuses any root inside the checkout, and refuses a secrets store the machine has left readable.",
+  "_comment": "Public example only. What one machine supplies to the runtime adapter. Copy it outside this repository, replace every path, and keep the copy beside the private roots it names \u2014 never in the checkout. src/cli/generate-config.ts reads this and writes the runtime's own configuration, and src/cli/install-gateway-agent.ts reads it and writes the wrapper, the LaunchAgent and the rotation entry; it refuses any root inside the checkout, and refuses a secrets store the machine has left readable.",
   "runtimeRoot": "/absolute/path/outside/this/repository/runtime",
   "configPath": "/absolute/path/outside/this/repository/openclaw.json",
   "stateDir": "/absolute/path/outside/this/repository/runtime-state",
@@ -13,12 +13,21 @@
   "searchWrapperPath": "/absolute/path/outside/this/repository/bin/start-search.sh",
   "monitorState": "/absolute/path/outside/this/repository/lane-monitor",
   "monitorWrapperPath": "/absolute/path/outside/this/repository/bin/start-monitor.sh",
+  "academicWrapperPath": "/absolute/path/outside/this/repository/bin/start-academic.sh",
+  "academicOsRoot": "/absolute/path/to/the/academic-os/checkout",
+  "academicOsConfig": "/absolute/path/outside/this/repository/academic-os.config.json",
+  "academicOsState": "/absolute/path/outside/this/repository/academic-os-state",
+  "ntulearnRoot": "/absolute/path/to/the/ntulearn/checkout",
+  "ntulearnState": "/absolute/path/to/the/ntulearn/checkout/.data",
+  "academicState": "/absolute/path/outside/this/repository/academic-desk",
   "indexAllowlist": ["/absolute/path/to/a/root/worth/indexing"],
   "extractionScope": [
     "/absolute/path/to/a/root/worth/indexing",
     "/absolute/path/to/a/root/worth/indexing/papers/*/MH*.pdf"
   ],
   "blocklist": ["/absolute/path/that/is/never/touched"],
-  "searchScopes": { "academic": "/absolute/path/to/a/root/worth/indexing" },
+  "searchScopes": {
+    "academic": "/absolute/path/to/the/modules/root"
+  },
   "ownerTelegramUserId": 100000000
 }

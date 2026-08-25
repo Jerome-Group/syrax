@@ -9,7 +9,10 @@
 > log surfaces — and by
 > [ADR-0020](0020-the-wrapper-opens-the-gateways-capture-and-keeps-only-stderr.md), which answers
 > that section's rotation mechanism, launchd being unable to open a capture file on the volume this
-> record placed the logs on.
+> record placed the logs on — and by
+> [ADR-0030](0030-the-academic-desk-composes-the-brief-and-the-writes-wait-for-a-tap.md), which
+> gives the 07:00 brief a unit of its own to be composed in, so the schedule below pokes the
+> academic desk rather than the gateway.
 
 Syrax runs on the mini under **launchd**, as **two LaunchAgents** — not containerised, and not one
 process. `com.jerome-group.syrax.gateway` runs OpenClaw; `com.jerome-group.syrax.search` runs the
@@ -144,10 +147,15 @@ heartbeat: a morning with no brief means Syrax is down. No observer for the obse
 Three exist: the hourly incremental reindex, the three-day OCR retry pass
 ([ADR-0004](0004-syrax-owns-the-file-search-index.md)), and the 07:00 brief
 ([#10](https://github.com/Jerome-Group/syrax/issues/10)). OpenClaw has its own scheduler and the
-brief must run through it, so these could have split across two systems. They do not.
+~~brief must run through it~~ *(spent by
+[ADR-0030](0030-the-academic-desk-composes-the-brief-and-the-writes-wait-for-a-tap.md): the brief is
+composed by the academic desk and posted at the Bot API, so it runs through the runtime nowhere)*,
+so these could have split across two systems. They do not.
 
 Every schedule is a launchd calendar job that pokes a loopback endpoint — the index jobs call the
-search service, the brief calls the gateway. Two reasons, and the second is the one that matters.
+search service, the brief calls the gateway *(spent by
+[ADR-0030](0030-the-academic-desk-composes-the-brief-and-the-writes-wait-for-a-tap.md): the brief
+pokes the academic desk, which composes and posts it)*. Two reasons, and the second is the one that matters.
 The index jobs get the resident embedder instead of loading a second copy per run, which is the
 whole point of the standalone service. And the standing constraint is that proactive messages come
 **only from schedules the Owner set** — one `LaunchAgents` directory and `launchctl list` is an
