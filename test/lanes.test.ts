@@ -39,6 +39,15 @@ describe("the two lanes", () => {
     }
   });
 
+  it("let the front lane's second rung finish an ordinary reply, which 1024 could not", () => {
+    const rung = frontLane.rungs.find((each) => each.modelId === "ministral-3b-latest");
+    assert.ok(rung !== undefined, "the rung #205 measured is no longer on the front lane.");
+    assert.ok(
+      rung.maxTokens >= 4096,
+      `${modelRef(rung)} reserves ${rung.maxTokens}, and #205 measured an ordinary reply running to ~1,700 tokens and cut mid-word at 1024.`,
+    );
+  });
+
   it("hold ADR-0016's invariant: the largest call plus the reservation clears every ceiling", () => {
     for (const lane of lanes) {
       for (const rung of lane.rungs) {
