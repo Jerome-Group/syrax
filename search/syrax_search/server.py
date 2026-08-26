@@ -36,7 +36,7 @@ from .reading import Reader
 from .report import RetrievalReport
 from .report import run as score_benchmark
 from .retrieval import search as search_index
-from .shortlist import Shortlists, token_of
+from .shortlist import Shortlists
 from .staging import Staging
 
 SCOPE_HEADER = "x-syrax-scope"
@@ -73,12 +73,13 @@ class SearchUnit:
             answer = self.answers.remember(query, scope, verdict)
             return self.shortlists.offer(verdict, scope, answer.token) | {"answer": answer.token}
 
-    def choose(self, choice: str, scope_name: str | None) -> dict:
-        resolved = self.shortlists.resolve(choice, self.scope_root(scope_name))
+    def choose(self, answer: str, position: int, scope_name: str | None) -> dict:
+        resolved = self.shortlists.resolve(answer, position, self.scope_root(scope_name))
         if resolved["choice"] == "declined":
             # The Owner rejecting every candidate is a miss whose shape is already known, so it is
-            # captured here rather than parsed: no model sees this tap, and none has to (ADR-0007).
-            self.answers.capture(token_of(choice), "not-in-the-shortlist")
+            # captured here rather than parsed: no model reads that answer, and none has to
+            # (ADR-0007).
+            self.answers.capture(answer, "not-in-the-shortlist")
         return resolved
 
     def capture(self, answer: str, shape: str, expect: str | None) -> dict:
@@ -128,7 +129,8 @@ def build(unit: SearchUnit) -> MCPServer:
         description=(
             "Find documents by what they are about or by what they are called. Returns a verdict: "
             "`confident` names one document, `ambiguous` offers up to ten candidates to choose "
-            "between — each carrying the `choice` value a tap on it sends back — and `empty` means "
+            "between — each carrying the `position` it is listed on, which is what the Owner says "
+            "back and what `choose` resolves — and `empty` means "
             "nothing indexed answers this. A result marked "
             "`contents_indexed: false` is known by its name alone — it exists, and what is inside "
             "it has not been read. Every reply carries an `answer` value, which is the thing "
@@ -141,14 +143,16 @@ def build(unit: SearchUnit) -> MCPServer:
     @server.tool(
         name="choose",
         description=(
-            "Turn a tap on one of `search`'s candidates back into the document it stands for. "
-            "Pass the `choice` value the button carried. `chosen` names one document, `declined` "
-            "means none of them was wanted, and `expired` means the shortlist is gone — say so "
-            "and offer to search again rather than acting on it."
+            "Turn the number the Owner said back into the document it stands for. Pass the "
+            "`answer` value that the same `search` reply carried and the `position` they gave, "
+            "as they said it and 1-based; `0` is none of them. Never work out which document a "
+            "number means yourself. `chosen` names one document, `declined` means none of them "
+            "was wanted, and `expired` means the shortlist is gone or the number is not one of "
+            "its lines — say so and offer to search again rather than acting on it."
         ),
     )
-    async def choose(choice: str, context: Context) -> dict:
-        return unit.choose(choice, _scope_of(context))
+    async def choose(answer: str, position: int, context: Context) -> dict:
+        return unit.choose(answer, position, _scope_of(context))
 
     @server.tool(
         name="capture",

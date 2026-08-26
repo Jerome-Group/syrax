@@ -142,84 +142,24 @@ describe("what a chat that searches is told", () => {
     assert.match(flowed, /Never send one of them instead of asking/);
   });
 
-  it("puts the names in the message and the numbers on the buttons", () => {
-    assert.match(flowed, /A `label` is the result's own `position` and never its name/);
+  /**
+   * ADR-0033: the keyboard is gone. Ten buttons, each carrying an opaque token the model had to
+   * transcribe, was a tool call `gemini-3.5-flash-lite` aborted mid-serialisation and
+   * `openai/gpt-oss-120b` failed schema validation on six times over — and a close call reached the
+   * Owner as nothing at all. What is left is an ordinary message they answer with a number.
+   */
+  it("offers a close call as a message the Owner answers, with no keyboard on it", () => {
+    assert.match(flowed, /as \*\*one ordinary message and no buttons\*\*/);
+    assert.match(flowed, /a line per result reading that result's own `position`/);
     assert.match(
       flowed,
       /Number every line from the `position` the reply gives it and never by counting/,
-      "the model numbering its own list is how a tap fetches a name nobody read.",
+      "the model numbering its own list is how a number fetches a name nobody read.",
     );
-  });
-
-  /**
-   * #194: the wording that replaced it said what to put on a button and never where the buttons go,
-   * so a turn composed the runtime's own keyboard shape beside `presentation`, `message` dropped the
-   * argument it does not have, and the send still answered `ok`. A shortlist reached the Owner with
-   * nothing to tap. The block structure is named because leaving it to be inferred has failed once.
-   */
-  /**
-   * #200: the shape was described in prose and validated as a schema, and the gap was the fields
-   * prose leaves implicit. Two models on two providers dropped the same two — `type` on the block
-   * and `label` on the buttons — and every close call was refused before it reached the wire.
-   *
-   * So the instruction shows the call, and this reads that example back as JSON rather than as
-   * words. The keys asserted here are the ones `MessagePresentationButtonsBlock` and
-   * `MessagePresentationButton` require, which is what the validator was rejecting.
-   */
-  it("shows the shortlist's call as an example that satisfies the runtime's own schema", () => {
-    const example = /```json\n([\s\S]*?)```/.exec(instruction)?.[1];
-    assert.ok(example, "the close call has no worked example, so its shape is prose again.");
-
-    const call = JSON.parse(example) as {
-      action: string;
-      message: string;
-      presentation: { blocks: { type: string; buttons?: { label: string; value: string }[] }[] };
-    };
-
-    assert.equal(call.action, "send");
-    assert.match(
-      call.message,
-      /^1\. .+\n2\. /,
-      "the list is not numbered from one in the message.",
-    );
-    assert.equal(call.presentation.blocks.length, 1, "a block beside the buttons is dropped.");
-
-    const [block] = call.presentation.blocks;
-    assert.equal(block!.type, "buttons");
-    assert.ok(block!.buttons?.length, "the buttons block carries no buttons.");
-    for (const button of block!.buttons!) {
-      assert.equal(
-        typeof button.label,
-        "string",
-        `a button with no label: ${JSON.stringify(button)}`,
-      );
-      assert.equal(
-        typeof button.value,
-        "string",
-        `a button with no value: ${JSON.stringify(button)}`,
-      );
-    }
-    assert.equal(block!.buttons!.at(-1)!.label, "None of these");
-  });
-
-  it("names the tool, the argument and the block, rather than leaving the shape to be guessed", () => {
-    assert.match(flowed, /calling `message` in exactly this shape/);
-    assert.match(flowed, /Every key above is required and the call is refused without it/);
-  });
-
-  /**
-   * #198: the runtime discards a `text` block whenever a `message` is present, and refuses a
-   * `presentation` carrying no `message` at all. Both were measured against the pinned runtime.
-   * A shortlist reached the Owner as ten numbers naming nothing.
-   */
-  it("keeps the list in the message, where a block beside one would be dropped", () => {
-    assert.match(flowed, /\*\*The list is the `message`\*\*/);
-    assert.match(flowed, /a `text` block beside a `message` is dropped/);
-    assert.match(flowed, /a `presentation` with no `message` is refused outright/);
     assert.doesNotMatch(
-      instruction,
-      /`text` block holding/,
-      "the shape that drops the list is being asked for again.",
+      flowed,
+      /`presentation`/,
+      "the shortlist is composing a keyboard again, which is what ADR-0033 took away.",
     );
   });
 
@@ -228,14 +168,16 @@ describe("what a chat that searches is told", () => {
     assert.match(instruction, /Never offer the closest thing you found/);
   });
 
-  it("resolves a tap through the unit that minted it, and never by working it out", () => {
-    assert.match(instruction, /callback_data: <value>/);
+  it("resolves the number the Owner said through the unit, and never by working it out", () => {
+    assert.match(flowed, /A message that is just a number is the Owner answering that list/);
     assert.match(instruction, /syrax-search-general__choose/);
-    assert.match(instruction, /Never\s+work out what was tapped yourself/);
+    assert.match(flowed, /as `position`, exactly as they wrote it/);
+    assert.match(flowed, /`0` where they say none of them is what they meant/);
+    assert.match(flowed, /\*\*Never work out which document a number means yourself\*\*/);
   });
 
   it("says an expired shortlist has expired rather than acting on it", () => {
-    assert.match(instruction, /on \*expired\* tell them the shortlist has expired/);
+    assert.match(flowed, /on \*expired\* tell them the shortlist has expired/);
   });
 
   it("captures a miss from a reply and never from anything else", () => {

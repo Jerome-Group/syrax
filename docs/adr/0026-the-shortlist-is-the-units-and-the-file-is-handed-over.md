@@ -4,8 +4,11 @@ Broad search is the first capability where an answer is not text. General sends 
 on a close call it sends **three buttons**, and a tap on one has to come back and mean something.
 *(Ten buttons — [ADR-0028](0028-a-close-call-offers-ten.md), each labelled with its candidate's
 number rather than its name —
-[ADR-0032](0032-the-button-carries-the-number-and-the-message-carries-the-name.md). Nothing below
-changes: a tap carries a token and a position however many there are.)*
+[ADR-0032](0032-the-button-carries-the-number-and-the-message-carries-the-name.md), and then no
+buttons at all: the Owner says the number and this unit still maps it —
+[ADR-0033](0033-the-shortlist-is-a-message-and-the-owner-says-a-number.md). What this record claims
+is unchanged by that, and it is the claim in the title: the shortlist is the unit's, and no model
+works out what a choice means.)*
 None of that is expressible in a reply's text, so this is the first place where
 [ADR-0003](0003-the-runtime-adapter-wraps-openclaw.md)'s boundary — a configuration contract, no
 code on the request path — has to be held against a surface rather than against a chain.

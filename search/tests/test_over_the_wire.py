@@ -82,25 +82,27 @@ async def test_the_connection_carries_the_scope(address, machine):
 
 
 @pytest.mark.anyio
-async def test_a_close_call_offers_a_shortlist_a_tap_can_resolve(address):
+async def test_a_close_call_offers_a_shortlist_a_number_can_resolve(address):
     offer = await _call(
         address, "search", {"query": "quiver representations path algebra stroke rate"}, None
     )
     assert offer["verdict"] == "ambiguous"
 
-    tapped = offer["results"][0]
-    chosen = await _call(address, "choose", {"choice": tapped["choice"]}, None)
+    first = offer["results"][0]
+    chosen = await _call(
+        address, "choose", {"answer": offer["answer"], "position": first["position"]}, None
+    )
     assert chosen["choice"] == "chosen"
-    assert chosen["result"]["path"] == tapped["path"]
+    assert chosen["result"]["path"] == first["path"]
 
-    assert await _call(address, "choose", {"choice": offer["none_of_these"]}, None) == {
+    assert await _call(address, "choose", {"answer": offer["answer"], "position": 0}, None) == {
         "choice": "declined"
     }
 
 
 @pytest.mark.anyio
-async def test_a_tap_this_unit_never_minted_says_the_shortlist_has_expired(address):
-    assert await _call(address, "choose", {"choice": "nevermINTed:0"}, None) == {
+async def test_an_answer_this_unit_never_offered_says_the_shortlist_has_expired(address):
+    assert await _call(address, "choose", {"answer": "nevermINTed", "position": 1}, None) == {
         "choice": "expired"
     }
 
@@ -114,14 +116,14 @@ async def test_attach_hands_a_document_over_the_wire(address, machine, tmp_path)
 
 
 @pytest.mark.anyio
-async def test_a_tap_does_not_cross_from_one_connections_scope_to_another(address):
+async def test_a_number_does_not_cross_from_one_connections_scope_to_another(address):
     query = "quiver representations path algebra stroke rate"
     offer = await _call(address, "search", {"query": query}, "notes")
     assert offer["verdict"] == "ambiguous"
-    tapped = offer["results"][0]["choice"]
+    said = {"answer": offer["answer"], "position": offer["results"][0]["position"]}
 
-    assert (await _call(address, "choose", {"choice": tapped}, "notes"))["choice"] == "chosen"
-    assert await _call(address, "choose", {"choice": tapped}, None) == {"choice": "expired"}
+    assert (await _call(address, "choose", said, "notes"))["choice"] == "chosen"
+    assert await _call(address, "choose", said, None) == {"choice": "expired"}
 
 
 @pytest.mark.anyio
@@ -144,12 +146,12 @@ async def test_a_reply_saying_a_result_was_wrong_captures_it_with_its_numbers(ad
 
 
 @pytest.mark.anyio
-async def test_the_none_of_these_tap_captures_the_same_way(address, machine):
-    """The tap's shape is known without asking, so nothing parses it and nothing is asked."""
+async def test_none_of_them_captures_the_same_way(address, machine):
+    """The shape is known without asking, so nothing parses it and nothing is asked."""
     offer = await _call(
         address, "search", {"query": "quiver representations path algebra stroke rate"}, None
     )
-    await _call(address, "choose", {"choice": offer["none_of_these"]}, None)
+    await _call(address, "choose", {"answer": offer["answer"], "position": 0}, None)
 
     captured = entries(machine.benchmark_path)
     assert [one.shape for one in captured] == ["not-in-the-shortlist"]

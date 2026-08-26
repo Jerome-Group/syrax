@@ -1,5 +1,11 @@
 # The button carries the number and the message carries the name
 
+> **Superseded in one part by
+> [ADR-0033](0033-the-shortlist-is-a-message-and-the-owner-says-a-number.md)** — a close call has no
+> buttons at all now, because the tool call carrying eleven of them was one the front lane could not
+> emit. The numbering below is what ADR-0033 is built on: the Owner says the number rather than
+> tapping it.
+
 [ADR-0026](0026-the-shortlist-is-the-units-and-the-file-is-handed-over.md) put a document's name on
 its button and [ADR-0028](0028-a-close-call-offers-ten.md) raised the count to ten. Neither asked how
 wide a button is. It is about **twelve characters**, and this corpus does not have twelve characters
@@ -41,7 +47,9 @@ Please select the document you are looking for:
 3. MH1300_Midterm_2024_Questions.pdf
 ```
 
-A one- or two-character label cannot truncate, which is the whole of the fix.
+A one- or two-character label cannot truncate, which is the whole of the fix. *(The buttons are
+gone — [ADR-0033](0033-the-shortlist-is-a-message-and-the-owner-says-a-number.md). The list below is
+what remains, and the Owner types its number.)*
 
 **Nothing about the tap changes.** The button's `value` is still the opaque `choice` the unit
 minted, the unit is still the only thing that can turn one back into a document, and the model still
