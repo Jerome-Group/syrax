@@ -30,8 +30,34 @@ export function agentDefaults(deployment: Deployment, standingDown: readonly str
     skipBootstrap: true,
     blockStreamingDefault: "off",
     typingMode: "instant",
+    heartbeat: heartbeatSettings,
   };
 }
+
+/**
+ * The runtime pokes every agent on its own cadence whether or not anything says so, and keeps each
+ * poke in the session it poked. That is what grows a chat nobody has reset — hundreds of turns the
+ * Owner never sent, until the prompt meets a provider's ceiling and the chat *"gets slower and then
+ * breaks"*. The poke is a capability worth keeping; retaining it is the defect.
+ *
+ * The timezone is deliberately not stated. Omitting it falls through `userTimezone`, which Syrax
+ * does not state either, to the host clock — the mini's, which is the Owner's. And
+ * `src/academic/occurrences.ts` already argues that a second timezone stated anywhere is a second
+ * answer to what *today* means.
+ */
+const heartbeatSettings = {
+  // The inherited cadence, restated rather than changed. It has to be here even so: the runtime's
+  // schema stops validating `activeHours` altogether when this key is absent, so a mistyped window
+  // below would pass `config validate` and then fail open — an unreadable window is read at run
+  // time as no window at all, which is a night the heartbeat runs straight through.
+  every: "30m",
+  // The fix. Each run gets its own session, so a poke no longer appends to the chat the Owner is
+  // holding — which is the only reason a chat grew without anybody typing into it.
+  isolatedSession: true,
+  // Not while the Owner is asleep. The start is the hour the morning brief already treats as the
+  // beginning of their day; the end is exclusive, so the last poke lands before eleven.
+  activeHours: { start: "07:00", end: "23:00" },
+};
 
 /**
  * The worker lane, which is a lane only because it is reached here: the sub-agent override is the
