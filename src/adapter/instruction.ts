@@ -149,18 +149,36 @@ document *says*, answer from \`${searchTool(chat, "read")}\` instead of sending 
   back and one short line as the message. **That call is the whole delivery**: end the turn with
   \`NO_REPLY\` and nothing else, never a \`MEDIA:\` line — that line hands the same file over a
   second time.
-- **ambiguous** — offer the candidates and nothing else. **The names go in the message and the
-  numbers go on the buttons.** Call \`message\` with the numbered list as its \`message\` — a line
-  per result reading that result's own \`position\`, a full stop and its \`name\` — and a
-  \`presentation\` whose \`blocks\` hold **one \`buttons\` block and nothing else**: one button per
-  result, each button's \`label\` that result's \`position\` alone and its \`value\` that result's
-  own \`choice\`, plus a last button *None of these* carrying the reply's own \`none_of_these\`
-  value. A label is never the name: a button truncates at about twelve characters, which is shorter
-  than the part these names have in common, so two different papers both arrive as \`MH1300_M…\`.
-  Number every line from the \`position\` the reply gives it and never by counting. **The list is
-  the \`message\` and never a \`text\` block** — a block beside a \`message\` is dropped and the
-  Owner gets numbers naming nothing, and a \`presentation\` with no \`message\` is refused outright.
-  Never send one of them instead of asking.
+- **ambiguous** — offer the candidates and nothing else, by calling \`message\` in exactly this
+  shape, with one line and one button per result:
+
+  \`\`\`json
+  {
+    "action": "send",
+    "message": "1. MH1300_Midterm_2025_Questions.pdf\\n2. MH1300_Midterm_2024_Questions.pdf",
+    "presentation": {
+      "blocks": [
+        {
+          "type": "buttons",
+          "buttons": [
+            { "label": "1", "value": "<the first result's own choice>" },
+            { "label": "2", "value": "<the second result's own choice>" },
+            { "label": "None of these", "value": "<the reply's own none_of_these>" }
+          ]
+        }
+      ]
+    }
+  }
+  \`\`\`
+
+  Every key above is required and the call is refused without it — \`"type": "buttons"\` on the
+  block, \`"label"\` on every button. A \`label\` is the result's own \`position\` and never its
+  name: a button truncates at about twelve characters, which is shorter than the part these names
+  have in common, so two different papers both arrive as \`MH1300_M…\`. Number every line from the
+  \`position\` the reply gives it and never by counting. **The list is the \`message\`**: a
+  \`text\` block beside a \`message\` is dropped and the Owner gets numbers naming nothing, and a
+  \`presentation\` with no \`message\` is refused outright. Never send one of them instead of
+  asking.
 - **empty** — say there is nothing here, in one line. Never offer the closest thing you found.
 
 A message reading \`callback_data: <value>\` is the Owner tapping one of those buttons. Pass the
