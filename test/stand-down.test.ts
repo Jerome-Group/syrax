@@ -291,6 +291,27 @@ describe("a stand down", () => {
     assert.deepEqual(frontChain().fallbacks, frontLane.rungs.slice(1).map(modelRef));
   });
 
+  it("forgets the refusal when a size re-test came due while the monitor was down", async () => {
+    const outgrew = writeSizeRefusal();
+    const started = new LaneMonitor(deployment);
+    await started.watchRungs();
+    assert.equal(started.standDowns.active().length, 1, "the fixture never stood the rung down.");
+
+    // The monitor stops, the horizon passes, and it comes back up: the return arrives through
+    // `reconcile` rather than through the timer that `bringBack` owns.
+    const later = new Date(Date.now() + 2 * 60 * 60 * 1000);
+    const restarted = new LaneMonitor(deployment, later);
+    await restarted.reconcile(later);
+
+    assert.deepEqual(restarted.standDowns.active(later), []);
+    assert.deepEqual(
+      restarted.rungs.outgrown(),
+      [],
+      "the refusal survived the restart, so the next sweep puts the rung back out untried.",
+    );
+    assert.ok(frontChain().fallbacks.includes(outgrew), "the rung did not go back into the chain.");
+  });
+
   it("reads a ledger written before stand downs had kinds as the allowance ones they were", () => {
     const until = new Date(Date.now() + 3_600_000).toISOString();
     writePrivateFile(

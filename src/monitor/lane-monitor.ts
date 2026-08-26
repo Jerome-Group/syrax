@@ -167,10 +167,17 @@ export class LaneMonitor {
   async reconcile(now: Date = new Date()): Promise<Landed | null> {
     for (const held of this.standDowns.active(now)) this.#scheduleReturn(held);
     for (const returned of this.standDowns.returnedWhileDown()) {
+      // The same forgetting `bringBack` does, because this is the same return arriving by the other
+      // route: a finding that survived the restart would stand the rung straight back out, off a
+      // refusal from before the monitor stopped, without it ever being tried (ADR-0035).
+      if (returned.kind === "size") this.rungs.forgetOutgrown(returned.rung);
       await this.announce(
         {
           kind: "a stand down returned",
-          said: `${returned.rung} came back to the ${returned.lane} lane: its reset passed while the monitor was down.`,
+          said:
+            returned.kind === "size"
+              ? `${returned.rung} came back to the ${returned.lane} lane to be tried again: its re-test came due while the monitor was down.`
+              : `${returned.rung} came back to the ${returned.lane} lane: its reset passed while the monitor was down.`,
         },
         now,
       );
