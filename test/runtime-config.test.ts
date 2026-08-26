@@ -59,6 +59,16 @@ describe("the generated runtime configuration", () => {
     assert.equal(config.tools.profile, "minimal");
   });
 
+  it("states the heartbeat, so a poke nobody sent stops growing the session it lands in", () => {
+    const heartbeat = config.agents.defaults.heartbeat;
+    assert.equal(heartbeat.isolatedSession, true);
+    assert.deepEqual(heartbeat.activeHours, { start: "07:00", end: "23:00" });
+    // The interval has to be stated for the window above to be validated at all: the runtime's
+    // schema stops checking `activeHours` when `every` is absent, and an unreadable window fails
+    // open rather than closed.
+    assert.equal(heartbeat.every, "30m");
+  });
+
   it("states the log's fixed basename, its size bound and its redaction", () => {
     assert.equal(config.logging.file, "/private/root/logs/openclaw.log");
     assert.doesNotMatch(config.logging.file, /\d{4}-\d{2}-\d{2}/, "a dated basename rolls.");

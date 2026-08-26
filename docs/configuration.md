@@ -181,6 +181,35 @@ The calendar mirror keeps recurring masters compact, so the desk expands `FREQ=D
 `unexpanded` with the rule itself. A morning it cannot see fully never reads as a morning with
 nothing in it.
 
+## The heartbeat
+
+This is the runtime's own poke at each agent, and not the morning brief, which `CONTEXT.md` also
+calls a daily heartbeat. The two are unrelated: the brief is a launchd schedule of Syrax's own.
+
+The runtime pokes every agent on a timer of its own, and unless it is told otherwise it keeps each
+poke in the session it poked. Nothing in Syrax asked for that and nothing was switching it off, so
+a chat nobody had reset accumulated hundreds of turns the Owner never sent — which is what *"my
+chat gets slower and then breaks"* turns out to be. The prompt grows monotonically until it meets
+a provider's ceiling.
+
+So the heartbeat joins the settings Syrax states rather than inherits, in
+`src/adapter/agent-defaults.ts`, and the poke itself is kept — it is a capability, and retaining
+it was the defect. Three values:
+
+| Stated | Value | Why |
+|--------|-------|-----|
+| The interval | Every 30 minutes | The cadence it already ran at, restated rather than changed. It has to be stated even so: the runtime's schema stops validating the window below whenever this is absent, so a mistyped window would pass validation and then fail open — an unreadable window is read at run time as no window at all. |
+| The session each run gets | Its own, with no conversation history | The fix. A poke no longer appends to the chat the Owner is holding, which is the only reason a chat grew without anybody typing into it. |
+| When it may run | 07:00 to 23:00 | Not while the Owner is asleep. The start is the hour the morning brief already treats as the beginning of their day; the end is exclusive, so the last poke lands before eleven. |
+
+The timezone is deliberately not stated, so it stays the machine's own clock — nothing states the
+runtime's user timezone either, and the host is what both fall through to. `academic-os` pins the
+mini to `Asia/Singapore` and refuses to install its Refresh anywhere else, so a second timezone
+stated here would be a second answer to what *today* means.
+
+Changing any of this is the ordinary path: edit `src/adapter/agent-defaults.ts`, regenerate, restart.
+`test/runtime-config.test.ts` reads the three values back out of what the generator wrote.
+
 ## The escape hatch
 
 The rationed lane is reached through one MCP tool the monitor serves, `syrax-monitor__reach`, and
