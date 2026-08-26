@@ -13,8 +13,9 @@ export type Rung = {
   reasoning: boolean;
   contextWindow: number;
   /**
-   * Output the request reserves. A call is charged its prompt plus this, whether or not it streams
-   * and whether or not the reservation is used (ADR-0016, ADR-0034).
+   * Output the request reserves. On Groq a call is charged its prompt plus this, whether or not it
+   * streams and whether or not the reservation is used (ADR-0016, ADR-0034). A provider that bills
+   * what it generates charges nothing for the headroom, which is why the two differ per rung.
    */
   maxTokens: number;
   /** What the provider refuses a single request over. `null` where it publishes none. */

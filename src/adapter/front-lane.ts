@@ -29,7 +29,11 @@ export const frontLane: Lane = {
       name: "front-2 Mistral Ministral 3B",
       reasoning: false,
       contextWindow: 131072,
-      maxTokens: 1024,
+      // Mistral bills what it generates rather than what it reserves, so the 1024 this carried
+      // saved nothing and cut an ordinary explanatory reply off mid-word. Measured in #205: that
+      // reply finishes naturally at ~1,700 tokens, and 4096 rather than 2048 is the room for one
+      // longer than ordinary.
+      maxTokens: 4096,
       perRequestCeilingTokens: null,
     },
     {
