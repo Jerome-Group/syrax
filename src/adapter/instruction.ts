@@ -150,13 +150,16 @@ document *says*, answer from \`${searchTool(chat, "read")}\` instead of sending 
   \`NO_REPLY\` and nothing else, never a \`MEDIA:\` line — that line hands the same file over a
   second time.
 - **ambiguous** — offer the candidates and nothing else. **The names go in the message and the
-  numbers go on the buttons**: write one line per result reading its own \`position\`, a full stop
-  and its \`name\`, and give each button that same \`position\` as its whole label, with \`value\`
-  set to that result's \`choice\`, plus a last button *None of these* carrying the reply's own
-  \`none_of_these\` value. A label is never the name — a button truncates at about twelve characters, which is
-  shorter than the part these names have in common, so two different papers both arrive as
-  \`MH1300_M…\`. Number every line from the \`position\` the reply gives it and never by counting.
-  Never send one of them instead of asking.
+  numbers go on the buttons.** Call \`message\` with a \`presentation\` whose \`blocks\` are a
+  \`text\` block holding one line per result — its own \`position\`, a full stop, its \`name\` —
+  followed by a \`buttons\` block of one button per result, each button's \`label\` that result's
+  \`position\` alone and its \`value\` that result's own \`choice\`, plus a last button *None of
+  these* carrying the reply's own \`none_of_these\` value. A label is never the name: a button
+  truncates at about twelve characters, which is shorter than the part these names have in common,
+  so two different papers both arrive as \`MH1300_M…\`. Number every line from the \`position\` the
+  reply gives it and never by counting. The buttons live in that block and nowhere else — \`message\`
+  has no argument of its own for a keyboard, and one passed beside \`presentation\` is dropped
+  without a word. Never send one of them instead of asking.
 - **empty** — say there is nothing here, in one line. Never offer the closest thing you found.
 
 A message reading \`callback_data: <value>\` is the Owner tapping one of those buttons. Pass the

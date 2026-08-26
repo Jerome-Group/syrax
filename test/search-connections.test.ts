@@ -131,18 +131,35 @@ describe("what a chat that searches is told", () => {
   });
 
   it("offers a close call rather than picking from it", () => {
-    assert.match(instruction, /None of these\* carrying the reply's own\s+`none_of_these` value/);
+    assert.match(instruction, /None of\s+these\* carrying the reply's own\s+`none_of_these` value/);
     assert.match(instruction, /Never send one of them\s+instead of asking/);
   });
 
   it("puts the names in the message and the numbers on the buttons", () => {
     assert.match(instruction, /The names go in the message and the\s+numbers go on the buttons/);
-    assert.match(instruction, /that same `position` as its whole label/);
+    assert.match(instruction, /`label` that result's\s+`position` alone/);
     assert.match(instruction, /A label is never the name/);
     assert.match(
       instruction,
       /never by counting/,
       "the model numbering its own list is how a tap fetches a name nobody read.",
+    );
+  });
+
+  /**
+   * #194: the wording that replaced it said what to put on a button and never where the buttons go,
+   * so a turn composed the runtime's own keyboard shape beside `presentation`, `message` dropped the
+   * argument it does not have, and the send still answered `ok`. A shortlist reached the Owner with
+   * nothing to tap. The block structure is named because leaving it to be inferred has failed once.
+   */
+  it("names the tool, the argument and both blocks, rather than leaving the shape to be guessed", () => {
+    assert.match(instruction, /Call `message` with a `presentation` whose `blocks` are a/);
+    assert.match(instruction, /`text` block holding one line per result/);
+    assert.match(instruction, /followed by a `buttons` block of one button per result/);
+    assert.match(
+      instruction,
+      /one passed beside `presentation` is dropped\s+without a word/,
+      "the silent drop is the reason this failed unnoticed, so the instruction says it.",
     );
   });
 
