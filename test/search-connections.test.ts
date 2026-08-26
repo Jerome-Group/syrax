@@ -139,17 +139,14 @@ describe("what a chat that searches is told", () => {
   });
 
   it("offers a close call rather than picking from it", () => {
-    assert.match(flowed, /None of these\* carrying the reply's own `none_of_these` value/);
     assert.match(flowed, /Never send one of them instead of asking/);
   });
 
   it("puts the names in the message and the numbers on the buttons", () => {
-    assert.match(flowed, /The names go in the message and the numbers go on the buttons/);
-    assert.match(flowed, /`label` that result's `position` alone/);
-    assert.match(instruction, /A label is never the name/);
+    assert.match(flowed, /A `label` is the result's own `position` and never its name/);
     assert.match(
-      instruction,
-      /never by counting/,
+      flowed,
+      /Number every line from the `position` the reply gives it and never by counting/,
       "the model numbering its own list is how a tap fetches a name nobody read.",
     );
   });
@@ -160,9 +157,54 @@ describe("what a chat that searches is told", () => {
    * argument it does not have, and the send still answered `ok`. A shortlist reached the Owner with
    * nothing to tap. The block structure is named because leaving it to be inferred has failed once.
    */
+  /**
+   * #200: the shape was described in prose and validated as a schema, and the gap was the fields
+   * prose leaves implicit. Two models on two providers dropped the same two — `type` on the block
+   * and `label` on the buttons — and every close call was refused before it reached the wire.
+   *
+   * So the instruction shows the call, and this reads that example back as JSON rather than as
+   * words. The keys asserted here are the ones `MessagePresentationButtonsBlock` and
+   * `MessagePresentationButton` require, which is what the validator was rejecting.
+   */
+  it("shows the shortlist's call as an example that satisfies the runtime's own schema", () => {
+    const example = /```json\n([\s\S]*?)```/.exec(instruction)?.[1];
+    assert.ok(example, "the close call has no worked example, so its shape is prose again.");
+
+    const call = JSON.parse(example) as {
+      action: string;
+      message: string;
+      presentation: { blocks: { type: string; buttons?: { label: string; value: string }[] }[] };
+    };
+
+    assert.equal(call.action, "send");
+    assert.match(
+      call.message,
+      /^1\. .+\n2\. /,
+      "the list is not numbered from one in the message.",
+    );
+    assert.equal(call.presentation.blocks.length, 1, "a block beside the buttons is dropped.");
+
+    const [block] = call.presentation.blocks;
+    assert.equal(block!.type, "buttons");
+    assert.ok(block!.buttons?.length, "the buttons block carries no buttons.");
+    for (const button of block!.buttons!) {
+      assert.equal(
+        typeof button.label,
+        "string",
+        `a button with no label: ${JSON.stringify(button)}`,
+      );
+      assert.equal(
+        typeof button.value,
+        "string",
+        `a button with no value: ${JSON.stringify(button)}`,
+      );
+    }
+    assert.equal(block!.buttons!.at(-1)!.label, "None of these");
+  });
+
   it("names the tool, the argument and the block, rather than leaving the shape to be guessed", () => {
-    assert.match(instruction, /Call `message` with the numbered list as its `message`/);
-    assert.match(instruction, /one `buttons` block and nothing else/);
+    assert.match(flowed, /calling `message` in exactly this shape/);
+    assert.match(flowed, /Every key above is required and the call is refused without it/);
   });
 
   /**
@@ -171,8 +213,9 @@ describe("what a chat that searches is told", () => {
    * A shortlist reached the Owner as ten numbers naming nothing.
    */
   it("keeps the list in the message, where a block beside one would be dropped", () => {
-    assert.match(flowed, /The list is the `message` and never a `text` block/);
-    assert.match(instruction, /a `presentation` with no `message` is refused outright/);
+    assert.match(flowed, /\*\*The list is the `message`\*\*/);
+    assert.match(flowed, /a `text` block beside a `message` is dropped/);
+    assert.match(flowed, /a `presentation` with no `message` is refused outright/);
     assert.doesNotMatch(
       instruction,
       /`text` block holding/,
