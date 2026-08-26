@@ -11,8 +11,6 @@ import type { Lane } from "./lane.ts";
 
 export const frontLane: Lane = {
   name: "front",
-  /** Measured in #56 and carried by ADR-0009. */
-  largestCallTokens: 6200,
   rungs: [
     {
       provider: "syrax-gemini",
@@ -22,6 +20,8 @@ export const frontLane: Lane = {
       contextWindow: 1048576,
       maxTokens: 8192,
       perRequestCeilingTokens: null,
+      // Measured in #56 and carried by ADR-0009, when it was one figure for the whole chain.
+      largestCallTokens: 6200,
     },
     {
       provider: "syrax-mistral",
@@ -35,6 +35,7 @@ export const frontLane: Lane = {
       // longer than ordinary.
       maxTokens: 4096,
       perRequestCeilingTokens: null,
+      largestCallTokens: 6200,
     },
     {
       provider: "syrax-groq",
@@ -46,6 +47,10 @@ export const frontLane: Lane = {
       // Every tool-capable Groq model carries the same 8,000 tokens per minute, and a single
       // request is refused against it.
       perRequestCeilingTokens: 8000,
+      // The one rung whose figure anything can contradict, because it is the only one on this lane
+      // whose provider refuses a call for its size and says how big it was. #204 watched real
+      // traffic pass this and the lane monitor is what says so (ADR-0035).
+      largestCallTokens: 6200,
     },
   ],
 };

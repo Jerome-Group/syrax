@@ -32,6 +32,7 @@ import { DailyCounters } from "./counters.ts";
 import { EscapeHatch, type HatchAsk } from "./hatch.ts";
 import { LaneMembership } from "./lane-membership.ts";
 import { mcpEndpoint, type Tool } from "./mcp.ts";
+import { rungNamed } from "../adapter/lanes.ts";
 import { RemovalTaps } from "./removal-taps.ts";
 import { type Delivered, deliverScoredRetrieval } from "./retrieval-delivery.ts";
 import { Removals } from "./removals.ts";
@@ -39,8 +40,9 @@ import { sweepChainRungs, type Swept } from "./rung-sweep.ts";
 import { RungWatch } from "./rung-watch.ts";
 import { type Source, TelemetrySources } from "./sources.ts";
 import type { Removed } from "../adapter/removal-ledger.ts";
-import type { StandDown } from "../adapter/stand-down-ledger.ts";
-import { AlreadyReturned, StandDowns } from "./stand-down.ts";
+import type { StandDown, StandDownKind } from "../adapter/stand-down-ledger.ts";
+
+import { AlreadyReturned, StandDowns, WouldEmptyLane } from "./stand-down.ts";
 import {
   type Transition,
   usageReport,
@@ -59,6 +61,21 @@ const longestTimer = 2147483647;
  * to is posted in System.
  */
 export type StoodDown = { standDown: StandDown; landing: Promise<Landed> };
+
+/**
+ * How long a rung stood down for size stays out before it is put back to be tried again. It is a
+ * re-test horizon rather than a reset, and an hour is the trade it makes: the session it could not
+ * take is usually reset within one, and the cost of guessing wrong is a single refused call rather
+ * than the three growing retries a turn that not standing it down costs (ADR-0035).
+ */
+const sizeStandDownHours = 1;
+
+/** A stated reset reads as one and a re-test says so, because they are not the same coming back. */
+function untilReads(standDown: StandDown): string {
+  return standDown.kind === "size"
+    ? `until it is tried again at ${standDown.until}`
+    : `until ${standDown.until}`;
+}
 
 /**
  * A tap, answered. `removed` is null where the value resolved to nothing, which is the one outcome
@@ -107,7 +124,11 @@ export class LaneMonitor {
       this.telemetry,
       this.standDowns.active(now),
       this.removals.removed(),
-      { rotted: this.rungs.rotted(), window: this.rungs.window() },
+      {
+        rotted: this.rungs.rotted(),
+        outgrown: this.rungs.outgrown(),
+        window: this.rungs.window(),
+      },
       now,
     );
     writeUsageReport(this.#deployment.monitorState, report);
@@ -146,10 +167,17 @@ export class LaneMonitor {
   async reconcile(now: Date = new Date()): Promise<Landed | null> {
     for (const held of this.standDowns.active(now)) this.#scheduleReturn(held);
     for (const returned of this.standDowns.returnedWhileDown()) {
+      // The same forgetting `bringBack` does, because this is the same return arriving by the other
+      // route: a finding that survived the restart would stand the rung straight back out, off a
+      // refusal from before the monitor stopped, without it ever being tried (ADR-0035).
+      if (returned.kind === "size") this.rungs.forgetOutgrown(returned.rung);
       await this.announce(
         {
           kind: "a stand down returned",
-          said: `${returned.rung} came back to the ${returned.lane} lane: its reset passed while the monitor was down.`,
+          said:
+            returned.kind === "size"
+              ? `${returned.rung} came back to the ${returned.lane} lane to be tried again: its re-test came due while the monitor was down.`
+              : `${returned.rung} came back to the ${returned.lane} lane: its reset passed while the monitor was down.`,
         },
         now,
       );
@@ -189,7 +217,56 @@ export class LaneMonitor {
   async watchRungs(now: Date = new Date()): Promise<Transition[]> {
     const moved = this.rungs.watch(this.#absent(now), now);
     for (const transition of moved) await this.announce(transition, now);
+    await this.#standDownWhatCannotFit(now);
     return moved;
+  }
+
+  /**
+   * The one place a rung leaves its lane without the Owner asking (ADR-0035). A rung whose ceiling
+   * the traffic has outgrown refuses every call at that size, and no amount of waiting shrinks the
+   * request — so the runtime's backoff cannot converge, and each retry it makes is larger than the
+   * attempt that just failed. Taking the rung out for a while spends nothing while the rungs above
+   * it answer.
+   *
+   * **The horizon is a re-test rather than a reset**, which is what the kind on the entry says.
+   * Nothing here can watch a session shrink: there is no such signal in the runtime's log, and the
+   * only way to find out whether the conversation has been reset is to put the rung back and let it
+   * try. Standing down again costs one refused call an hour, against three growing retries a turn.
+   *
+   * ADR-0012's *reported, never repaired* is not being loosened. That refuses an **irreversible**
+   * edit made on ambiguous evidence — a 404 that might be a transient unrouting. This is neither:
+   * a `413` naming its own numbers is unambiguous, and a stand down is written back by construction.
+   */
+  async #standDownWhatCannotFit(now: Date = new Date()): Promise<void> {
+    for (const passed of this.rungs.outgrown()) {
+      const rung = rungNamed(passed.rung);
+      if (rung === undefined || rung.perRequestCeilingTokens === null) continue;
+      if (passed.saw + rung.maxTokens < rung.perRequestCeilingTokens) continue;
+      if (this.standDowns.active(now).some((held) => held.rung === passed.rung)) continue;
+      try {
+        // The landing is awaited here where the tool path deliberately does not await it: there is
+        // no turn to end, so nothing else would ever settle it, and an unawaited rejection on a
+        // scheduled poke is a lane rebuilt or not with nobody the wiser.
+        await this.standDown(
+          {
+            rung: passed.rung,
+            until: new Date(+now + sizeStandDownHours * 60 * 60 * 1000),
+            why: `the session has grown past what this rung will take — it was asked for ${passed.saw} tokens plus the ${rung.maxTokens} it reserves, against a ${rung.perRequestCeilingTokens} ceiling`,
+            kind: "size",
+          },
+          now,
+        ).landing;
+      } catch (error) {
+        // The lane's last rung is the one refusal this expects to meet, and leaving the rung where
+        // it is is the right way round: a rung that refuses beats no lane at all. Anything else is
+        // the write or its landing having failed, which would otherwise leave the ledger saying a
+        // rung is out while the generated configuration still holds it, silently.
+        if (error instanceof WouldEmptyLane) continue;
+        console.error(
+          `syrax lane monitor: ${passed.rung} was not stood down for size: ${reason(error)}`,
+        );
+      }
+    }
   }
 
   /**
@@ -262,13 +339,16 @@ export class LaneMonitor {
    * **It answers before it has landed**, on purpose: the answer is what ends the turn the land is
    * waiting for. What the landing did arrives in System behind it.
    */
-  standDown(asked: { rung: string; until: Date; why: string }, now: Date = new Date()): StoodDown {
+  standDown(
+    asked: { rung: string; until: Date; why: string; kind?: StandDownKind },
+    now: Date = new Date(),
+  ): StoodDown {
     const standDown = this.standDowns.stand(asked, now, this.removals.rungs());
     this.#membership.write();
     this.#scheduleReturn(standDown);
     const landing = this.#landAndSay(
       "a stand down",
-      `${standDown.rung} is out of the ${standDown.lane} lane until ${standDown.until} — ${standDown.why}.`,
+      `${standDown.rung} is out of the ${standDown.lane} lane ${untilReads(standDown)} — ${standDown.why}.`,
       now,
     );
     return { standDown, landing };
@@ -276,10 +356,13 @@ export class LaneMonitor {
 
   bringBack(rung: string, now: Date = new Date()): StoodDown {
     const standDown = this.standDowns.bringBack(rung);
+    if (standDown.kind === "size") this.rungs.forgetOutgrown(standDown.rung);
     this.#membership.write();
     const landing = this.#landAndSay(
       "a stand down returned",
-      `${standDown.rung} is back in the ${standDown.lane} lane at the reset it was stood down until.`,
+      standDown.kind === "size"
+        ? `${standDown.rung} is back in the ${standDown.lane} lane to be tried again — if the session is still too large for it, it stands down again.`
+        : `${standDown.rung} is back in the ${standDown.lane} lane at the reset it was stood down until.`,
       now,
     );
     return { standDown, landing };

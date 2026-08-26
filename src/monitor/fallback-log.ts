@@ -29,6 +29,14 @@ export type Decision = {
   /** What the provider said, verbatim: a model that is gone and one that has stopped being free
    * wear the same code, and only these words tell them apart. */
   said: string | null;
+  /**
+   * The same words at the runtime's longer cap. `said` is the preview it truncates to 200
+   * characters from the head, and a refusal naming its numbers late — a long model slug, a long
+   * organisation id — loses them there with no sign that anything was cut. Anything reading a
+   * figure out of the words reads this and falls back to `said`; anything showing them shows
+   * `said`, which is the length the runtime chose for a message a person reads.
+   */
+  saidInFull: string | null;
 };
 
 /**
@@ -180,6 +188,7 @@ function asDecision(line: string): Decision[] {
       reason: typeof record.reason === "string" ? record.reason : null,
       status: typeof record.status === "number" ? record.status : null,
       said: firstString(record.providerErrorMessagePreview, record.errorPreview),
+      saidInFull: firstString(record.errorPreview, record.providerErrorMessagePreview),
     },
   ];
 }

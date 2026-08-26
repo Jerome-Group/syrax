@@ -312,6 +312,14 @@ stood-down provider is not broken — nothing ails it that the reset will not cu
 reconfigured, and it does not come back by itself**. A lane's membership is configuration, so the
 rung returns only when something writes it back at the reset it was stood down until: the return is
 owned rather than awaited, and a stand down with no return scheduled is a rung retired by accident.
+
+**There are two kinds and only one of them is bounded by a reset** (ADR-0035). An *allowance* stand
+down is the one above: the Owner states a reset, and the rung goes back when it arrives. A *size*
+stand down is the monitor's, for a rung the session has grown past — a call it will refuse at any
+hour, so there is no reset to state. It is bounded by a re-test instead: the rung goes back to find
+out whether the conversation has been reset, and stands down again if it has not. Both are written
+to the same ledger and both are refused a lane's last rung, because a lane emptied by the monitor
+answers exactly as little as one emptied by the Owner.
 _Avoid_: cooldown — it lapses on its own after seconds, where this lasts until a stated reset and
 lapses only when something acts; disable, which sounds permanent where this is bounded by the reset
 that ends it; pin — the apparent opposite and not one, since a pin forces a *selection* within a

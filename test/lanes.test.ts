@@ -48,12 +48,23 @@ describe("the two lanes", () => {
     );
   });
 
-  it("hold ADR-0016's invariant: the largest call plus the reservation clears every ceiling", () => {
+  it("hold the invariant per rung: its own largest call plus its reservation clears its ceiling", () => {
     for (const lane of lanes) {
       for (const rung of lane.rungs) {
         assert.ok(
-          rungFitsItsCeiling(rung, lane.largestCallTokens),
-          `${modelRef(rung)} reserves ${rung.maxTokens} over a ${lane.largestCallTokens}-token call, past its ${rung.perRequestCeilingTokens} ceiling.`,
+          rungFitsItsCeiling(rung),
+          `${modelRef(rung)} reserves ${rung.maxTokens} over a ${rung.largestCallTokens}-token call, past its ${rung.perRequestCeilingTokens} ceiling.`,
+        );
+      }
+    }
+  });
+
+  it("carry a largest call each, so the figure can be contradicted one rung at a time", () => {
+    for (const lane of lanes) {
+      for (const rung of lane.rungs) {
+        assert.ok(
+          Number.isInteger(rung.largestCallTokens) && rung.largestCallTokens > 0,
+          `${modelRef(rung)} states no largest call, so nothing can check its ceiling.`,
         );
       }
     }

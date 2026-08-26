@@ -8,7 +8,7 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { after, before, beforeEach, describe, it } from "node:test";
 import { buildRuntimeConfig } from "../src/adapter/build.ts";
 import { writeCarrierMap, type CarrierMap } from "../src/adapter/carriers.ts";
@@ -16,9 +16,11 @@ import { readDeployment, type Deployment } from "../src/adapter/deployment.ts";
 import { frontLane } from "../src/adapter/front-lane.ts";
 import { generateConfig } from "../src/adapter/generator.ts";
 import { modelRef } from "../src/adapter/lane.ts";
+import { runtimeLogPath } from "../src/adapter/runtime-log.ts";
 import { writePrivateFile } from "../src/adapter/private-state.ts";
 import { workerLane } from "../src/adapter/worker-lane.ts";
 import { LaneMonitor } from "../src/monitor/lane-monitor.ts";
+import { WouldEmptyLane } from "../src/monitor/stand-down.ts";
 import { standDownLedger, type StandDown } from "../src/adapter/stand-down-ledger.ts";
 import {
   runtimeIsInstalled,
@@ -32,6 +34,28 @@ import { standInRuntime, temporaryMachine } from "./machine.ts";
 import { TelegramStub } from "./stubs/telegram-bot-api.ts";
 
 const botToken = "6100000000:STUBSTUBSTUBSTUBSTUBSTUBSTUBSTUBSTU";
+
+/** A refusal for size, in the shape the runtime logs one: the status is what tells it from a rate
+ * limit or a context overflow, all three of which are worded alike (ADR-0035). */
+function sizeRefusal(at: string, candidate: string, requested: number, limit: number): string {
+  const [provider, ...model] = candidate.split("/");
+  return JSON.stringify({
+    0: '{"subsystem":"model-fallback/decision"}',
+    1: {
+      event: "model_fallback_decision",
+      decision: "candidate_failed",
+      requestedProvider: provider,
+      requestedModel: model.join("/"),
+      candidateProvider: provider,
+      candidateModel: model.join("/"),
+      reason: "rate_limit",
+      status: 413,
+      providerErrorMessagePreview: `Request too large. Limit ${limit}, Requested ${requested}, on tokens per minute (TPM).`,
+    },
+    2: "model fallback decision",
+    time: at,
+  });
+}
 
 /** The front lane's second rung: one a stand down can take without emptying anything. */
 const secondRung = modelRef(frontLane.rungs[1]!);
@@ -63,6 +87,16 @@ describe("a stand down", () => {
     commands = standInRuntime(deployment.runtimeRoot);
     generateConfig(deployment, carriers);
   });
+
+  /** The front lane's Groq rung refusing a call for its size, in the runtime's log. Returns it. */
+  function writeSizeRefusal(): string {
+    const rung = frontLane.rungs.find((each) => each.perRequestCeilingTokens !== null)!;
+    writeFileSync(
+      runtimeLogPath(deployment.logsDir),
+      `${sizeRefusal(new Date().toISOString(), modelRef(rung), rung.perRequestCeilingTokens! + 800, rung.perRequestCeilingTokens!)}\n`,
+    );
+    return modelRef(rung);
+  }
 
   /** The front lane exactly as the running gateway would take it. */
   function frontChain(): { primary: string; fallbacks: string[] } {
@@ -188,6 +222,116 @@ describe("a stand down", () => {
     assert.throws(
       () => monitor.standDowns.stand({ rung: workerFloor, until, why: "spent" }),
       /last rung/,
+    );
+  });
+
+  it("tells a size stand down from an allowance one, and refuses it a lane it would empty", () => {
+    const monitor = new LaneMonitor(deployment);
+    const until = new Date(Date.now() + 3_600_000);
+
+    const spent = monitor.standDowns.stand({ rung: secondRung, until, why: "spent" });
+    const outgrown = monitor.standDowns.stand({
+      rung: modelRef(frontLane.rungs.at(-1)!),
+      until,
+      why: "the session has grown past what this rung will take",
+      kind: "size",
+    });
+
+    assert.equal(spent.kind, "allowance", "a stand down with no kind stated is not an allowance.");
+    assert.equal(outgrown.kind, "size");
+    // The guard does not care which kind emptied the lane, and that is the point of asserting it
+    // here: a lane the monitor emptied answers exactly as little as one the Owner emptied.
+    assert.throws(
+      () =>
+        monitor.standDowns.stand({
+          rung: modelRef(frontLane.rungs[0]!),
+          until,
+          why: "outgrown",
+          kind: "size",
+        }),
+      // Typed rather than matched on its words: it is the one refusal an automatic stand down
+      // expects to meet, and telling it from a failed write is what keeps that catch narrow.
+      WouldEmptyLane,
+    );
+  });
+
+  it("stands a rung the traffic outgrew out of its lane once, and not again unasked", async () => {
+    // Real time throughout: the return is scheduled against the wall clock, so a stand down dated
+    // in the past comes straight back and the loop under test would look like it never ran.
+    const outgrew = writeSizeRefusal();
+    const monitor = new LaneMonitor(deployment);
+
+    await monitor.watchRungs();
+    const first = monitor.standDowns.active();
+    // Nothing new has reached the log, so a second poke has no fresh refusal to act on.
+    await monitor.watchRungs();
+    const second = monitor.standDowns.active();
+
+    assert.deepEqual(
+      first.map((held) => ({ rung: held.rung, kind: held.kind })),
+      [{ rung: outgrew, kind: "size" }],
+    );
+    assert.deepEqual(second, first, "the same refusal stood the rung down twice.");
+    assert.ok(
+      !frontChain().fallbacks.includes(outgrew),
+      "the rung is in the ledger and still in the written chain.",
+    );
+  });
+
+  it("puts an outgrown rung back to be tried, and forgets the refusal that took it out", async () => {
+    const outgrew = writeSizeRefusal();
+    const monitor = new LaneMonitor(deployment);
+    await monitor.watchRungs();
+
+    await monitor.bringBack(outgrew).landing;
+
+    assert.deepEqual(monitor.standDowns.active(), []);
+    assert.deepEqual(
+      monitor.rungs.outgrown(),
+      [],
+      "the refusal it was taken out on outlived the return, so it would go straight back out untried.",
+    );
+    assert.deepEqual(frontChain().fallbacks, frontLane.rungs.slice(1).map(modelRef));
+  });
+
+  it("forgets the refusal when a size re-test came due while the monitor was down", async () => {
+    const outgrew = writeSizeRefusal();
+    const started = new LaneMonitor(deployment);
+    await started.watchRungs();
+    assert.equal(started.standDowns.active().length, 1, "the fixture never stood the rung down.");
+
+    // The monitor stops, the horizon passes, and it comes back up: the return arrives through
+    // `reconcile` rather than through the timer that `bringBack` owns.
+    const later = new Date(Date.now() + 2 * 60 * 60 * 1000);
+    const restarted = new LaneMonitor(deployment, later);
+    await restarted.reconcile(later);
+
+    assert.deepEqual(restarted.standDowns.active(later), []);
+    assert.deepEqual(
+      restarted.rungs.outgrown(),
+      [],
+      "the refusal survived the restart, so the next sweep puts the rung back out untried.",
+    );
+    assert.ok(frontChain().fallbacks.includes(outgrew), "the rung did not go back into the chain.");
+    // The consequence, rather than the proxy for it: the next poke has no fresh refusal to act on.
+    await restarted.watchRungs(later);
+    assert.deepEqual(restarted.standDowns.active(later), []);
+  });
+
+  it("reads a ledger written before stand downs had kinds as the allowance ones they were", () => {
+    const until = new Date(Date.now() + 3_600_000).toISOString();
+    writePrivateFile(
+      standDownLedger(deployment.monitorState),
+      JSON.stringify([
+        { rung: secondRung, lane: "front", at: new Date().toISOString(), until, why: "spent" },
+      ]),
+    );
+
+    const monitor = new LaneMonitor(deployment);
+
+    assert.deepEqual(
+      monitor.standDowns.active().map((held) => ({ rung: held.rung, kind: held.kind })),
+      [{ rung: secondRung, kind: "allowance" }],
     );
   });
 

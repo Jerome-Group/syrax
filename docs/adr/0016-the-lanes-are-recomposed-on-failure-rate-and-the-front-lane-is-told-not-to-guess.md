@@ -4,6 +4,12 @@
 > one part.** A request is charged the same way whether it streams or not, so *"the identical call
 > sent without streaming was not refused at all"* is false and not streaming is no escape from a
 > wall. Both terms of the invariant, the composition, and every rung's `maxTokens` are untouched.
+>
+> **Amended by
+> [ADR-0035](0035-a-rung-the-session-has-outgrown-stands-down-until-it-can-take-it.md) in one
+> part.** The largest call the invariant reads is a property of a rung rather than of a lane, and
+> the lane monitor reconciles the written figure against what refusals say the traffic actually is.
+> The invariant's shape, both its terms and the composition are untouched.
 
 The front lane is **Gemini 3.5 Flash Lite → Mistral `ministral-3b-latest` → Groq
 `openai/gpt-oss-120b`**. The worker lane is **Gemini 3.1 Flash Lite → Mistral
