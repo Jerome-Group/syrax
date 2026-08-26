@@ -185,18 +185,21 @@ describe("General answering with the corpus", { skip: !runtimeIsInstalled() }, (
     assert.equal(warned.body.message_thread_id, syrax.carriers.general);
   });
 
+  /**
+   * The arguments here are the ones the standing instruction asks for, and that is the point rather
+   * than a detail. #198 shipped an instruction describing a `text` block and a test scripting the
+   * list in `message`: the runtime discards a block beside a `message`, so this proved the surface
+   * would render a list nothing was ever going to send it. A shortlist reached the Owner as ten
+   * numbers naming nothing, green all the way. If the instruction changes shape, this call does too.
+   */
   it("offers three tappable candidates and a way to want none of them", async () => {
     const offered = await turn(
       "that thing about algebras",
       {
         action: "send",
-        message: numbered,
+        message: `Please select the document you are looking for:\n\n${numbered}`,
         presentation: {
           blocks: [
-            {
-              type: "text",
-              text: `Please select the document you are looking for:\n\n${numbered}`,
-            },
             {
               type: "buttons",
               buttons: [
@@ -224,14 +227,56 @@ describe("General answering with the corpus", { skip: !runtimeIsInstalled() }, (
     // The point of the whole change: the names are somewhere the client cannot truncate them, and
     // the label is short enough that it never will. #192 had two different papers both reading
     // `MH1300_M…` because the name was on the button.
-    for (const name of shortlist.candidates) {
+    // Read as the Owner reads it: the surface formats what looks like a filename, so `wedderburn.md`
+    // reaches the wire as `<code>wedderburn.md</code>` and a plain substring is testing the markup.
+    const read = String(offered.body.text).replace(/<[^>]+>/g, "");
+    for (const [at, name] of shortlist.candidates.entries()) {
+      assert.ok(read.includes(name), `${name} is nowhere the Owner can read it.`);
       assert.ok(
-        String(offered.body.text).includes(name),
-        `${name} is nowhere the Owner can read it.`,
+        read.includes(`${at + 1}. ${name}`),
+        `${name} is in the message unnumbered, so no button points at it.`,
       );
     }
     for (const button of keyboard.flat().slice(0, -1)) {
       assert.ok(button.text.length <= 2, `a label that can truncate: ${button.text}`);
+    }
+  });
+
+  /**
+   * Why the list is the `message` (#198). The runtime keeps the `message` and discards a `text`
+   * block sitting beside it, so an instruction asking for the names in a block ships a shortlist of
+   * numbers naming nothing — which is what reached the Owner, with every test green, because the
+   * test above scripted a shape the instruction was no longer asking for.
+   *
+   * Scripted, so it pins the runtime rather than the model. If a bump starts rendering both, this
+   * goes red and the instruction has a choice it did not have.
+   */
+  it("drops a text block that sits beside a message, keeping only the message", async () => {
+    const offered = await turn(
+      "that thing about algebras, in a block",
+      {
+        action: "send",
+        message: "Please select the document you are looking for:",
+        presentation: {
+          blocks: [
+            { type: "text", text: numbered },
+            {
+              type: "buttons",
+              buttons: [{ label: "1", value: shortlist.choices[0] }],
+            },
+          ],
+        },
+      },
+      { method: "sendMessage", predicate: carriesAKeyboard },
+    );
+
+    const read = String(offered.body.text).replace(/<[^>]+>/g, "");
+    assert.equal(read.trim(), "Please select the document you are looking for:");
+    for (const name of shortlist.candidates) {
+      assert.ok(
+        !read.includes(name),
+        `${name} survived in a block, so the message no longer wins.`,
+      );
     }
   });
 

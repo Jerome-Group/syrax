@@ -111,6 +111,14 @@ describe("the connections to the search unit", () => {
 describe("what a chat that searches is told", () => {
   const instruction = chatInstruction(chats.general);
 
+  /**
+   * The same instruction with its wrapping collapsed. What is under test is the sentence, and the
+   * sentence is hard-wrapped at whatever column the prose reached — so a `\s+` between two words is
+   * a guess about where the break fell today, and editing a clause four words earlier moves it.
+   * Three of these have gone red for a reflow rather than for a change in meaning.
+   */
+  const flowed = instruction.replace(/\s+/g, " ");
+
   it("names the tools of its own connection and of no other chat's", () => {
     assert.match(instruction, /syrax-search-general__search/);
     assert.doesNotMatch(instruction, /syrax-search-academic/);
@@ -131,13 +139,13 @@ describe("what a chat that searches is told", () => {
   });
 
   it("offers a close call rather than picking from it", () => {
-    assert.match(instruction, /None of\s+these\* carrying the reply's own\s+`none_of_these` value/);
-    assert.match(instruction, /Never send one of them\s+instead of asking/);
+    assert.match(flowed, /None of these\* carrying the reply's own `none_of_these` value/);
+    assert.match(flowed, /Never send one of them instead of asking/);
   });
 
   it("puts the names in the message and the numbers on the buttons", () => {
-    assert.match(instruction, /The names go in the message and the\s+numbers go on the buttons/);
-    assert.match(instruction, /`label` that result's\s+`position` alone/);
+    assert.match(flowed, /The names go in the message and the numbers go on the buttons/);
+    assert.match(flowed, /`label` that result's `position` alone/);
     assert.match(instruction, /A label is never the name/);
     assert.match(
       instruction,
@@ -152,14 +160,23 @@ describe("what a chat that searches is told", () => {
    * argument it does not have, and the send still answered `ok`. A shortlist reached the Owner with
    * nothing to tap. The block structure is named because leaving it to be inferred has failed once.
    */
-  it("names the tool, the argument and both blocks, rather than leaving the shape to be guessed", () => {
-    assert.match(instruction, /Call `message` with a `presentation` whose `blocks` are a/);
-    assert.match(instruction, /`text` block holding one line per result/);
-    assert.match(instruction, /followed by a `buttons` block of one button per result/);
-    assert.match(
+  it("names the tool, the argument and the block, rather than leaving the shape to be guessed", () => {
+    assert.match(instruction, /Call `message` with the numbered list as its `message`/);
+    assert.match(instruction, /one `buttons` block and nothing else/);
+  });
+
+  /**
+   * #198: the runtime discards a `text` block whenever a `message` is present, and refuses a
+   * `presentation` carrying no `message` at all. Both were measured against the pinned runtime.
+   * A shortlist reached the Owner as ten numbers naming nothing.
+   */
+  it("keeps the list in the message, where a block beside one would be dropped", () => {
+    assert.match(flowed, /The list is the `message` and never a `text` block/);
+    assert.match(instruction, /a `presentation` with no `message` is refused outright/);
+    assert.doesNotMatch(
       instruction,
-      /one passed beside `presentation` is dropped\s+without a word/,
-      "the silent drop is the reason this failed unnoticed, so the instruction says it.",
+      /`text` block holding/,
+      "the shape that drops the list is being asked for again.",
     );
   });
 
