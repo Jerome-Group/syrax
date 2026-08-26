@@ -293,12 +293,13 @@ clears it or never will. The two earn separate names because a provider need not
 one answers both with the same error code and a `retry-after` on each, so a caller that reads the
 header alone will keep retrying a call that cannot succeed.
 
-**The size that meets the wall is not the prompt, and it is partly Syrax's own choice.** A streaming
-request to Groq is charged its prompt *plus the output it reserves*, so the same conversation clears
-the wall or is refused by it depending on a `maxTokens` written in configuration — and the identical
-call sent without streaming is not refused at all. A wall is therefore a property of the request as
+**The size that meets the wall is not the prompt, and it is partly Syrax's own choice.** A request
+to Groq is charged its prompt *plus the output it reserves* — whether or not it streams, and whether
+or not the reservation is used — so the same conversation clears the wall or is refused by it
+depending on a `maxTokens` written in configuration. A wall is therefore a property of the request as
 sent rather than of the model as published: it moves when Syrax changes a setting, which makes
-clearing it something the configuration owns rather than something the provider fixes.
+clearing it something the configuration owns rather than something the provider fixes. Not streaming
+is not such a setting, and ADR-0034 says why the temptation is worth naming.
 _Avoid_: rate limit — it names the allowance, which is the thing this is not; context window — a
 different ceiling, belonging to what the model can read rather than to what the plan will accept;
 per-request ceiling — it names the wall as the model's alone, which is the half this entry corrects
