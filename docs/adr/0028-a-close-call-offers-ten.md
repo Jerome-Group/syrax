@@ -1,5 +1,10 @@
 # A close call offers ten, and `ambiguous` becomes a page rather than a choice between three
 
+> **Amended by
+> [ADR-0032](0032-the-button-carries-the-number-and-the-message-carries-the-name.md)** in one: a
+> button carries its candidate's number rather than its name, and the names are the message. The
+> count of ten stands; what the ten look like does not.
+
 [ADR-0004](0004-syrax-owns-the-file-search-index.md) chose three candidates and
 [ADR-0026](0026-the-shortlist-is-the-units-and-the-file-is-handed-over.md) built a keyboard for
 three buttons. The shortlist is now **ten**, and the reason is the residue
@@ -34,9 +39,11 @@ pool is forty, so ten is never padding — every candidate offered is one the fu
 ## What it costs, which is the part worth recording
 
 **`ambiguous` stops meaning *a close call between three documents*.** Ten buttons is a page of
-results the Owner scans, and that is a different gesture from picking between three. ADR-0004's
-framing — `confident` sends, `ambiguous` asks, `empty` admits — survives; what changes is that
-asking now looks like a list.
+results the Owner scans *(the page moved into the message and the buttons became its numbers —
+[ADR-0032](0032-the-button-carries-the-number-and-the-message-carries-the-name.md). A button holds
+about twelve characters, which was shorter than the part these names have in common.)*, and that is
+a different gesture from picking between three. ADR-0004's framing — `confident` sends, `ambiguous`
+asks, `empty` admits — survives; what changes is that asking now looks like a list.
 
 **The tail is not worse than the head, and that was measured rather than assumed.** The obvious
 objection to a longer shortlist is that nothing filters positions 4 through 10: the `empty` floor is
