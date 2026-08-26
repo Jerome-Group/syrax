@@ -37,6 +37,31 @@ def test_a_tappable_value_is_the_answer_it_belongs_to_and_a_position():
     assert offer["none_of_these"] == "answer1:none"
 
 
+def test_a_close_call_numbers_its_own_candidates_from_one():
+    """The line the Owner reads a document on is the unit's, for the reason the tap value is.
+
+    A model counting its own list can print `3.` beside the fourth name, and a tap on `3` then
+    fetches a document whose name they never read — which is #192 arriving through its own fix.
+    """
+    offer = Shortlists().offer(close_call(), None, "answer1")
+
+    assert [one["position"] for one in offer["results"]] == [1, 2, 3]
+    for result in offer["results"]:
+        assert result["choice"] == f"answer1:{result['position'] - 1}", (
+            "the number the Owner reads and the value their tap carries came apart."
+        )
+
+
+def test_a_tap_that_resolves_names_a_document_rather_than_a_line():
+    """The position belongs to the offer. What comes back is one document, off any list."""
+    shortlists = Shortlists()
+    offer = shortlists.offer(close_call(), None, "answer1")
+
+    chosen = shortlists.resolve(offer["results"][1]["choice"])
+
+    assert set(chosen["result"]) == {"path", "name", "contents_indexed"}
+
+
 def test_a_confident_verdict_offers_nothing_to_choose_between():
     confident = Verdict("confident", (Candidate("/documents/quiver.md", "quiver.md", True),), 0.12)
     reply = Shortlists().offer(confident, None, "answer1")

@@ -131,8 +131,19 @@ describe("what a chat that searches is told", () => {
   });
 
   it("offers a close call rather than picking from it", () => {
-    assert.match(instruction, /None of these\* carrying the reply's own `none_of_these` value/);
+    assert.match(instruction, /None of these\* carrying the reply's own\s+`none_of_these` value/);
     assert.match(instruction, /Never send one of them\s+instead of asking/);
+  });
+
+  it("puts the names in the message and the numbers on the buttons", () => {
+    assert.match(instruction, /The names go in the message and the\s+numbers go on the buttons/);
+    assert.match(instruction, /that same `position` as its whole label/);
+    assert.match(instruction, /A label is never the name/);
+    assert.match(
+      instruction,
+      /never by counting/,
+      "the model numbering its own list is how a tap fetches a name nobody read.",
+    );
   });
 
   it("delivers an empty verdict as nothing here, never as the least-bad match", () => {

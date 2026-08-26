@@ -27,6 +27,9 @@ const shortlist = {
   decline: "kP3xVq1a:none",
 };
 
+/** The message body a close call writes: the names, numbered, where they have room to be read. */
+const numbered = shortlist.candidates.map((name, at) => `${at + 1}. ${name}`).join("\n");
+
 const carriesAKeyboard = (call: OutboundCall) => call.body.reply_markup !== undefined;
 
 describe("General answering with the corpus", { skip: !runtimeIsInstalled() }, () => {
@@ -187,15 +190,18 @@ describe("General answering with the corpus", { skip: !runtimeIsInstalled() }, (
       "that thing about algebras",
       {
         action: "send",
-        message: "Three of these look close.",
+        message: numbered,
         presentation: {
           blocks: [
-            { type: "text", text: "Three of these look close." },
+            {
+              type: "text",
+              text: `Please select the document you are looking for:\n\n${numbered}`,
+            },
             {
               type: "buttons",
               buttons: [
-                ...shortlist.candidates.map((label, at) => ({
-                  label,
+                ...shortlist.candidates.map((_, at) => ({
+                  label: String(at + 1),
                   value: shortlist.choices[at],
                 })),
                 { label: "None of these", value: shortlist.decline },
@@ -211,9 +217,22 @@ describe("General answering with the corpus", { skip: !runtimeIsInstalled() }, (
       .inline_keyboard;
     assert.deepEqual(
       keyboard.flat().map((button) => button.text),
-      [...shortlist.candidates, "None of these"],
+      ["1", "2", "3", "None of these"],
     );
     assert.equal(offered.body.message_thread_id, syrax.carriers.general);
+
+    // The point of the whole change: the names are somewhere the client cannot truncate them, and
+    // the label is short enough that it never will. #192 had two different papers both reading
+    // `MH1300_M…` because the name was on the button.
+    for (const name of shortlist.candidates) {
+      assert.ok(
+        String(offered.body.text).includes(name),
+        `${name} is nowhere the Owner can read it.`,
+      );
+    }
+    for (const button of keyboard.flat().slice(0, -1)) {
+      assert.ok(button.text.length <= 2, `a label that can truncate: ${button.text}`);
+    }
   });
 
   it("acknowledges a tap before the work the tap triggers, and hands its value to the chat", async () => {

@@ -86,13 +86,24 @@ class Candidate:
     extracted: bool
     """False where only the name is indexed: the document exists and was never read."""
 
-    def as_result(self, choice: str | None = None) -> dict:
-        """One document as a tool reply names it, with the value a tap on it would carry."""
+    def as_result(self, offered: tuple[str, int] | None = None) -> dict:
+        """One document as a tool reply names it, and what an offer of it carries: value, then line.
+
+        The pair is one argument because the two may not come apart. `position` is the line the
+        Owner reads this document on, 1-based, and it is minted here for the reason `choice` is: a
+        model that counts its own list can print `3.` beside the fourth name, and a tap on `3` then
+        fetches a document whose name they never read (#192). A number that arrived as `null` would
+        send it back to counting, so there is no way to spell that.
+        """
+        if offered is None:
+            return {"path": self.path, "name": self.name, "contents_indexed": self.extracted}
+        choice, position = offered
         return {
             "path": self.path,
             "name": self.name,
             "contents_indexed": self.extracted,
-            **({} if choice is None else {"choice": choice}),
+            "choice": choice,
+            "position": position,
         }
 
 
@@ -119,7 +130,10 @@ class Verdict:
         return {
             "verdict": self.state,
             "results": [
-                one.as_result(choice) for one, choice in zip(self.candidates, tappable, strict=True)
+                one.as_result(None if choice is None else (choice, position))
+                for position, (one, choice) in enumerate(
+                    zip(self.candidates, tappable, strict=True), start=1
+                )
             ],
             "floor": self.floor,
             "floor_provenance": self.provenance,
