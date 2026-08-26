@@ -8,14 +8,29 @@
  * A stand down has no expiry of its own either. It is bounded by a stated reset, and the return is
  * *owned* — scheduled by whoever stood the rung down, and re-derived here on the way in for the
  * case where nothing was running when the reset came.
+ *
+ * **Both kinds are bounded the same way and mean different things by it** (ADR-0035). An allowance
+ * stand down comes back because its reset arrived; a size one comes back to be tried again, because
+ * nothing here can see a session shrink and putting the rung back is the only way to find out. The
+ * guards below do not distinguish them, deliberately: a lane emptied by the monitor answers exactly
+ * as little as one emptied by the Owner.
  */
 
 import { modelRef } from "../adapter/lane.ts";
 import { laneHolding } from "../adapter/lanes.ts";
 import { writePrivateFile } from "../adapter/private-state.ts";
-import { readLedger, standDownLedger, type StandDown } from "../adapter/stand-down-ledger.ts";
+import {
+  readLedger,
+  standDownLedger,
+  type StandDown,
+  type StandDownKind,
+} from "../adapter/stand-down-ledger.ts";
 
 export class AlreadyReturned extends Error {}
+
+/** The last-rung guard, typed so a caller standing a rung down unattended can tell it from a
+ * failure to write. It is the one refusal below that an automatic stand down expects to meet. */
+export class WouldEmptyLane extends Error {}
 
 export class StandDowns {
   #path: string;
@@ -54,7 +69,7 @@ export class StandDowns {
    * written (ADR-0012).
    */
   stand(
-    asked: { rung: string; until: Date; why: string },
+    asked: { rung: string; until: Date; why: string; kind?: StandDownKind },
     now: Date = new Date(),
     removed: readonly string[] = [],
   ): StandDown {
@@ -74,7 +89,7 @@ export class StandDowns {
     }
     const out = new Set([...this.active(now).map((held) => held.rung), ...removed, asked.rung]);
     if (lane.rungs.every((rung) => out.has(modelRef(rung)))) {
-      throw new Error(
+      throw new WouldEmptyLane(
         `${asked.rung} is the ${lane.name} lane's last rung, and a lane with none answers nothing.`,
       );
     }
@@ -85,6 +100,7 @@ export class StandDowns {
       at: now.toISOString(),
       until: asked.until.toISOString(),
       why: asked.why,
+      kind: asked.kind ?? "allowance",
     };
     this.#held = [...this.active(now), standDown];
     this.#write();

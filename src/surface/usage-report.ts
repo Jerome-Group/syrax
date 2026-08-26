@@ -45,6 +45,10 @@ function watched(seen: UsageReport["watched"]): string[] {
       (one) =>
         `- ${one.rung} (${one.lane}) has answered to no such name since ${one.at}: "${one.said}"`,
     ),
+    ...seen.outgrown.map(
+      (one) =>
+        `- ${one.rung} (${one.lane}) is written for a largest call of ${one.wrote} tokens and was asked for ${one.saw} at ${one.at}: correct the figure in its own file`,
+    ),
     ...(seen.window?.unknown === undefined || seen.window.unknown === null
       ? []
       : [`- the rung watch did not cover everything: ${seen.window.unknown}`]),

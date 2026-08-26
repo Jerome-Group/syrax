@@ -20,7 +20,7 @@ import type { DailyCounters } from "./counters.ts";
 import type { Source, TelemetrySources } from "./sources.ts";
 import type { Removed } from "../adapter/removal-ledger.ts";
 import type { StandDown } from "../adapter/stand-down-ledger.ts";
-import type { Rotted, Window } from "./rung-watch.ts";
+import type { Outgrown, Rotted, Window } from "./rung-watch.ts";
 
 /** One lane, in the two things a report is asked for: what is left, and what is still in it. */
 export type LaneUsage = {
@@ -45,7 +45,7 @@ export type LaneUsage = {
  * two share a report because between them they answer one question — whether the lane can still be
  * relied on.
  */
-export type RungWatched = { rotted: Rotted[]; window: Window | null };
+export type RungWatched = { rotted: Rotted[]; outgrown: Outgrown[]; window: Window | null };
 
 export type UsageReport = { at: string; lanes: LaneUsage[]; watched: RungWatched };
 
@@ -53,10 +53,11 @@ export type UsageReport = { at: string; lanes: LaneUsage[]; watched: RungWatched
  * What makes the report arrive unasked, and the whole of what does: everything else is silence,
  * which is what separates this from a daily brief.
  *
- * Three of the seven are stated by the rung watch — a lane switching, and a rung found rotted or
- * found working again — off the runtime's own decision log and off the daily sweep alike, and the
- * seventh is the Owner tapping one of them out of its chain (ADR-0012). They are named here because
- * the set is the report's contract rather than a list of today's producers.
+ * Four of the eight are stated by the rung watch — a lane switching, a rung found rotted or found
+ * working again, and a rung asked for more than its file says it is ever asked for — off the
+ * runtime's own decision log and off the daily sweep alike, and the seventh is the Owner tapping
+ * one of them out of its chain (ADR-0012, ADR-0035). They are named here because the set is the
+ * report's contract rather than a list of today's producers.
  */
 export type Transition = {
   kind:
@@ -66,7 +67,8 @@ export type Transition = {
     | "a rationed spend"
     | "a rotted rung"
     | "a recovered rung"
-    | "a rung removed";
+    | "a rung removed"
+    | "an outgrown call size";
   said: string;
 };
 

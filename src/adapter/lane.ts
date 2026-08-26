@@ -20,26 +20,42 @@ export type Rung = {
   maxTokens: number;
   /** What the provider refuses a single request over. `null` where it publishes none. */
   perRequestCeilingTokens: number | null;
-};
-
-/**
- * A lane: the rungs, in the order they are tried, and the call size their ceilings are measured
- * against. The two travel together everywhere because neither means anything alone — a ceiling
- * without a call size cannot be checked, and a chain without one cannot be composed.
- */
-export type Lane = {
-  name: "front" | "worker";
-  rungs: readonly Rung[];
-  /** The largest single call this lane makes, which is the other half of the invariant below. */
+  /**
+   * The largest call this rung is asked to take, which is the other half of the invariant below.
+   * It sits on the rung rather than on the lane because a ceiling is the provider's and a call is
+   * what reaches that provider: one figure for a whole chain cannot say that a rung two positions
+   * down is asked something a different size, and cannot be contradicted rung by rung when real
+   * traffic outgrows it (ADR-0035).
+   */
   largestCallTokens: number;
 };
 
-/** ADR-0016's invariant: a rung's ceiling must exceed its lane's largest call plus its own reservation. */
-export function rungFitsItsCeiling(rung: Rung, largestCallTokens: number): boolean {
+/** A lane: the rungs, in the order they are tried. */
+export type Lane = {
+  name: "front" | "worker";
+  rungs: readonly Rung[];
+};
+
+/**
+ * ADR-0016's invariant, now read per rung (ADR-0035): a rung's ceiling must exceed the largest call
+ * it is asked to take plus its own reservation. Both terms are the rung's, which is what lets one
+ * chain hold rungs on opposite sides of the same arithmetic.
+ */
+export function rungFitsItsCeiling(rung: Rung): boolean {
   return (
     rung.perRequestCeilingTokens === null ||
-    largestCallTokens + rung.maxTokens < rung.perRequestCeilingTokens
+    rung.largestCallTokens + rung.maxTokens < rung.perRequestCeilingTokens
   );
+}
+
+/**
+ * What a refusal says the call actually was. A provider that refuses a request for its size names
+ * the total it charged — prompt plus reservation (ADR-0034) — so the call is that total less what
+ * this rung reserves, and it is the only observation of a real call size anything here can make:
+ * a served call says nothing about its own size anywhere in the runtime's log.
+ */
+export function callBehind(rung: Rung, requestedTokens: number): number {
+  return requestedTokens - rung.maxTokens;
 }
 
 export function modelRef(rung: Rung): string {

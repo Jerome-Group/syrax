@@ -45,6 +45,30 @@ function decisionLine(at: string, decision: string, candidate: string, reason?: 
   });
 }
 
+/** A refusal for size, in the shape the provider words one and the runtime passes it through. */
+function refusalLine(at: string, candidate: string, requested: number, limit: number): string {
+  const [provider, ...model] = candidate.split("/");
+  return JSON.stringify({
+    0: '{"subsystem":"model-fallback/decision"}',
+    1: {
+      event: "model_fallback_decision",
+      lane: "main",
+      decision: "candidate_failed",
+      requestedProvider: provider,
+      requestedModel: model.join("/"),
+      candidateProvider: provider,
+      candidateModel: model.join("/"),
+      // A `413` carrying `rate_limit` is what #204 measured: the runtime's overflow detector
+      // refuses any message naming tokens per minute, so a size refusal takes the rate-limit path.
+      reason: "rate_limit",
+      status: 413,
+      providerErrorMessagePreview: `Request too large for model. Limit ${limit}, Requested ${requested}, on tokens per minute (TPM).`,
+    },
+    2: "model fallback decision",
+    time: at,
+  });
+}
+
 describe("the fallback-decision reader", () => {
   it("reads what it has not read before, and nothing twice", () => {
     const { root } = temporaryMachine();
@@ -172,6 +196,53 @@ describe("the fallback-decision reader", () => {
       ["a recovered rung"],
     );
     assert.deepEqual(watch.rotted(), []);
+  });
+
+  it("says when a rung was asked for more than its own file says it is ever asked for", () => {
+    const { root, deployment } = temporaryMachine();
+    const log = join(root, "openclaw.log");
+    const rung = frontLane.rungs.find((each) => each.perRequestCeilingTokens !== null)!;
+    // The refusal #204 watched, in the provider's own words: the total charged is the call plus
+    // what this rung reserves, so a `Requested` this far over says the written figure is stale.
+    const asked = rung.largestCallTokens + rung.maxTokens + 1600;
+    writeFileSync(
+      log,
+      `${refusalLine("2026-08-24T09:00:00Z", modelRef(rung), asked, rung.perRequestCeilingTokens!)}\n`,
+    );
+    const watch = new RungWatch(deployment.monitorState as string, log);
+
+    const found = watch.watch([]);
+    const quiet = watch.watch([]);
+
+    assert.deepEqual(
+      found.map((one) => one.kind),
+      ["an outgrown call size"],
+    );
+    assert.match(found[0]!.said, new RegExp(`${rung.largestCallTokens}`));
+    assert.match(found[0]!.said, new RegExp(`${asked - rung.maxTokens}`));
+    assert.deepEqual(quiet, [], "a figure nobody has corrected was announced twice.");
+    assert.deepEqual(
+      watch.outgrown().map((one) => ({ rung: one.rung, wrote: one.wrote, saw: one.saw })),
+      [{ rung: modelRef(rung), wrote: rung.largestCallTokens, saw: asked - rung.maxTokens }],
+    );
+  });
+
+  it("leaves a figure alone when the refusal is one the written call size already covers", () => {
+    const { root, deployment } = temporaryMachine();
+    const log = join(root, "openclaw.log");
+    const rung = frontLane.rungs.find((each) => each.perRequestCeilingTokens !== null)!;
+    writeFileSync(
+      log,
+      `${refusalLine("2026-08-24T09:00:00Z", modelRef(rung), rung.largestCallTokens + rung.maxTokens, rung.perRequestCeilingTokens!)}\n`,
+    );
+    const watch = new RungWatch(deployment.monitorState as string, log);
+
+    assert.deepEqual(
+      watch.watch([]),
+      [],
+      "a call the figure covers was reported as outgrowing it.",
+    );
+    assert.deepEqual(watch.outgrown(), []);
   });
 });
 

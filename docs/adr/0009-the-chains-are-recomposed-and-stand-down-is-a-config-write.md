@@ -12,6 +12,11 @@
 > write is still hot-applied — but it is not live on the next turn. It lands when a channel reloads,
 > so the actuator is the write **plus** a safe restart. Everything structural about stand down
 > stands.
+>
+> **Amended by [ADR-0035](0035-a-rung-the-session-has-outgrown-stands-down-until-it-can-take-it.md) in one part.** A stated reset is no longer the whole of what bounds a
+> stand down: a rung the session has outgrown is bounded by a re-test instead, because there is no
+> reset to state. Everything else about stand down stands, the guard against emptying a lane
+> included, and the invariant's largest-call figure moves from the lane to the rung.
 
 [ADR-0006](0006-the-runtime-routes-and-syrax-owns-the-escape-hatch.md)'s structure is untouched: the
 runtime's own chains route, Syrax owns the escape hatch and the usage report, and neither sits on

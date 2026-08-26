@@ -12,12 +12,6 @@ import type { Lane } from "./lane.ts";
 
 export const workerLane: Lane = {
   name: "worker",
-  /**
-   * ADR-0009's largest refused request (13,431) less the 8,192 that request reserved. A sub-agent's
-   * first call is larger than the front-lane turn that spawned it, because it carries its own tool
-   * schemas and the schemas dominate.
-   */
-  largestCallTokens: 5239,
   rungs: [
     {
       provider: "syrax-gemini",
@@ -27,6 +21,7 @@ export const workerLane: Lane = {
       contextWindow: 1048576,
       maxTokens: 8192,
       perRequestCeilingTokens: null,
+      largestCallTokens: 5239,
     },
     {
       provider: "syrax-mistral",
@@ -36,6 +31,7 @@ export const workerLane: Lane = {
       contextWindow: 262144,
       maxTokens: 8192,
       perRequestCeilingTokens: null,
+      largestCallTokens: 5239,
     },
     {
       provider: "syrax-groq",
@@ -47,6 +43,13 @@ export const workerLane: Lane = {
       // the largest power of two the worker's own call leaves under Groq's 8,000-token ceiling.
       maxTokens: 2048,
       perRequestCeilingTokens: 8000,
+      /**
+       * ADR-0009's largest refused request (13,431) less the 8,192 that request reserved. This is
+       * the rung that refusal came from, and the figure belongs to it rather than to the lane: a
+       * sub-agent's first call is larger than the front-lane turn that spawned it, because it
+       * carries its own tool schemas and the schemas dominate.
+       */
+      largestCallTokens: 5239,
     },
     {
       provider: "syrax-zai",
@@ -60,6 +63,7 @@ export const workerLane: Lane = {
       // full one: a 16-token allowance came back as thinking and no content.
       maxTokens: 8192,
       perRequestCeilingTokens: null,
+      largestCallTokens: 5239,
     },
   ],
 };
