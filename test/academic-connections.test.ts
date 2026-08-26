@@ -29,6 +29,38 @@ function agent(id: string) {
   return config.agents.list.find((one) => one.id === id)!;
 }
 
+describe("reading a deployment", () => {
+  /**
+   * #196: a `Deployment` handed back to `readDeployment` type-checks, because the parameter is
+   * `unknown` and has to be. The academic paths arrive flat and leave nested, so the second pass
+   * found none of them and the generator refused a machine that named all six — by listing the six
+   * keys to add, which describes the fixture rather than the call that broke it.
+   */
+  it("refuses one it has already read, rather than dropping what it derived", () => {
+    assert.throws(
+      () => readDeployment(deployment),
+      /already a Deployment/,
+      "reading twice silently produces a deployment naming no academic products.",
+    );
+  });
+
+  it("reads a file that spells out having none, rather than calling it a second read", () => {
+    assert.equal(
+      readDeployment({ ...machine.deployment, academic: null }).academic?.academicOsRoot,
+      machine.deployment.academicOsRoot,
+      '`"academic": null` is a machine saying it has no pair, not a Deployment going back in.',
+    );
+  });
+
+  it("still reads a deployment file's own contents, which is the shape it is for", () => {
+    assert.equal(
+      readDeployment(machine.deployment).academic?.academicOsRoot,
+      machine.deployment.academicOsRoot,
+      "the guard is reading the derived field, not the flat one it is derived from.",
+    );
+  });
+});
+
 describe("the connection to the academic desk", () => {
   it("stands one desk on loopback, a port above the lane monitor's", () => {
     const server = (config.mcp.servers as Record<string, { url: string; transport: string }>)[

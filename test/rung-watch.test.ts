@@ -11,7 +11,6 @@ import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
-import { readDeployment } from "../src/adapter/deployment.ts";
 import { frontLane } from "../src/adapter/front-lane.ts";
 import { modelRef } from "../src/adapter/lane.ts";
 import { runtimeLogPath } from "../src/adapter/runtime-log.ts";
@@ -190,8 +189,8 @@ describe("the rung watch over a real gateway", { skip: !runtimeIsInstalled() }, 
     });
     await syrax.telegram.waitFor("sendMessage", isAnswer, 60_000);
 
-    const deployment = readDeployment(syrax.gateway.deployment);
-    const monitor = new LaneMonitor(deployment);
+    // The fixture read it already, and reading a `Deployment` again drops what it derived (#196).
+    const monitor = new LaneMonitor(syrax.gateway.deployment);
     const crossed = syrax.telegram.calls.length;
     const moved = await monitor.watchRungs();
 
@@ -216,6 +215,6 @@ describe("the rung watch over a real gateway", { skip: !runtimeIsInstalled() }, 
     // start from, which is a gap in the window rather than a quiet hour.
     assert.equal(monitor.rungs.window()!.from, null);
     assert.match(String(monitor.rungs.window()!.unknown), /never been read/);
-    assert.ok(runtimeLogPath(deployment.logsDir).endsWith("openclaw.log"));
+    assert.ok(runtimeLogPath(syrax.gateway.deployment.logsDir).endsWith("openclaw.log"));
   });
 });
