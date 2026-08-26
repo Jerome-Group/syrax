@@ -1,5 +1,10 @@
 # The lanes are re-composed on failure rate, and the front lane is told not to guess
 
+> **Amended by [ADR-0034](0034-the-reservation-is-charged-whether-the-call-streams-or-not.md) in
+> one part.** A request is charged the same way whether it streams or not, so *"the identical call
+> sent without streaming was not refused at all"* is false and not streaming is no escape from a
+> wall. Both terms of the invariant, the composition, and every rung's `maxTokens` are untouched.
+
 The front lane is **Gemini 3.5 Flash Lite → Mistral `ministral-3b-latest` → Groq
 `openai/gpt-oss-120b`**. The worker lane is **Gemini 3.1 Flash Lite → Mistral
 `ministral-8b-latest` → Groq `openai/gpt-oss-20b` → Z.AI `glm-4.5-flash`**. No model appears in
@@ -85,7 +90,8 @@ number:
 
 A request is not charged its call. On Groq a **streaming** request is charged its prompt **plus the
 output it reserves**, so a 2,745-token prompt was presented as `Requested 10931` against an 8,000
-ceiling — and the identical call sent without streaming was not refused at all. OpenClaw streams.
+ceiling — and ~~the identical call sent without streaming was not refused at all~~ *(spent —
+[ADR-0034](0034-the-reservation-is-charged-whether-the-call-streams-or-not.md))*. OpenClaw streams.
 The invariant becomes:
 
 > **A rung's per-request ceiling must exceed the largest call its lane makes *plus that rung's own

@@ -604,16 +604,18 @@ APIs and, where it concerns a turn rather than a call, against the pinned `openc
 *"cannot be a worker rung at any hour of any day"*. Both findings rest on a setting nobody had
 looked at.
 
-`maxTokens: 8192` sat in the prototype's model definitions. Groq charges a **streaming** request its
-prompt *plus the output it reserves*, so a 2,745-token front prompt was presented as **10,931**
-against an 8,000 ceiling — `Limit 8000, Requested 10931`, reproduced exactly. Set `maxTokens: 1024`
-and the identical turn answers **200 in 776 ms**; a full delegating turn runs **4.4 s** with no
-failover and no 429, and Groq **serves sub-agent calls** at 620 ms and 1,089 ms.
+`maxTokens: 8192` sat in the prototype's model definitions. Groq charges a request its prompt *plus
+the output it reserves*, so a 2,745-token front prompt was presented as **10,931** against an 8,000
+ceiling — `Limit 8000, Requested 10931`, reproduced exactly. Set `maxTokens: 1024` and the identical
+turn answers **200 in 776 ms**; a full delegating turn runs **4.4 s** with no failover and no 429,
+and Groq **serves sub-agent calls** at 620 ms and 1,089 ms.
 
 The rule is narrower than it first looks and was isolated by elimination: the same request with
-`max_tokens: 8192` **not** streaming returns 200, and so does one variant carrying
-`reasoning_effort`. What is established is the trap, not the formula — a streaming request plus a
-large reservation is refused, and OpenClaw streams.
+`max_tokens: 8192` **not** streaming returns 200 *(spent —
+[ADR-0034](../adr/0034-the-reservation-is-charged-whether-the-call-streams-or-not.md), which
+measured both the charge and the refusal with streaming off, and leaves this 200 unreconciled)*, and
+so does one variant carrying `reasoning_effort`. What is established is the trap, not the formula —
+a request plus a large reservation is refused, and streaming is not what does it.
 
 So Groq's demotion survives, and **its recorded reason does not**. What disqualifies Groq from the
 top of the front lane is that 8,000 TPM against a ~2,745-token prompt is **~2.6 calls a minute**,

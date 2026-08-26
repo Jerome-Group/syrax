@@ -12,7 +12,10 @@ export type Rung = {
   name: string;
   reasoning: boolean;
   contextWindow: number;
-  /** Output the request reserves. A streaming call is charged its prompt plus this (ADR-0016). */
+  /**
+   * Output the request reserves. A call is charged its prompt plus this, whether or not it streams
+   * and whether or not the reservation is used (ADR-0016, ADR-0034).
+   */
   maxTokens: number;
   /** What the provider refuses a single request over. `null` where it publishes none. */
   perRequestCeilingTokens: number | null;
