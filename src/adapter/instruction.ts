@@ -6,6 +6,10 @@
  * Every line here is paid for on every turn (ADR-0011), so nothing is here that the code, the tool
  * descriptions or the runtime already says. What is left is the three things a model gets wrong
  * without being told, and the shape of a chat's own corpus turn.
+ *
+ * Changing any of it is unobservable in a chat session already running, so a change made here
+ * cannot be judged until a fresh one starts — *Judging an instruction change* in `AGENTS.md` says
+ * why, and four pull requests over one capability are what it cost to find out.
  */
 
 import { dueTool, promoteTool, syncTool } from "./academic-tools.ts";
