@@ -186,102 +186,62 @@ describe("General answering with the corpus", { skip: !runtimeIsInstalled() }, (
   });
 
   /**
-   * The arguments here are the ones the standing instruction asks for, and that is the point rather
-   * than a detail. #198 shipped an instruction describing a `text` block and a test scripting the
-   * list in `message`: the runtime discards a block beside a `message`, so this proved the surface
-   * would render a list nothing was ever going to send it. A shortlist reached the Owner as ten
-   * numbers naming nothing, green all the way. If the instruction changes shape, this call does too.
+   * ADR-0033: a close call is an ordinary message now. Ten buttons carrying opaque tokens was a
+   * tool call `gemini-3.5-flash-lite` aborted mid-serialisation and `openai/gpt-oss-120b` failed
+   * schema validation on six times, so what reached the Owner was nothing at all. The arguments
+   * here are the ones the standing instruction asks for, and that is the point rather than a
+   * detail: #198 shipped a test scripting one shape while the instruction described another, and
+   * stayed green while the chat was broken.
    */
-  it("offers three tappable candidates and a way to want none of them", async () => {
+  it("offers the candidates as one message, numbered, with nothing to tap", async () => {
     const offered = await turn(
       "that thing about algebras",
       {
         action: "send",
-        message: `Please select the document you are looking for:\n\n${numbered}`,
-        presentation: {
-          blocks: [
-            {
-              type: "buttons",
-              buttons: [
-                ...shortlist.candidates.map((_, at) => ({
-                  label: String(at + 1),
-                  value: shortlist.choices[at],
-                })),
-                { label: "None of these", value: shortlist.decline },
-              ],
-            },
-          ],
-        },
+        message: `Which of these did you mean?\n\n${numbered}`,
       },
-      { method: "sendMessage", predicate: carriesAKeyboard },
+      { method: "sendMessage" },
     );
 
-    const keyboard = (offered.body.reply_markup as { inline_keyboard: { text: string }[][] })
-      .inline_keyboard;
-    assert.deepEqual(
-      keyboard.flat().map((button) => button.text),
-      ["1", "2", "3", "None of these"],
-    );
-    assert.equal(offered.body.message_thread_id, syrax.carriers.general);
-
-    // The point of the whole change: the names are somewhere the client cannot truncate them, and
-    // the label is short enough that it never will. #192 had two different papers both reading
-    // `MH1300_M…` because the name was on the button.
     // Read as the Owner reads it: the surface formats what looks like a filename, so `wedderburn.md`
     // reaches the wire as `<code>wedderburn.md</code>` and a plain substring is testing the markup.
     const read = String(offered.body.text).replace(/<[^>]+>/g, "");
     for (const [at, name] of shortlist.candidates.entries()) {
-      assert.ok(read.includes(name), `${name} is nowhere the Owner can read it.`);
       assert.ok(
         read.includes(`${at + 1}. ${name}`),
-        `${name} is in the message unnumbered, so no button points at it.`,
+        `${name} is not on a line the Owner can name.`,
       );
     }
-    for (const button of keyboard.flat().slice(0, -1)) {
-      assert.ok(button.text.length <= 2, `a label that can truncate: ${button.text}`);
-    }
+    assert.equal(
+      offered.body.reply_markup,
+      undefined,
+      "a keyboard came back, which is the tool call ADR-0033 removed because it could not be emitted.",
+    );
+    assert.equal(offered.body.message_thread_id, syrax.carriers.general);
   });
 
   /**
-   * Why the list is the `message` (#198). The runtime keeps the `message` and discards a `text`
-   * block sitting beside it, so an instruction asking for the names in a block ships a shortlist of
-   * numbers naming nothing — which is what reached the Owner, with every test green, because the
-   * test above scripted a shape the instruction was no longer asking for.
-   *
-   * Scripted, so it pins the runtime rather than the model. If a bump starts rendering both, this
-   * goes red and the instruction has a choice it did not have.
+   * A keyboard of its own rather than a shortlist's, since ADR-0033 took the shortlist's away. What
+   * these two prove is the surface — that a tap is acknowledged before anything else crosses the
+   * wire, and that an edit drops buttons it does not pass again — and both still hold for the
+   * keyboards Syrax does put up: System's *remove this rung*, and the academic pair's two writes.
    */
-  it("drops a text block that sits beside a message, keeping only the message", async () => {
-    const offered = await turn(
-      "that thing about algebras, in a block",
+  async function postAKeyboard(): Promise<OutboundCall> {
+    return await turn(
+      "put a keyboard up",
       {
         action: "send",
-        message: "Please select the document you are looking for:",
+        message: "Tap one.",
         presentation: {
-          blocks: [
-            { type: "text", text: numbered },
-            {
-              type: "buttons",
-              buttons: [{ label: "1", value: shortlist.choices[0] }],
-            },
-          ],
+          blocks: [{ type: "buttons", buttons: [{ label: "one", value: shortlist.choices[0] }] }],
         },
       },
       { method: "sendMessage", predicate: carriesAKeyboard },
     );
-
-    const read = String(offered.body.text).replace(/<[^>]+>/g, "");
-    assert.equal(read.trim(), "Please select the document you are looking for:");
-    for (const name of shortlist.candidates) {
-      assert.ok(
-        !read.includes(name),
-        `${name} survived in a block, so the message no longer wins.`,
-      );
-    }
-  });
+  }
 
   it("acknowledges a tap before the work the tap triggers, and hands its value to the chat", async () => {
-    const keyboarded = syrax.telegram.matching("sendMessage", carriesAKeyboard).at(-1)!;
+    const keyboarded = await postAKeyboard();
     await syrax.telegram.quiet();
     const from = syrax.telegram.calls.length;
     const asked = syrax.provider.requests.length;
@@ -304,7 +264,7 @@ describe("General answering with the corpus", { skip: !runtimeIsInstalled() }, (
   });
 
   it("keeps a keyboard across an edit only where the edit passes it again", async () => {
-    const keyboarded = syrax.telegram.matching("sendMessage", carriesAKeyboard).at(-1)!;
+    const keyboarded = await postAKeyboard();
     const edit = (extra: Record<string, unknown>) => ({
       action: "edit",
       channel: "telegram",

@@ -4,6 +4,10 @@
 > [ADR-0032](0032-the-button-carries-the-number-and-the-message-carries-the-name.md)** in one: a
 > button carries its candidate's number rather than its name, and the names are the message. The
 > count of ten stands; what the ten look like does not.
+>
+> **Amended by [ADR-0033](0033-the-shortlist-is-a-message-and-the-owner-says-a-number.md)** in one
+> more: there are no buttons. Ten is now ten lines of a message the Owner answers by typing a
+> number, which is the page-to-scan this record already said ten buttons had become.
 
 [ADR-0004](0004-syrax-owns-the-file-search-index.md) chose three candidates and
 [ADR-0026](0026-the-shortlist-is-the-units-and-the-file-is-handed-over.md) built a keyboard for

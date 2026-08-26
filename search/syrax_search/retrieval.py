@@ -86,25 +86,16 @@ class Candidate:
     extracted: bool
     """False where only the name is indexed: the document exists and was never read."""
 
-    def as_result(self, offered: tuple[str, int] | None = None) -> dict:
-        """One document as a tool reply names it, and what an offer of it carries: value, then line.
+    def as_result(self, position: int | None = None) -> dict:
+        """One document as a tool reply names it, and the line the Owner reads it on.
 
-        The pair is one argument because the two may not come apart. `position` is the line the
-        Owner reads this document on, 1-based, and it is minted here for the reason `choice` is: a
-        model that counts its own list can print `3.` beside the fourth name, and a tap on `3` then
-        fetches a document whose name they never read (#192). A number that arrived as `null` would
-        send it back to counting, so there is no way to spell that.
+        `position` is 1-based and minted here rather than counted by a model: one that numbers its
+        own list can print `3.` beside the fourth name, and *three* then fetches a document whose
+        name they never read (#192). It is what the Owner says back and what `choose` resolves, so
+        the number they read and the number the unit means are the same number by construction.
         """
-        if offered is None:
-            return {"path": self.path, "name": self.name, "contents_indexed": self.extracted}
-        choice, position = offered
-        return {
-            "path": self.path,
-            "name": self.name,
-            "contents_indexed": self.extracted,
-            "choice": choice,
-            "position": position,
-        }
+        described = {"path": self.path, "name": self.name, "contents_indexed": self.extracted}
+        return described if position is None else described | {"position": position}
 
 
 @dataclass(frozen=True)
@@ -124,16 +115,16 @@ class Verdict:
     best: float | None = None
     """The best the vector arm reached at all, which is the number `empty` was decided on."""
 
-    def as_reply(self, choices: list[str] | None = None) -> dict:
-        """`choices` are the tap values a close call's shortlist minted, one per candidate."""
-        tappable = choices if choices is not None else [None] * len(self.candidates)
+    def as_reply(self, numbered: bool = False) -> dict:
+        """`numbered` on a close call, whose candidates are a list the Owner reads and answers.
+
+        Every other verdict is a document rather than a line of one, so it carries no number.
+        """
         return {
             "verdict": self.state,
             "results": [
-                one.as_result(None if choice is None else (choice, position))
-                for position, (one, choice) in enumerate(
-                    zip(self.candidates, tappable, strict=True), start=1
-                )
+                one.as_result(position if numbered else None)
+                for position, one in enumerate(self.candidates, start=1)
             ],
             "floor": self.floor,
             "floor_provenance": self.provenance,

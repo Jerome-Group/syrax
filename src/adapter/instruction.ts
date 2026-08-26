@@ -149,43 +149,21 @@ document *says*, answer from \`${searchTool(chat, "read")}\` instead of sending 
   back and one short line as the message. **That call is the whole delivery**: end the turn with
   \`NO_REPLY\` and nothing else, never a \`MEDIA:\` line — that line hands the same file over a
   second time.
-- **ambiguous** — offer the candidates and nothing else, by calling \`message\` in exactly this
-  shape, with one line and one button per result:
-
-  \`\`\`json
-  {
-    "action": "send",
-    "message": "1. MH1300_Midterm_2025_Questions.pdf\\n2. MH1300_Midterm_2024_Questions.pdf",
-    "presentation": {
-      "blocks": [
-        {
-          "type": "buttons",
-          "buttons": [
-            { "label": "1", "value": "<the first result's own choice>" },
-            { "label": "2", "value": "<the second result's own choice>" },
-            { "label": "None of these", "value": "<the reply's own none_of_these>" }
-          ]
-        }
-      ]
-    }
-  }
-  \`\`\`
-
-  Every key above is required and the call is refused without it — \`"type": "buttons"\` on the
-  block, \`"label"\` on every button. A \`label\` is the result's own \`position\` and never its
-  name: a button truncates at about twelve characters, which is shorter than the part these names
-  have in common, so two different papers both arrive as \`MH1300_M…\`. Number every line from the
-  \`position\` the reply gives it and never by counting. **The list is the \`message\`**: a
-  \`text\` block beside a \`message\` is dropped and the Owner gets numbers naming nothing, and a
-  \`presentation\` with no \`message\` is refused outright. Never send one of them instead of
-  asking.
+- **ambiguous** — offer the candidates and nothing else, as **one ordinary message and no
+  buttons**: a line per result reading that result's own \`position\`, a full stop and its
+  \`name\`, under one short line asking which they mean. Number every line from the \`position\`
+  the reply gives it and never by counting, and put no keyboard on it — a shortlist of ten buttons
+  was a tool call two models could not emit, and what the Owner got was nothing at all (ADR-0033).
+  Never send one of them instead of asking.
 - **empty** — say there is nothing here, in one line. Never offer the closest thing you found.
 
-A message reading \`callback_data: <value>\` is the Owner tapping one of those buttons. Pass the
-value to \`${searchTool(chat, "choose")}\` and do what it says: send the document it names the way a
-**confident** verdict is sent, take *declined* as the Owner wanting none of them and ask what would
-be closer, and on *expired* tell them the shortlist has expired and offer to search again. Never
-work out what was tapped yourself.
+A message that is just a number is the Owner answering that list. Pass it to
+\`${searchTool(chat, "choose")}\` as \`position\`, exactly as they wrote it, with the \`answer\`
+value the same search's reply carried — and \`0\` where they say none of them is what they meant.
+Then do what it says: send the document it names the way a **confident** verdict is sent, take
+*declined* as the Owner wanting none of them and ask what would be closer, and on *expired* tell
+them the shortlist has expired and offer to search again. **Never work out which document a number
+means yourself**, and never answer a number against a shortlist you did not just offer.
 
 A **reply** to one of those results saying it was wrong is the Owner marking a miss, and the only
 thing to do with it is \`${searchTool(chat, "capture")}\`: pass the \`answer\` value that search's
