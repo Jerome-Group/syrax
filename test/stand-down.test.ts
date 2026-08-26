@@ -349,8 +349,10 @@ describe("a stand down over a real gateway", { skip: !runtimeIsInstalled() }, ()
     // One turn before the write: it says where the measurement starts, and it lets the config
     // watcher attach — the gateway starts it after reporting itself ready.
     assert.equal((await turn(syrax, "Which model is this?")).model, gemini);
-    const deployment = readDeployment(syrax.gateway.deployment);
-    const monitor = new LaneMonitor(deployment);
+    // The fixture read it when it stood the gateway, and a `Deployment` is not the shape
+    // `readDeployment` maps: reading it twice drops the academic paths into a nested field the
+    // second pass cannot see, and the generator then refuses a machine that named all six (#196).
+    const monitor = new LaneMonitor(syrax.gateway.deployment);
 
     const stood = await monitor.standDown({
       rung: `syrax-gemini/${gemini}`,

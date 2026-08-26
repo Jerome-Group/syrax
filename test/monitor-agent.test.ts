@@ -147,7 +147,10 @@ describe("the lane monitor's pre-flight", { skip: !onLaunchd }, () => {
   it("refuses a store that is not there, which is a machine the wizard has not run on", async () => {
     const { root, deployment, installed } = machine();
     writeFileSync(join(root, "moved"), "");
-    const gone = readDeployment({ ...deployment, secretsStore: join(root, "gone", "syrax.json") });
+    // Overridden rather than re-read: this is already a `Deployment`, and reading one again drops
+    // the academic paths it derived (#196). Nothing here reads them, which is exactly why it went
+    // unnoticed until the guard existed.
+    const gone = { ...deployment, secretsStore: join(root, "gone", "syrax.json") };
     const wrapper = join(root, "gone-wrapper.sh");
     writeFileSync(
       wrapper,

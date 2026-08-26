@@ -144,6 +144,21 @@ export function readDeployment(source: unknown): Deployment {
   }
   const input = source as Record<string, unknown>;
 
+  // A `Deployment` going back in is well-typed, because the parameter is `unknown` and has to be —
+  // it validates JSON nobody wrote to a schema. What it is not is *readable*: the academic paths
+  // arrive flat and leave nested, so a second pass finds none of them and produces a deployment
+  // naming no products. The generator then refuses a machine that named all six, and says so by
+  // listing the six keys to add — which sends the reader to the fixture rather than to the call
+  // (#196). `academic` is derived and never written in the file, so its presence is the tell. The
+  // *object* is: a literal `"academic": null` is somebody spelling out that a machine has none,
+  // and refusing that as a double-read would send the reader hunting for a call that never was.
+  if (typeof input.academic === "object" && input.academic !== null) {
+    throw new InvalidDeployment(
+      "This is already a Deployment rather than a deployment file's contents: reading it again " +
+        "would drop the academic paths it has derived. Use it as it is.",
+    );
+  }
+
   for (const key of requiredPaths) {
     const value = input[key];
     if (typeof value !== "string" || !value.startsWith("/")) {
