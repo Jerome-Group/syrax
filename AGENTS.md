@@ -33,6 +33,33 @@ put live values and runtime state outside the repository.
   request for one, and it fires after the push — so a caught credential is burned: rotate it
   first, then clean up. The full response is in `CONTRIBUTING.md`.
 
+## Judging an instruction change
+
+**A change to a standing instruction has no effect on the chat session that was running when it
+landed.** Starting a fresh one — `/new` in that chat — is a precondition of judging the change,
+not a troubleshooting step to reach for once it looks inert.
+
+Carry the mechanism rather than the ritual, because it reaches cases this paragraph did not
+anticipate. The instruction arrives as project context injected from the agent's workspace when
+a session starts. A session already under way carries its own history instead, and in that
+history sit the model's own earlier tool calls — and an in-context example outweighs an
+instruction, reliably. So a model that has already emitted a malformed call goes on copying its
+own earlier attempt, however the instruction now reads. The new text is not in the window it is
+reading.
+
+[#204](https://github.com/Jerome-Group/syrax/issues/204) is where this was measured, in the
+trajectories and the runtime log. What it cost is four pull requests over one capability —
+[#195](https://github.com/Jerome-Group/syrax/pull/195),
+[#199](https://github.com/Jerome-Group/syrax/pull/199),
+[#201](https://github.com/Jerome-Group/syrax/pull/201) and
+[#203](https://github.com/Jerome-Group/syrax/pull/203) — each shipping an instruction change and
+each judged in the chat that was already open. Those wordings were being guessed as well, which
+[ADR-0033](docs/adr/0033-the-shortlist-is-a-message-and-the-owner-says-a-number.md) records and
+this does not replace. That is the trap rather than a caveat on it: two failures that look
+identical from the chat, and a session that cannot see the new text cannot tell them apart.
+
+`src/adapter/instruction.ts` composes the text this is about.
+
 ## Code standards
 
 `CODING_STANDARDS.md` is the full version: the burden is on the code, not on docs — names,

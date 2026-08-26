@@ -66,6 +66,11 @@ Two rules, and they pull in opposite directions on purpose.
   last one's context is disposable — and carrying it forward is how a session ends up confidently
   building against a decision that was superseded two tickets ago.
 
+Both rules are about **this** session — the one working in the checkout. A chat session against
+the deployed runtime is the other kind, and it has a rule of its own that pulls the opposite
+way: an instruction change cannot be judged in a chat that was already open. *Judging an
+instruction change* in `AGENTS.md` is that rule; nothing here reaches it.
+
 Everywhere else, the choice at a phase boundary — continue, `/clear`, `/handoff`, subagent,
 `/compact` — is the ordered tree in `PHASE-BOUNDARIES.md`. It ships with the skills rather than
 with any repository, so reach it through `/ask-matt`, which links it. It is deliberately not
