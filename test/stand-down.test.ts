@@ -20,6 +20,7 @@ import { runtimeLogPath } from "../src/adapter/runtime-log.ts";
 import { writePrivateFile } from "../src/adapter/private-state.ts";
 import { workerLane } from "../src/adapter/worker-lane.ts";
 import { LaneMonitor } from "../src/monitor/lane-monitor.ts";
+import { WouldEmptyLane } from "../src/monitor/stand-down.ts";
 import { standDownLedger, type StandDown } from "../src/adapter/stand-down-ledger.ts";
 import {
   runtimeIsInstalled,
@@ -248,7 +249,9 @@ describe("a stand down", () => {
           why: "outgrown",
           kind: "size",
         }),
-      /last rung/,
+      // Typed rather than matched on its words: it is the one refusal an automatic stand down
+      // expects to meet, and telling it from a failed write is what keeps that catch narrow.
+      WouldEmptyLane,
     );
   });
 
@@ -310,6 +313,9 @@ describe("a stand down", () => {
       "the refusal survived the restart, so the next sweep puts the rung back out untried.",
     );
     assert.ok(frontChain().fallbacks.includes(outgrew), "the rung did not go back into the chain.");
+    // The consequence, rather than the proxy for it: the next poke has no fresh refusal to act on.
+    await restarted.watchRungs(later);
+    assert.deepEqual(restarted.standDowns.active(later), []);
   });
 
   it("reads a ledger written before stand downs had kinds as the allowance ones they were", () => {

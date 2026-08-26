@@ -46,7 +46,13 @@ function decisionLine(at: string, decision: string, candidate: string, reason?: 
 }
 
 /** A refusal for size, in the shape the provider words one and the runtime passes it through. */
-function refusalLine(at: string, candidate: string, requested: number, limit: number): string {
+function refusalLine(
+  at: string,
+  candidate: string,
+  requested: number,
+  limit: number,
+  status = 413,
+): string {
   const [provider, ...model] = candidate.split("/");
   return JSON.stringify({
     0: '{"subsystem":"model-fallback/decision"}',
@@ -61,7 +67,7 @@ function refusalLine(at: string, candidate: string, requested: number, limit: nu
       // A `413` carrying `rate_limit` is what #204 measured: the runtime's overflow detector
       // refuses any message naming tokens per minute, so a size refusal takes the rate-limit path.
       reason: "rate_limit",
-      status: 413,
+      status,
       providerErrorMessagePreview: `Request too large for model. Limit ${limit}, Requested ${requested}, on tokens per minute (TPM).`,
     },
     2: "model fallback decision",
@@ -225,6 +231,59 @@ describe("the fallback-decision reader", () => {
       watch.outgrown().map((one) => ({ rung: one.rung, wrote: one.wrote, saw: one.saw })),
       [{ rung: modelRef(rung), wrote: rung.largestCallTokens, saw: asked - rung.maxTokens }],
     );
+  });
+
+  it("leaves a bucket 429 alone, which is worded like a wall and is not one", () => {
+    const { root, deployment } = temporaryMachine();
+    const log = join(root, "openclaw.log");
+    const rung = frontLane.rungs.find((each) => each.perRequestCeilingTokens !== null)!;
+    // The provider's own rate-limit wording, which names `Requested` exactly as a size refusal
+    // does. Only the status separates them, and a context overflow is worded alike again.
+    writeFileSync(
+      log,
+      `${refusalLine("2026-08-24T09:00:00Z", modelRef(rung), rung.perRequestCeilingTokens! + 4000, rung.perRequestCeilingTokens!, 429)}\n`,
+    );
+    const watch = new RungWatch(deployment.monitorState as string, log);
+
+    assert.deepEqual(watch.watch([]), [], "a rate limit was read as a call outgrowing its figure.");
+    assert.deepEqual(watch.outgrown(), []);
+  });
+
+  it("reads a grouped number, and one the shorter preview truncated away", () => {
+    const { root, deployment } = temporaryMachine();
+    const log = join(root, "openclaw.log");
+    const rung = frontLane.rungs.find((each) => each.perRequestCeilingTokens !== null)!;
+    const asked = rung.largestCallTokens + rung.maxTokens + 1600;
+    const grouped = asked.toLocaleString("en-US");
+    writeFileSync(
+      log,
+      `${JSON.stringify({
+        0: '{"subsystem":"model-fallback/decision"}',
+        1: {
+          event: "model_fallback_decision",
+          decision: "candidate_failed",
+          requestedProvider: rung.provider,
+          requestedModel: rung.modelId,
+          candidateProvider: rung.provider,
+          candidateModel: rung.modelId,
+          reason: "rate_limit",
+          status: 413,
+          // The runtime cuts this one at 200 characters from the head, so the number falls off it.
+          providerErrorMessagePreview: `Request too large for model \`${rung.modelId}\` in organization org-${"0".repeat(48)} service tier \`on_demand\` on tokens per minute (TPM): Limit ${rung.perRequestCeilingTokens}, Re`,
+          errorPreview: `Request too large for model \`${rung.modelId}\` in organization org-${"0".repeat(48)} service tier \`on_demand\` on tokens per minute (TPM): Limit ${rung.perRequestCeilingTokens}, Requested ${grouped}.`,
+        },
+        2: "model fallback decision",
+        time: "2026-08-24T09:00:00Z",
+      })}\n`,
+    );
+    const watch = new RungWatch(deployment.monitorState as string, log);
+
+    assert.deepEqual(
+      watch.watch([]).map((one) => one.kind),
+      ["an outgrown call size"],
+      `${grouped} was not read: a grouped number, or one the 200-character preview cut off.`,
+    );
+    assert.equal(watch.outgrown()[0]!.saw, asked - rung.maxTokens);
   });
 
   it("leaves a figure alone when the refusal is one the written call size already covers", () => {

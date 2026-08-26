@@ -202,7 +202,9 @@ function decided(before: State, decisions: readonly Decision[]): State {
   // its own fix would tell the Owner to make a change already made.
   outgrown = outgrown.filter((one) => {
     const rung = rungNamed(one.rung);
-    return rung === undefined || rung.largestCallTokens < one.saw;
+    // A rung no chain holds any more has no figure left to correct, and nothing offers a way to
+    // clear it: keeping the entry would leave a line in every report for ever.
+    return rung !== undefined && rung.largestCallTokens < one.saw;
   });
   return { serving, rotted, outgrown };
 }
@@ -226,7 +228,7 @@ function decided(before: State, decisions: readonly Decision[]): State {
  */
 function outgrewItsFigure(decision: Decision, lane: string): Outgrown | undefined {
   if (decision.status !== sizeRefusalStatus) return undefined;
-  const requested = requestedTokens(decision.said);
+  const requested = requestedTokens(decision.saidInFull) ?? requestedTokens(decision.said);
   const rung = rungNamed(decision.candidate);
   if (requested === undefined || rung === undefined) return undefined;
   const saw = callBehind(rung, requested);
