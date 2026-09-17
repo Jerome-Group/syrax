@@ -14,11 +14,14 @@ the layout and [`AGENTS.md`](AGENTS.md) for the working rules.
 all four and the write path recreating a chat's topic the moment a send finds it cleared. The
 runtime is OpenClaw, pinned to an exact version and installed outside this checkout; the adapter
 that configures it, and the suite that proves the reply path against a local stub of each wire, are
-here. The worker lane, the capability tool layers and the search index are still ahead.
+here. Worker delegation, file search, the lane monitor and the academic desk are implemented. The full
+Media capability and a fresh end-to-end acceptance run remain tracked work; see
+[setup prerequisites](docs/setup.md#before-you-start) before attempting a deployment.
 
 ## What is here
 
 - [`docs/system-overview.md`](docs/system-overview.md) — the components, data flow, and public/private boundary.
+- [`docs/providers.md`](docs/providers.md) — provider accounts, API-key placement, model chains and credential checks.
 - [`docs/setup.md`](docs/setup.md) — the safe setup sequence and the checks before a runtime is launched.
 - [`docs/configuration.md`](docs/configuration.md) — the configuration contract and placeholder example.
 - [`config/syrax.example.toml`](config/syrax.example.toml) — illustrative public configuration, not a live file.
@@ -29,10 +32,14 @@ here. The worker lane, the capability tool layers and the search index are still
 
 ## Getting started
 
+You supply your own provider accounts and Telegram bot. This is a macOS LaunchAgent setup and
+currently requires the academic-os and ntulearn integrations. For the exact key template and
+account links, read [Providers and credentials](docs/providers.md).
+
 Read the overview first, then follow [`docs/setup.md`](docs/setup.md): install the pinned runtime
 outside the checkout, write the secrets store, describe the machine, generate the runtime's
-configuration, then install the LaunchAgent that supervises it. `npm test` proves the reply path
-with no external call and no quota spent.
+configuration, then install the LaunchAgent that supervises it. `SYRAX_RUNTIME_ROOT="$RUNTIME_ROOT" npm test` exercises the reply path against local stubs
+with no external call and no quota spent; without that variable, gateway-backed tests skip.
 
 ## Public boundary
 

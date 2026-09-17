@@ -1,15 +1,73 @@
 # Setup
 
 One bot carrying the four chats — **General**, **Academic**, **Media** and **System** — with the
-front lane answering each of them and delegating the slow work to the worker lane. The capability
-tool layers are later work, so what follows stops where the system does rather than describing one
-that is not standing yet.
+front lane answering each of them and delegating the slow work to the worker lane. The tracked adapter includes worker delegation, search, the lane monitor and the academic desk.
+This guide describes that configuration; a clean live-account acceptance run is tracked separately
+in [#132](https://github.com/Jerome-Group/syrax/issues/132).
 
 Everything Syrax stores lives outside this checkout. The repository holds the pin, the adapter that
 generates the runtime's configuration, and the tests — nothing a `git add` could turn into a public
 commit.
 
+## Before you start
+
+This is the Owner's **macOS, single-user Telegram** setup. The supplied service installers use
+LaunchAgents, macOS `stat` and `pmset`; Linux and Windows service installation are not supplied.
+Use a dedicated bot and private state root, rather than replacing an existing OpenClaw installation.
+LaunchAgents run in your logged-in user's session. Set the Mac's timezone to the timezone you want
+for the morning brief and schedules; keeping the machine awake and logged in is part of operating it.
+
+Prepare these first:
+
+- Git, **Node.js 26 or newer** and npm; **Python 3.14** for search. The wrappers use Node from
+  `/opt/homebrew/bin`, `/usr/local/bin` or the system PATH they set, not your shell's version-manager
+  initialization. Verify that a supported Node is available there before loading a service.
+- Your own **Gemini, Mistral, Groq and Z.AI developer API keys**, a Telegram bot token and a locally
+  generated gateway token. [Providers and credentials](providers.md) gives the official account
+  links, exact JSON template and commands. API quotas and any charges belong to your accounts.
+- A document directory to index, with an academic subdirectory for `searchScopes.academic`.
+  The pinned search model takes approximately 698 MB before the environment and index; allow
+  additional disk space for your document corpus and private logs.
+- The separately configured [academic-os](https://github.com/Jerome-Group/academic-os) and
+  [ntulearn](https://github.com/Jerome-Group/ntulearn) products. Follow each repository's setup first:
+  academic-os needs its calendar configuration and built CLI; ntulearn needs your own working
+  authenticated session. Syrax does not supply those accounts or log you in.
+
+**The academic pair is currently required by the configuration generator.** Its six path fields
+and `searchScopes.academic` cannot simply be omitted to get a chatbot-only install. If you cannot
+use those integrations, reproducing the complete setup requires adapting the agent/tool wiring in
+source; that reduced deployment is not a supported setup option yet. The Media topic can answer
+chat messages, but the full Media capability is separate unfinished work
+([#131](https://github.com/Jerome-Group/syrax/issues/131)).
+
+## Clone and choose private paths
+
+Run the following in a terminal. The checkout may live wherever you keep source; the private root
+must be **outside it**. The commands below are for a new installation, and every later command is
+run from the repository root in the same shell.
+
+```sh
+git clone https://github.com/Jerome-Group/syrax.git
+cd syrax
+npm ci
+
+umask 077
+export SYRAX_PRIVATE="$HOME/.local/share/syrax"
+export RUNTIME_ROOT="$SYRAX_PRIVATE/runtime"
+export SEARCH_ROOT="$SYRAX_PRIVATE/search-env"
+export DEPLOYMENT="$SYRAX_PRIVATE/deployment.json"
+export GENERATED_CONFIG="$SYRAX_PRIVATE/openclaw.json"
+export STATE_DIR="$SYRAX_PRIVATE/runtime-state"
+mkdir -p "$RUNTIME_ROOT" "$SYRAX_PRIVATE/secrets"
+chmod 700 "$SYRAX_PRIVATE" "$SYRAX_PRIVATE/secrets"
+cp -n config/deployment.example.json "$DEPLOYMENT"
+```
+
+These environment variables hold paths only. Re-establish them if you open another shell.
+The shell variables do not configure Syrax by themselves: edit the deployment JSON to match them.
+
 ## Safe setup sequence
+
 
 1. Read [system-overview.md](system-overview.md) and [configuration.md](configuration.md).
 2. **Install the pinned runtime outside the checkout.** The lockfile is the pin
@@ -18,16 +76,16 @@ commit.
 
    ```sh
    cp runtime/package.json runtime/package-lock.json "$RUNTIME_ROOT/"
-   npm ci --prefix "$RUNTIME_ROOT"
+   (cd "$RUNTIME_ROOT" && npm ci)
    ```
 
-3. **Write the secrets store.** One JSON file, mode `600` inside a `700` directory
-   ([ADR-0010](adr/0010-one-secrets-store-reached-by-file-backed-refs.md)). It holds the provider
-   keys, the bot token and the gateway auth token; nothing else on the machine holds any of them,
-   and no key is ever exported into an environment.
-4. **Describe the machine.** Copy
-   [`config/deployment.example.json`](../config/deployment.example.json) outside the repository and
-   replace every path and the Owner's Telegram user ID.
+3. **Write the secrets store.** Follow [Providers and credentials](providers.md#create-the-secrets-store)
+   to fill the private copy of `config/secrets.example.json`, generate the gateway token and check
+   all six values without printing them. Keep it mode `600` in a `700` directory.
+4. **Describe the machine.** Edit the private deployment copied above. Use absolute paths,
+   not shell variables or `~`. [Deployment fields](#deployment-fields) below maps every field to
+   what you must provide. Complete [Telegram preparation](#telegram-preparation) below and set
+   `ownerTelegramUserId` to your numeric user ID before continuing.
 5. **Generate the runtime configuration.**
 
    ```sh
@@ -79,8 +137,9 @@ commit.
    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jerome-group.syrax.search.plist
    ```
 
-   The same command writes the two index schedules beside it, and they are loaded the same way.
-   Nothing is indexed until a pass is poked at the running unit:
+   The installer also prints bootstrap commands for `index-incremental` and `index-full`.
+   Run both printed commands to enable the recurring index passes. To index immediately instead
+   of waiting for a schedule, poke the running search unit (use your `searchPort` if changed):
 
    ```sh
    curl --fail -X POST http://127.0.0.1:18790/index/full
@@ -93,6 +152,10 @@ commit.
    node src/cli/install-monitor-agent.ts "$DEPLOYMENT"
    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jerome-group.syrax.hatch.plist
    ```
+
+   Also run the installer's printed bootstrap commands for `rung-watch`, `rung-sweep` and
+   `retrieval-report`. The daily rung sweep makes real provider requests, so it consumes quota.
+   The other two schedules inspect local state and can post reports into System.
 
    What its wrapper runs is this checkout, so move or rename the checkout and run the installer
    again. Its pre-flight **refuses to start** when the counters' directory cannot be made private,
@@ -116,6 +179,131 @@ commit.
 
 11. Before committing a change, inspect the staged file list and search it for credentials, private
     conversations, machine-specific paths, and provider responses.
+
+## Deployment fields
+
+Keep the example's JSON structure and edit its values. For the private root above, replace
+`/absolute/path/outside/this/repository` with the **expanded absolute path** printed by
+`printf '%s\n' "$SYRAX_PRIVATE"`, then adjust the following. Do not apply that replacement to a
+live file from another installation.
+
+| Fields | Values to supply |
+|--------|------------------|
+| `runtimeRoot`, `configPath`, `stateDir` | Match `RUNTIME_ROOT`, `GENERATED_CONFIG`, `STATE_DIR` above |
+| `workspace`, `logsDir`, `secretsStore` | Private `workspace`, `logs`, `secrets/syrax.json` below your private root |
+| `carrierMap` | Private `runtime-state/carriers.json`; created by provisioning, retained across upgrades |
+| `wrapperPath`, `searchWrapperPath`, `monitorWrapperPath`, `academicWrapperPath` | The example's four `bin/start-*.sh` paths under your private root; installers create them |
+| `searchRoot`, `searchIndex`, `monitorState` | Private `search-env`, `search-index`, `lane-monitor`; `searchRoot` must match `SEARCH_ROOT` |
+| `academicOsRoot`, `ntulearnRoot` | Actual checkouts of those two products, outside the Syrax checkout |
+| `academicOsConfig`, `academicOsState` | academic-os's existing configuration file and configured state root |
+| `ntulearnState` | ntulearn's configured state-file parent, holding its output; use that product's actual location |
+| `academicState` | Syrax's own private academic-desk scratch directory |
+| `indexAllowlist` | Nonempty list of document roots to crawl |
+| `extractionScope` | Nonempty list of roots or patterns within the allowlist whose contents may be extracted |
+| `blocklist` | Nonempty list of forbidden roots; include your entire Syrax private root and the other products' credential/state roots |
+| `searchScopes.academic` | Your academic document root, inside an `indexAllowlist` root; required by the current agents |
+| `ownerTelegramUserId` | Your positive numeric Telegram user ID, not a username, bot ID or group ID |
+
+The default local ports are gateway `18789`, search `18790`, monitor `18791`, academic `18792`.
+If occupied, set `gatewayPort`, `searchPort`, `monitorPort`, `academicPort` explicitly in the
+private JSON and adjust manual curl commands. Keep provider URLs at their defaults for a normal
+install. The illustrative `syrax.example.toml` is not an input file and does not need to be copied.
+
+## Telegram preparation
+
+1. Create a dedicated bot using [BotFather](https://core.telegram.org/bots/features#botfather)
+   and place its token in the secrets store. Enable
+   [topics in private chats](https://core.telegram.org/bots/features#topics-in-private-chats)
+   for that bot in BotFather.
+2. Open the bot's private chat from the account that will own Syrax and send `/start`. This is a
+   private chat with topics, not a forum group. Syrax provisions the four topics itself.
+3. Obtain your numeric user ID from the bot's incoming update. Before starting the gateway, with
+   no other process polling this dedicated bot, the snippet below prints only sender IDs. It also
+   checks that topics are enabled and no webhook is configured. If no ID appears, send a fresh
+   private message to the bot and repeat. Choose your own ID if more than one appears.
+
+```sh
+node --input-type=module - "$SYRAX_PRIVATE/secrets/syrax.json" <<'JS'
+import { readSecret, secretPaths } from './src/adapter/secrets-store.ts';
+const token = readSecret(process.argv[2], secretPaths.telegramBotToken);
+async function call(method) {
+  const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+    method: 'POST', signal: AbortSignal.timeout(15000)
+  }).catch(() => { throw new Error('Telegram transport failed; check connectivity.'); });
+  const body = await response.json();
+  if (!body.ok) throw new Error(`Telegram ${method} failed (HTTP ${response.status}).`);
+  return body.result;
+}
+if (!(await call('getMe')).has_topics_enabled) {
+  throw new Error('Enable private-chat topics in BotFather first.');
+}
+if ((await call('getWebhookInfo')).url) {
+  throw new Error('This bot has a webhook; use a dedicated polling bot.');
+}
+const updates = await call('getUpdates');
+const ids = updates.filter(u => u.message?.chat.type === 'private')
+  .map(u => u.message.from.id);
+console.log('Private-message sender IDs:', [...new Set(ids)]);
+JS
+```
+
+This reads Telegram but sends no messages and prints no token or message text. Stop using
+`getUpdates` once the gateway starts: two pollers compete. Put the chosen ID in the deployment,
+then return to step 5. See Telegram's [getUpdates](https://core.telegram.org/bots/api#getupdates)
+and [getMe](https://core.telegram.org/bots/api#getme) references for those API checks.
+
+## Verify the installation
+
+A generated config is not proof of a working account. After loading the services:
+
+```sh
+launchctl print gui/$(id -u)/com.jerome-group.syrax.gateway
+launchctl print gui/$(id -u)/com.jerome-group.syrax.search
+launchctl print gui/$(id -u)/com.jerome-group.syrax.hatch
+launchctl print gui/$(id -u)/com.jerome-group.syrax.academic
+```
+
+Check that each resident process stays running, rather than repeatedly exiting. Inspect private
+`logsDir` files when it does not. In your bot, send a short greeting in each of General, Academic,
+Media and System. Then test a known indexed document in General, an academic read in Academic,
+and a current lane-usage report in System. These live chat checks consume provider quota; test the
+hatch only if you intend to spend its allowance. A successful greeting alone does not prove search,
+academic access or every model fallback.
+
+| Symptom | What to check |
+|---------|---------------|
+| Generator refuses a path or scope | All private paths must be outside the checkout; all six academic fields and `searchScopes.academic` must be present |
+| Secrets permission failure | `chmod 700` the store's parent and `chmod 600` the file; run the nonprinting check in the credentials guide |
+| Credential ref unresolved / provider rejects auth | Exact JSON property names, no placeholders, valid key for the selected endpoint; regeneration alone cannot fix account permissions |
+| `429` or unavailable model | Account quota and model access; use System's lane report; a configured name is not an entitlement |
+| Bot does not answer | Correct owner ID, `/start` sent, topics enabled, no webhook or competing poller, gateway running |
+| Search refuses to start | Python environment and deliberate `fetch-embedder` completed; valid allowlist/scope/blocklist; index directory readable by the service user |
+| Search finds nothing | Complete a full index pass; confirm the document is within extraction scope and outside the blocklist |
+| Academic tools report missing products | Verify the other products work using their own setup instructions, paths, build and authenticated state |
+| Works in terminal, fails under launchd | Supported Node in the wrapper's PATH, private paths accessible, external volumes mounted, capture logs checked |
+
+## Updates, restarts and backups
+
+After changing the deployment or adapter, regenerate configuration. If paths or wrappers changed,
+unload the affected jobs, rerun their installers, then load the printed plists. For a loaded service
+whose wrapper path is unchanged, restart with:
+
+```sh
+launchctl kickstart -k gui/$(id -u)/com.jerome-group.syrax.gateway
+```
+
+Use the corresponding label for search, hatch or academic. A standing-instruction change also
+needs `/new` in each affected chat before evaluating its behavior. Runtime upgrades come from a
+reviewed change to `runtime/package-lock.json`; recopy both runtime manifests and run `(cd "$RUNTIME_ROOT" && npm ci)` with the gateway stopped, then restart it. Do not upgrade a global
+OpenClaw binary and assume this install changed.
+
+Back up the private deployment, secrets store, runtime state (especially **`carrierMap`**), workspace,
+lane-monitor state and search benchmark with a private backup system. Stop services for a consistent
+snapshot. The carrier map binds logical chats to Telegram topic IDs: losing it leaves existing topics
+unmapped, and rerunning provisioning creates new topics instead of discovering them by name. Restore
+the map with the matching bot/account; do not delete it as a routine reset. Losing the monitor state
+also loses consumed-allowance counts and model stand-down/removal decisions. The search index can be
+rebuilt from documents, but the benchmark and its historical results cannot be recreated that way.
 
 ## When a chat comes back empty
 
@@ -145,12 +333,17 @@ one of them knows it changed:
   its `400` is invisible here. Take the new carrier id from the System announcement and set it in
   Seerr.
 
-Running it in the foreground is still the way to watch a start closely:
+To run it without launchd, first unload the gateway job and invoke the generated wrapper
+(`wrapperPath` in the deployment):
 
 ```sh
-OPENCLAW_CONFIG_PATH="$GENERATED_CONFIG" OPENCLAW_STATE_DIR="$STATE_DIR" \
-  node "$RUNTIME_ROOT/node_modules/openclaw/openclaw.mjs" gateway
+launchctl bootout gui/$(id -u)/com.jerome-group.syrax.gateway
+"$SYRAX_PRIVATE/bin/start-gateway.sh"
 ```
+
+If the job was never loaded, skip `bootout`. The wrapper retains the private-mode and credential
+pre-flight checks; its diagnostics go to `logsDir/gateway.err.log`, so follow that file in a second
+terminal. Stop the foreground process with Ctrl-C before bootstrapping the job again.
 
 Only one gateway can hold port 18789, and a foreground one keeps the supervised one down without
 saying so — the runtime exits `0` on a taken port, which is not a failure `KeepAlive` retries.
@@ -158,7 +351,7 @@ saying so — the runtime exits `0` on a taken port, which is not a failure `Kee
 ## Proving it without a private account
 
 ```sh
-npm test
+SYRAX_RUNTIME_ROOT="$RUNTIME_ROOT" npm test
 ```
 
 The suite drives the pinned gateway through two local stubs — a Telegram Bot API stub it long-polls

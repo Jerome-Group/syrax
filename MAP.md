@@ -2,7 +2,7 @@
 
 Public documentation and implementation of the Owner's personal chatbot system.
 
-Start here: `README.md`, then `AGENTS.md`.
+Start here: `README.md`, then `docs/setup.md` to run it or `AGENTS.md` to work here.
 
 | Area | What lives there | Entry point |
 |------|------------------|-------------|
@@ -14,7 +14,7 @@ Start here: `README.md`, then `AGENTS.md`.
 | Research | Findings from research tickets, one cited file per question | `docs/research/` |
 | System | Architecture, data flow, and public/private boundary | `docs/system-overview.md` |
 | Setup | Safe installation and runtime-injection sequence | `docs/setup.md` |
-| Configuration | Public contract and placeholder values | `config/syrax.example.toml` |
+| Configuration | Public deployment and secrets templates; guidance in `docs/configuration.md` | `config/deployment.example.json` |
 | Runtime adapter | Syrax's decisions as one generated runtime configuration | `src/adapter/build.ts` |
 | Chat surface | Syrax's own writes into the four chats, and the recreation a failed one triggers | `src/surface/chat-surface.ts` |
 | Lane monitor | The rationed lane's counters, which rungs stand down or have rotted, the daily sweep and the removal tap, the usage report, the retrieval report's delivery, and the four tools served over MCP | `src/monitor/lane-monitor.ts` |
