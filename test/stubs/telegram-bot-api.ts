@@ -49,6 +49,7 @@ export class TelegramStub {
   #nextMessageId = 1000;
   #nextTopicId = 2;
   #topics = new Set<number>();
+  #messages = new Map<string, Record<string, unknown>>();
 
   readonly apiRoot: string;
   readonly botToken: string;
@@ -217,29 +218,31 @@ export class TelegramStub {
     if (method === "createForumTopic") {
       return respond(response, { message_thread_id: this.createTopic(), name: body.name });
     }
-    if (method === "sendDocument" || method === "sendPhoto") {
-      call.messageId = this.#nextMessageId++;
-      return respond(response, {
-        message_id: call.messageId,
-        date: 1755000000,
-        chat: { id: body.chat_id, type: "private" },
-        from: botIdentity,
-      });
-    }
-    if (method === "sendMessage" || method === "editMessageText") {
-      const carrier = body.message_thread_id;
+    if (["sendDocument", "sendPhoto", "sendMessage", "editMessageText"].includes(method)) {
+      const editing = method === "editMessageText";
+      const previous = editing
+        ? this.#messages.get(`${body.chat_id}:${body.message_id}`)
+        : undefined;
+      if (editing && previous === undefined) {
+        return refuse(response, "Bad Request: message to edit not found");
+      }
+      const carrier = previous?.message_thread_id ?? body.message_thread_id;
       if (typeof carrier === "number" && !this.#topics.has(carrier)) {
         return refuse(response, "Bad Request: message thread not found");
       }
       if (body.text === "") return refuse(response, "Bad Request: message text is empty");
-      call.messageId = this.#nextMessageId++;
-      return respond(response, {
+      call.messageId = editing ? Number(body.message_id) : this.#nextMessageId++;
+      const message = {
+        ...previous,
         message_id: call.messageId,
         date: 1755000000,
         chat: { id: body.chat_id, type: "private" },
         from: botIdentity,
-        text: body.text,
-      });
+        ...(carrier === undefined ? {} : { message_thread_id: carrier, is_topic_message: true }),
+        ...(body.text === undefined ? {} : { text: body.text }),
+      };
+      this.#messages.set(`${body.chat_id}:${call.messageId}`, message);
+      return respond(response, message);
     }
     return respond(response, true);
   }
