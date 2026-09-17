@@ -2,14 +2,14 @@
 
 [The example configuration](../config/syrax.example.toml) is a public interface sketch. It names
 the decisions a deployment must make without pretending that the current repository already parses
-the file. A runtime adapter may translate this contract into its own configuration, but it must
-keep the boundary intact.
+the file. The OpenClaw adapter reads the deployment JSON below; it does not parse this TOML.
+For account links and the exact secret-store template, see [Providers and credentials](providers.md).
 
 ## The deployment file and what is generated from it
 
 Two files, and only the second is the runtime's. A **deployment** describes one machine — the roots
 the runtime must be told about rather than left to choose, the single Telegram account that is
-answered, the provisioning map that records which topic carries which chat, and the two base URLs;
+answered, the provisioning map that records which topic carries which chat, and optional API endpoint overrides;
 [`config/deployment.example.json`](../config/deployment.example.json) is its public shape.
 `src/cli/generate-config.ts` reads it and writes the runtime's own configuration, which is where
 every decision this repository's records argue actually lands.
@@ -26,17 +26,20 @@ gateway restarts; there is no partial edit of a live configuration.
 
 | Section | Meaning | Public value |
 |---------|---------|--------------|
-| runtime | The selected adapter and executable entrypoint | Placeholder until a runtime is chosen |
+| runtime | The selected adapter and executable entrypoint | Pinned OpenClaw install outside the checkout |
 | model | Provider and model selection | Names only; credentials stay outside the file |
 | paths | Roots for private state, chat archives, the search index, its benchmark, the logs and the lane monitor's own state | Absolute paths outside this repository |
-| security | Secret source and tool policy | Environment/private store plus explicit allowlist |
+| security | Secret source and tool policy | One private JSON secrets store plus explicit allowlist |
 | observability | Log and trace handling | Sanitised local output by default |
 
 ## Local configuration
 
-Use a filename matching config/*.local.* or config/*.secret.*; those patterns are ignored. A local
-file is still not automatically safe: keep its parent directory private, inspect the diff before
-every commit, and prefer environment variables or a dedicated secret store for credentials.
+Keep the live deployment JSON and secrets store **outside the checkout**. The ignored
+`config/*.local.*` and `config/*.secret.*` patterns are not a supported placement for live state.
+Use [`config/deployment.example.json`](../config/deployment.example.json) and
+[`config/secrets.example.json`](../config/secrets.example.json) only as templates; follow
+[setup.md](setup.md) for placement, permissions and generation. The generator writes the runtime
+config and each chat's standing instructions; edit their sources rather than those generated files.
 
 ## State placement
 

@@ -1,5 +1,5 @@
 # Public example only. This file is a configuration contract, not a live deployment file.
-# Keep secrets in the runtime environment or a private secret store.
+# This adapter uses one private JSON secrets store; see docs/providers.md.
 
 [runtime]
 # The adapter is OpenClaw, pinned to an exact version by `runtime/package-lock.json` and installed

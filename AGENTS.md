@@ -15,10 +15,10 @@ runtime state.
 
 ## Getting it running
 
-The current baseline is documentation-first. No agent runtime has been selected and there is no
-launch command yet. Read [`README.md`](README.md), then [`docs/system-overview.md`](docs/system-overview.md),
-[`docs/setup.md`](docs/setup.md), and [`docs/configuration.md`](docs/configuration.md) before adding
-an adapter. Use [`config/syrax.example.toml`](config/syrax.example.toml) only as a public contract;
+The runtime is pinned OpenClaw, installed outside this checkout. The adapter generates its
+configuration, and macOS LaunchAgents supervise the services. Read [`README.md`](README.md), then [`docs/system-overview.md`](docs/system-overview.md),
+[`docs/setup.md`](docs/setup.md), and [`docs/configuration.md`](docs/configuration.md) before changing
+the adapter. See `docs/providers.md` for provider accounts and the private secrets-store template. Use [`config/syrax.example.toml`](config/syrax.example.toml) only as a public contract;
 put live values and runtime state outside the repository.
 
 ## Conventions
@@ -135,5 +135,5 @@ Dependabot then refuses to rebase a branch it considers edited, so the way back 
 
 ## Repository notes
 
-The runtime adapter is intentionally undecided. Record that implementation decision in a new
-`docs/adr/` record when it becomes concrete.
+The runtime choice is recorded in `docs/adr/0003-the-runtime-adapter-wraps-openclaw.md`.
+Record a replacement decision in a new ADR if that choice changes.
