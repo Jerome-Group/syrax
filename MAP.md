@@ -14,7 +14,7 @@ Start here: `README.md`, then `docs/setup.md` to run it or `AGENTS.md` to work h
 | Research | Findings from research tickets, one cited file per question | `docs/research/` |
 | System | Architecture, data flow, and public/private boundary | `docs/system-overview.md` |
 | Setup | Safe installation and runtime-injection sequence | `docs/setup.md` |
-| Configuration | Deployment fields, credential setup and generated-runtime contract | `docs/configuration.md` |
+| Configuration | Public deployment and secrets templates; guidance in `docs/configuration.md` | `config/deployment.example.json` |
 | Runtime adapter | Syrax's decisions as one generated runtime configuration | `src/adapter/build.ts` |
 | Chat surface | Syrax's own writes into the four chats, and the recreation a failed one triggers | `src/surface/chat-surface.ts` |
 | Lane monitor | The rationed lane's counters, which rungs stand down or have rotted, the daily sweep and the removal tap, the usage report, the retrieval report's delivery, and the four tools served over MCP | `src/monitor/lane-monitor.ts` |
