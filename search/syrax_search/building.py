@@ -30,20 +30,18 @@ from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from typing import Literal
 
-import numpy as np
-
 from .chunking import chunk
 from .config import SearchConfig
 from .embedder import Embedder
 from .extraction import Extraction, extract
 from .index import (
     StoredDocument,
+    append_chunks,
     clear_chunks,
     document_text,
     forget_document,
     open_index,
     put_document,
-    replace_chunks,
     stored_documents,
 )
 from .walk import Crawled, crawl
@@ -118,14 +116,19 @@ def run_pass(
                 for crawled in batch:
                     seen.add(crawled.path)
                 for crawled, extraction in _read(batch, stored, kind, database, readers):
-                    _absorb(
-                        database, embedder, crawled, stored.get(crawled.path), extraction, report
-                    )
+                    with database:
+                        _absorb(
+                            database,
+                            embedder,
+                            crawled,
+                            stored.get(crawled.path),
+                            extraction,
+                            report,
+                        )
                     # A document at a time, and never a batch: the batch is how many files are
                     # *read* at once, and one textbook is two thousand windows — sixty-four of
                     # them in one transaction is hours of embedding that a power cut discards and
                     # that nothing can report progress through.
-                    database.commit()
                     progress(report)
         for path, document in stored.items():
             if path not in seen:
@@ -256,24 +259,13 @@ def _absorb(
     if stored is not None and stored.text_sha == text_sha:
         return
 
-    windows = list(chunk(extraction.text, embedder.tokenizer()))
-    replace_chunks(
-        database,
-        document_id,
-        [(one.ordinal, one.text) for one in windows],
-        _embed([one.text for one in windows], embedder),
-    )
-    report.embedded += len(windows)
-
-
-def _embed(texts: list[str], embedder: Embedder):
-    if not texts:
-        return None
-    batches = [
-        embedder.embed_documents(texts[start : start + EMBED_BATCH])
-        for start in range(0, len(texts), EMBED_BATCH)
-    ]
-    return np.concatenate(batches) if len(batches) > 1 else batches[0]
+    clear_chunks(database, document_id)
+    windows = chunk(extraction.text, embedder.tokenizer())
+    while batch := list(itertools.islice(windows, EMBED_BATCH)):
+        texts = [one.text for one in batch]
+        embeddings = embedder.embed_documents(texts)
+        append_chunks(database, document_id, [(one.ordinal, one.text) for one in batch], embeddings)
+        report.embedded += len(batch)
 
 
 def _digest(text: str | None) -> str | None:
