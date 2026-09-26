@@ -10,7 +10,8 @@
  * and the third is not reachable rather than filtered out.
  */
 
-import { readFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { writePrivateFile } from "../adapter/private-state.ts";
 import {
@@ -146,17 +147,21 @@ export async function propose(
   products: Products,
   item: Record<string, unknown>,
 ): Promise<{ ok: boolean; report: unknown; said: string; input: string }> {
-  const input = join(products.paths.academicState, "proposal-input.json");
-  writePrivateFile(
-    input,
-    `${JSON.stringify(
-      { schemaVersion: 1, source: { kind: "instruction", reference: "syrax" }, item },
-      null,
-      2,
-    )}\n`,
-  );
-  const ran = await products.academicOs(["calendar", "propose", "--input", input]);
-  return { ok: ran.ok, report: ran.report, said: ran.said, input };
+  const input = join(products.paths.academicState, `proposal-${randomUUID()}.json`);
+  try {
+    writePrivateFile(
+      input,
+      `${JSON.stringify(
+        { schemaVersion: 1, source: { kind: "instruction", reference: "syrax" }, item },
+        null,
+        2,
+      )}\n`,
+    );
+    const ran = await products.academicOs(["calendar", "propose", "--input", input]);
+    return { ok: ran.ok, report: ran.report, said: ran.said, input };
+  } finally {
+    await rm(input, { force: true });
+  }
 }
 
 /**
