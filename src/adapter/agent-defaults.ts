@@ -53,6 +53,11 @@ const heartbeatSettings = {
   // below would pass `config validate` and then fail open — an unreadable window is read at run
   // time as no window at all, which is a night the heartbeat runs straight through.
   every: "30m",
+  // Syrax's scheduled services own proactive reports; runtime checks stay internal.
+  target: "none",
+  prompt:
+    "This is an internal heartbeat. Do not call tools, send messages, or report routine health. " +
+    "Return NO_REPLY as your entire final reply.",
   // The fix. Each run gets its own session, so a poke no longer appends to the chat the Owner is
   // holding — which is the only reason a chat grew without anybody typing into it.
   isolatedSession: true,

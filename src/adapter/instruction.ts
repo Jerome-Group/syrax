@@ -209,6 +209,7 @@ export function chatInstruction(chat: Chat): string {
     `# Syrax — the ${chat.carrierName} chat`,
     antiFabrication,
     workerPassthrough,
+    "Never send `NO_REPLY` through `message`. It is a silence marker used only as the entire final reply.",
     `You answer the **${chat.carrierName}** chat, which owns ${chat.owns}.`,
     boundary(chat),
     keyboards,
