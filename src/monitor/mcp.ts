@@ -19,12 +19,13 @@ export type Tool = {
 
 type Rpc = {
   jsonrpc: "2.0";
-  id?: number | string;
+  id?: number | string | null;
   method?: string;
   params?: Record<string, unknown>;
 };
 
 const protocolVersion = "2025-06-18";
+const maximumBodyBytes = 1024 * 1024;
 
 export function mcpEndpoint(serverName: string, tools: Tool[]) {
   return async function serve(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -32,10 +33,9 @@ export function mcpEndpoint(serverName: string, tools: Tool[]) {
       // A client asking to open a stream is told there is none rather than left waiting on one.
       return send(response, 405, { error: "this endpoint answers POST only" });
     }
-    const message = await readJson(request);
-    if (message === null) {
-      return send(response, 400, rpcError(null, -32700, "the body is not JSON"));
-    }
+    const read = await readJson(request);
+    if (!read.ok) return send(response, read.status, rpcError(null, read.code, read.message));
+    const message = read.message;
     // A notification carries no id and expects no answer; `initialized` is the one that arrives.
     if (message.id === undefined) return send(response, 202, null);
     try {
@@ -70,7 +70,8 @@ async function answer(message: Rpc, serverName: string, tools: Tool[]): Promise<
     const asked = String(message.params?.name ?? "");
     const tool = tools.find((one) => one.name === asked);
     if (tool === undefined) return rpcError(id, -32602, `there is no tool called ${asked}`);
-    const given = (message.params?.arguments ?? {}) as Record<string, unknown>;
+    const given = message.params?.arguments === undefined ? {} : message.params.arguments;
+    if (!isRecord(given)) return rpcError(id, -32602, "tool arguments must be an object");
     return result(id, asContent(await tool.call(given)));
   }
   return rpcError(id, -32601, `${message.method} is not a method this server answers`);
@@ -99,17 +100,50 @@ function reason(thrown: unknown): string {
   return thrown instanceof Error ? thrown.message : String(thrown);
 }
 
-async function readJson(request: IncomingMessage): Promise<Rpc | null> {
+type ReadRequest =
+  { ok: true; message: Rpc } | { ok: false; status: number; code: number; message: string };
+
+async function readJson(request: IncomingMessage): Promise<ReadRequest> {
   const chunks: Buffer[] = [];
-  for await (const chunk of request) chunks.push(chunk as Buffer);
+  let bytes = 0;
   try {
-    return JSON.parse(Buffer.concat(chunks).toString("utf8")) as Rpc;
+    for await (const chunk of request) {
+      bytes += (chunk as Buffer).length;
+      if (bytes <= maximumBodyBytes) chunks.push(chunk as Buffer);
+      else chunks.length = 0;
+    }
   } catch {
-    return null;
+    return { ok: false, status: 400, code: -32700, message: "the body could not be read" };
   }
+  if (bytes > maximumBodyBytes) {
+    return { ok: false, status: 413, code: -32600, message: "the body exceeds 1 MiB" };
+  }
+  let held: unknown;
+  try {
+    held = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch {
+    return { ok: false, status: 400, code: -32700, message: "the body is not JSON" };
+  }
+  if (
+    !isRecord(held) ||
+    held.jsonrpc !== "2.0" ||
+    typeof held.method !== "string" ||
+    (held.id !== undefined &&
+      held.id !== null &&
+      typeof held.id !== "string" &&
+      typeof held.id !== "number") ||
+    (held.params !== undefined && !isRecord(held.params))
+  )
+    return { ok: false, status: 400, code: -32600, message: "the body is not a request" };
+  return { ok: true, message: held as Rpc };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function send(response: ServerResponse, status: number, payload: unknown): void {
+  if (response.destroyed) return;
   if (payload === null) {
     response.writeHead(status);
     response.end();
