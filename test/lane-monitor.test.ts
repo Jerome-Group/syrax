@@ -330,6 +330,24 @@ describe("the rationed lane's counters", () => {
 
     assert.equal(new DailyCounters(read.monitorState).state()[0]!.remaining, 20);
   });
+
+  it("reads malformed ledger days as a fresh day before comparing rollover dates", () => {
+    const { deployment } = temporaryMachine();
+    const monitorState = readDeployment(deployment).monitorState;
+    const today = new Date("2026-08-24T20:00:00Z");
+    const path = join(monitorState, "hatch-counters.json");
+    for (const day of ["unknown", "9999-99-99", "2099-02-29", "2026-8-24"]) {
+      writePrivateSecretsStore(path, {
+        day,
+        spent: { [rungId(hatchLane.rungs[0])]: 20 },
+        refused: {},
+      });
+      const counters = new DailyCounters(monitorState, today);
+      assert.equal(counters.remaining(hatchLane.rungs[0], today), 20);
+      counters.spend(hatchLane.rungs[0], today);
+      assert.equal(new DailyCounters(monitorState, today).state(today)[0]!.spent, 1);
+    }
+  });
 });
 
 describe("what each lane's headroom is read from", () => {
