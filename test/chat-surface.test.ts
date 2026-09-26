@@ -5,9 +5,11 @@
  */
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { after, before, beforeEach, describe, it } from "node:test";
-import { readCarrierMap, type CarrierMap } from "../src/adapter/carriers.ts";
+import { readCarrierMap, writeCarrierMap, type CarrierMap } from "../src/adapter/carriers.ts";
 import { readDeployment, type Deployment } from "../src/adapter/deployment.ts";
 import { generateConfig } from "../src/adapter/generator.ts";
 import { BotApi, TelegramApiError } from "../src/surface/bot-api.ts";
@@ -60,6 +62,153 @@ describe("the write path", () => {
       .filter((call) => call.method === "sendMessage")
       .map((call) => call.body as { chat_id: unknown; text: unknown });
   }
+
+  it("preserves different chats recreated by independent overlapping surfaces", async () => {
+    telegram.clearTopic(carriers.academic!);
+    telegram.clearTopic(carriers.media!);
+    const [academic, media] = await Promise.all([
+      surface().post("academic", "Academic report"),
+      surface().post("media", "Media report"),
+    ]);
+    const map = readCarrierMap(deployment.carrierMap);
+    assert.equal(map.academic, academic[0]!.id);
+    assert.equal(map.media, media[0]!.id);
+    const config = JSON.parse(readFileSync(deployment.configPath, "utf8"));
+    const topics = config.channels.telegram.direct[String(ownerTelegramUserId)].topics;
+    assert.deepEqual(topics[String(map.academic)], { agentId: "academic" });
+    assert.deepEqual(topics[String(map.media)], { agentId: "media" });
+  });
+
+  it("creates and announces one replacement for overlapping sends to the same chat", async () => {
+    telegram.clearTopic(carriers.academic!);
+    const before = telegram.calls.length;
+    const results = await Promise.all([
+      surface().post("academic", "First report"),
+      surface().post("academic", "Second report"),
+    ]);
+    assert.equal(results.flat().length, 1);
+    const calls = telegram.calls.slice(before);
+    assert.equal(calls.filter((call) => call.method === "createForumTopic").length, 1);
+    assert.equal(
+      calls.filter((call) => String(call.body.text).includes("came back empty")).length,
+      1,
+    );
+    const replacement = results.flat()[0]!.id;
+    const delivered = calls.filter((call) => call.body.message_thread_id === replacement);
+    assert.equal(delivered.length, 2);
+  });
+
+  it("provisions one set of missing carriers across overlapping surfaces", async () => {
+    carriers = { system: carriers.system! };
+    const before = telegram.calls.length;
+    const provisioned = await Promise.all([surface().provision(), surface().provision()]);
+    assert.deepEqual(
+      provisioned
+        .flat()
+        .map((carrier) => carrier.chat.id)
+        .sort(),
+      ["academic", "general", "media"],
+    );
+    assert.equal(
+      telegram.calls.slice(before).filter((call) => call.method === "createForumTopic").length,
+      3,
+    );
+    assert.equal(
+      telegram.calls.slice(before).filter((call) => call.method === "sendMessage").length,
+      0,
+    );
+  });
+
+  it("repairs routing after a replacement map was saved but configuration publication failed", async () => {
+    telegram.clearTopic(carriers.academic!);
+    const configuration = deployment.configPath;
+    deployment = { ...deployment, configPath: deployment.workspace };
+    const before = telegram.calls.length;
+    await assert.rejects(surface().post("academic", "First attempt"));
+    const replacement = readCarrierMap(deployment.carrierMap).academic;
+    assert.ok(replacement);
+    deployment = { ...deployment, configPath: configuration };
+    assert.deepEqual(await surface().post("academic", "Retry report"), []);
+    const config = JSON.parse(readFileSync(configuration, "utf8"));
+    assert.deepEqual(
+      config.channels.telegram.direct[String(ownerTelegramUserId)].topics[String(replacement)],
+      { agentId: "academic" },
+    );
+    assert.equal(
+      telegram.calls.slice(before).filter((call) => call.method === "createForumTopic").length,
+      1,
+    );
+  });
+
+  it("preserves carrier updates made by separate processes", { timeout: 10_000 }, async () => {
+    const fixture = temporaryMachine();
+    const path = join(fixture.root, "deployment.json");
+    writeFileSync(
+      path,
+      JSON.stringify({
+        ...fixture.deployment,
+        secretsStore: deployment.secretsStore,
+        telegramApiRoot: deployment.telegramApiRoot,
+        configPath: deployment.configPath,
+        carrierMap: deployment.carrierMap,
+        workspace: deployment.workspace,
+        stateDir: deployment.stateDir,
+        logsDir: deployment.logsDir,
+      }),
+    );
+    telegram.clearTopic(carriers.academic!);
+    telegram.clearTopic(carriers.media!);
+    const source = `import { readFileSync } from "node:fs";
+import { readDeployment } from ${JSON.stringify(new URL("../src/adapter/deployment.ts", import.meta.url).href)};
+import { ChatSurface } from ${JSON.stringify(new URL("../src/surface/chat-surface.ts", import.meta.url).href)};
+const surface = ChatSurface.open(readDeployment(JSON.parse(readFileSync(process.argv[1], "utf8"))));
+process.stdout.write("ready\\n");
+process.stdin.once("data", async () => {
+  process.stdout.write(JSON.stringify(await surface.post(process.argv[2], "process report")));
+  process.stdin.destroy();
+});`;
+    function worker(chat: string) {
+      const child = spawn(process.execPath, ["--input-type=module", "-e", source, path, chat], {
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      let output = "";
+      let errors = "";
+      child.stdout.on("data", (chunk: Buffer) => {
+        output += chunk.toString("utf8");
+      });
+      child.stderr.on("data", (chunk: Buffer) => {
+        errors += chunk.toString("utf8");
+      });
+      const ready = new Promise<void>((resolve, reject) => {
+        child.once("error", reject);
+        child.once("exit", (code) => reject(new Error(`worker exited ${code}: ${errors}`)));
+        child.stdout.once("data", () => resolve());
+      });
+      const result = new Promise<number>((resolve, reject) =>
+        child.once("close", (code) => {
+          if (code !== 0) return reject(new Error(errors));
+          resolve(JSON.parse(output.slice(output.indexOf("\n") + 1))[0].id);
+        }),
+      );
+      void result.catch(() => {});
+      return { child, ready, result };
+    }
+    writeCarrierMap(deployment.carrierMap, carriers as CarrierMap);
+    const academic = worker("academic");
+    const media = worker("media");
+    try {
+      await Promise.all([academic.ready, media.ready]);
+      academic.child.stdin.end("go");
+      media.child.stdin.end("go");
+      const [academicId, mediaId] = await Promise.all([academic.result, media.result]);
+      const map = readCarrierMap(deployment.carrierMap);
+      assert.equal(map.academic, academicId);
+      assert.equal(map.media, mediaId);
+    } finally {
+      academic.child.kill("SIGKILL");
+      media.child.kill("SIGKILL");
+    }
+  });
 
   it("posts into the carrier the map names, and creates nothing", async () => {
     const before = telegram.calls.length;
