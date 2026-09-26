@@ -111,3 +111,80 @@ def test_progress_survives_a_pass_that_is_cut_short(machine, embedder, monkeypat
 
     kept = open_index(machine.database_path).execute("SELECT count(*) FROM documents").fetchone()[0]
     assert kept == 2, "the two committed before the interrupt, and not the one it landed in"
+
+
+def test_large_documents_are_persisted_between_bounded_embedding_batches(machine, embedder):
+    from pathlib import Path
+
+    from syrax_search.building import EMBED_BATCH
+    from syrax_search.chunking import chunk
+
+    document = Path(path_of(machine, "notes/large.md"))
+    document.write_text("large synthetic textbook word " * 14000)
+    windows = list(chunk(document.read_text(), embedder.tokenizer()))
+    database = open_index(machine.database_path)
+    original = embedder.embed_documents
+    sizes = []
+
+    def observe(texts):
+        assert len(texts) <= EMBED_BATCH
+        if texts[0].startswith("large synthetic"):
+            written = database.execute(
+                "SELECT count(*) FROM chunks JOIN documents ON documents.id = chunks.document_id "
+                "WHERE documents.path = ?",
+                (str(document),),
+            ).fetchone()[0]
+            assert written == sum(sizes)
+            sizes.append(len(texts))
+        return original(texts)
+
+    embedder.embed_documents = observe
+    run_pass(machine, embedder, INCREMENTAL, database)
+    assert len(sizes) > 1
+    rows = database.execute(
+        "SELECT ordinal, chunks.text FROM chunks JOIN documents "
+        "ON documents.id = chunks.document_id WHERE documents.path = ? ORDER BY ordinal",
+        (str(document),),
+    ).fetchall()
+    assert rows == [(one.ordinal, one.text) for one in windows]
+    assert database.execute("SELECT count(*) FROM chunk_vectors").fetchone()[0] >= len(windows)
+    database.close()
+
+
+def test_failed_embedding_rolls_back_the_whole_replacement(machine, embedder):
+    from pathlib import Path
+
+    from syrax_search.building import EMBED_BATCH
+
+    run_pass(machine, embedder, INCREMENTAL)
+    database = open_index(machine.database_path)
+    document = Path(path_of(machine, "notes/rowing.md"))
+    before = {
+        table: database.execute(f"SELECT * FROM {table}").fetchall()
+        for table in ("documents", "chunks", "chunk_vectors")
+    }
+    document.write_text("replacement synthetic textbook word " * 14000)
+    original = embedder.embed_documents
+    batches = 0
+
+    def fail_after_one_batch(texts):
+        nonlocal batches
+        batches += 1
+        if batches == 2:
+            raise RuntimeError("synthetic inference failure")
+        assert len(texts) == EMBED_BATCH
+        return original(texts)
+
+    embedder.embed_documents = fail_after_one_batch
+    with pytest.raises(RuntimeError, match="synthetic inference failure"):
+        run_pass(machine, embedder, INCREMENTAL, database)
+    assert not database.in_transaction
+    for table, rows in before.items():
+        assert database.execute(f"SELECT * FROM {table}").fetchall() == rows
+    assert (
+        database.execute(
+            "SELECT count(*) FROM chunk_fts WHERE chunk_fts MATCH 'rowing'"
+        ).fetchone()[0]
+        == 1
+    )
+    database.close()

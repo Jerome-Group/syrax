@@ -123,14 +123,13 @@ def put_document(
     return document_id
 
 
-def replace_chunks(
+def append_chunks(
     database: sqlite3.Connection,
     document_id: int,
     chunks: list[tuple[int, str]],
     embeddings: np.ndarray | None,
 ) -> None:
-    """Every window of one document and its vectors, atomically swapped for the previous set."""
-    clear_chunks(database, document_id)
+    """One bounded batch of windows and their vectors within the document transaction."""
     for position, (ordinal, text) in enumerate(chunks):
         cursor = database.execute(
             "INSERT INTO chunks(document_id, ordinal, text) VALUES(?,?,?)",
@@ -147,9 +146,7 @@ def replace_chunks(
 
 def clear_chunks(database: sqlite3.Connection, document_id: int) -> None:
     """An external-content FTS5 table is told what it is losing: deleting the row is not enough."""
-    existing = database.execute(
-        "SELECT id, text FROM chunks WHERE document_id = ?", (document_id,)
-    ).fetchall()
+    existing = database.execute("SELECT id, text FROM chunks WHERE document_id = ?", (document_id,))
     for chunk_id, text in existing:
         database.execute(
             "INSERT INTO chunk_fts(chunk_fts, rowid, text) VALUES('delete', ?, ?)",
