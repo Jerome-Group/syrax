@@ -82,3 +82,57 @@ async def test_the_re_embed_pass_scores_the_set_and_the_hourly_one_does_not(unit
 
     await unit.index(FULL)
     assert os.path.exists(machine.retrieval_report_path)
+
+
+@pytest.mark.anyio
+async def test_index_pokes_reserve_before_the_worker_runs(unit, monkeypatch):
+    from syrax_search.server import _start_pass
+
+    gate = asyncio.Event()
+    ran = []
+
+    async def index(kind):
+        ran.append(kind)
+        await gate.wait()
+
+    monkeypatch.setattr(unit, "index", index)
+    assert _start_pass(unit, INCREMENTAL).status_code == 202
+    assert unit.indexing, "benchmark must see the reserved pass before its worker starts"
+    assert _start_pass(unit, FULL).status_code == 409
+    assert ran == [], "no event-loop yield has occurred between these requests"
+    await asyncio.sleep(0)
+    assert ran == [INCREMENTAL]
+    gate.set()
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert not unit.indexing
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("outcome", ["success", "failure", "cancelled"])
+async def test_a_finished_pass_releases_its_reservation(unit, monkeypatch, outcome, caplog):
+    finished = asyncio.Event()
+    tasks = []
+
+    async def index(kind):
+        tasks.append(asyncio.current_task())
+        try:
+            if outcome == "failure":
+                raise RuntimeError("synthetic pass failure")
+            if outcome == "cancelled":
+                raise asyncio.CancelledError
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(unit, "index", index)
+    assert unit.start_index(INCREMENTAL)
+    await finished.wait()
+    await asyncio.sleep(0)
+    assert not unit.indexing
+    if outcome == "failure":
+        assert "Index pass failed" in caplog.text
+    assert unit.start_index(FULL)
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert len(tasks) == 2
+    assert not unit.indexing

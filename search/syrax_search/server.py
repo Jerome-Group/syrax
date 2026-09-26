@@ -19,6 +19,7 @@ score is read by whatever posts it rather than by a model.
 from __future__ import annotations
 
 import asyncio
+import logging
 
 import anyio
 from mcp.server.mcpserver import MCPServer
@@ -60,10 +61,13 @@ class SearchUnit:
         self.staging = Staging(config)
         self._querying = asyncio.Lock()
         self._indexing = asyncio.Lock()
+        self._index_task: asyncio.Task[PassReport] | None = None
 
     @property
     def indexing(self) -> bool:
-        return self._indexing.locked()
+        return self._indexing.locked() or (
+            self._index_task is not None and not self._index_task.done()
+        )
 
     async def search(self, query: str, scope_name: str | None) -> dict:
         scope = self.scope_root(scope_name)
@@ -91,6 +95,21 @@ class SearchUnit:
 
     async def attach(self, path: str) -> dict:
         return await anyio.to_thread.run_sync(self.staging.attach, path)
+
+    def start_index(self, kind: str) -> bool:
+        if self.indexing:
+            return False
+        self._index_task = asyncio.get_running_loop().create_task(self.index(kind))
+        self._index_task.add_done_callback(self._pass_finished)
+        return True
+
+    def _pass_finished(self, task: asyncio.Task[PassReport]) -> None:
+        if self._index_task is task:
+            self._index_task = None
+        if not task.cancelled() and (error := task.exception()) is not None:
+            logging.getLogger(__name__).error(
+                "Index pass failed", exc_info=(type(error), error, error.__traceback__)
+            )
 
     async def index(self, kind: str) -> PassReport:
         async with self._indexing:
@@ -218,9 +237,8 @@ def _scope_of(context: Context) -> str | None:
 
 def _start_pass(unit: SearchUnit, kind: str) -> JSONResponse:
     """Accepted rather than awaited: a full pass is hours, and a poke is not a request to wait."""
-    if unit.indexing:
+    if not unit.start_index(kind):
         return JSONResponse({"pass": kind, "started": False, "reason": "already indexing"}, 409)
-    asyncio.get_running_loop().create_task(unit.index(kind))
     return JSONResponse({"pass": kind, "started": True}, 202)
 
 
