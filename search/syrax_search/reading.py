@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import sys
 import time
 from dataclasses import dataclass
 
@@ -24,12 +25,15 @@ from .index import document_text
 # A forty-page PDF is not a reply. What a model needs is enough of the document to answer from,
 # and the rest is a second `read` away.
 MAXIMUM_REPLY_CHARACTERS = 200_000
+MAXIMUM_HELD_TEXT_BYTES = 16 * 1024 * 1024
+MAXIMUM_HELD_DOCUMENTS = 128
 
 
 @dataclass
 class _Held:
     text: str
     expires_at: float
+    signature: tuple[int, int, int, int, int]
 
 
 def refused(config: SearchConfig, absolute: str) -> dict | None:
@@ -56,6 +60,7 @@ class Reader:
         self._config = config
         self._database = database
         self._held: dict[str, _Held] = {}
+        self._held_text_bytes = 0
 
     def read(self, path: str) -> dict:
         absolute = absolute_path(path)
@@ -67,14 +72,19 @@ class Reader:
         if stored:
             return self._reply(absolute, stored, "index")
 
-        held = self._recall(absolute)
+        try:
+            stat = os.stat(absolute)
+        except OSError as error:
+            return {"read": "refused", "path": absolute, "reason": f"error:{type(error).__name__}"}
+        signature = (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+        held = self._recall(absolute, signature)
         if held is not None:
             return self._reply(absolute, held, "ephemeral")
 
         extracted = extract(absolute)
         if extracted.text is None:
             return {"read": "refused", "path": absolute, "reason": extracted.status}
-        self._hold(absolute, extracted.text)
+        self._hold(absolute, extracted.text, signature)
         return self._reply(absolute, extracted.text, "ephemeral")
 
     def sweep(self, now: float | None = None) -> int:
@@ -82,18 +92,39 @@ class Reader:
         moment = time.monotonic() if now is None else now
         expired = [path for path, held in self._held.items() if held.expires_at <= moment]
         for path in expired:
-            del self._held[path]
+            self._discard(path)
         return len(expired)
 
-    def _recall(self, path: str) -> str | None:
+    def _recall(self, path: str, signature: tuple[int, int, int, int, int]) -> str | None:
         held = self._held.get(path)
-        if held is None or held.expires_at <= time.monotonic():
+        if held is None:
             return None
-        self._hold(path, held.text)
+        if held.expires_at <= time.monotonic() or held.signature != signature:
+            self._discard(path)
+            return None
+        self._hold(path, held.text, signature)
         return held.text
 
-    def _hold(self, path: str, text: str) -> None:
-        self._held[path] = _Held(text, time.monotonic() + self._config.idle_evict_seconds)
+    def _hold(self, path: str, text: str, signature: tuple[int, int, int, int, int]) -> None:
+        self._discard(path)
+        text_bytes = sys.getsizeof(text)
+        if text_bytes > MAXIMUM_HELD_TEXT_BYTES:
+            return
+        self.sweep()
+        while self._held and (
+            len(self._held) >= MAXIMUM_HELD_DOCUMENTS
+            or self._held_text_bytes + text_bytes > MAXIMUM_HELD_TEXT_BYTES
+        ):
+            self._discard(next(iter(self._held)))
+        self._held[path] = _Held(
+            text, time.monotonic() + self._config.idle_evict_seconds, signature
+        )
+        self._held_text_bytes += text_bytes
+
+    def _discard(self, path: str) -> None:
+        held = self._held.pop(path, None)
+        if held is not None:
+            self._held_text_bytes -= sys.getsizeof(held.text)
 
     def _reply(self, path: str, text: str, source: str) -> dict:
         return {
