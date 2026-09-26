@@ -265,24 +265,25 @@ def _keyword_arm(
     expression = _match_expression(query)
     if expression is None:
         return [], [], []
+    prefix = None if scope is None else scope.rstrip("/") + "/"
     text_hits = database.execute(
         """
         SELECT chunks.document_id FROM chunk_fts
         JOIN chunks ON chunks.id = chunk_fts.rowid
         JOIN documents ON documents.id = chunks.document_id
-        WHERE chunk_fts MATCH ? AND (? IS NULL OR documents.path LIKE ? || '/%')
+        WHERE chunk_fts MATCH ? AND (? IS NULL OR substr(documents.path, 1, length(?)) = ?)
         ORDER BY rank LIMIT ?
         """,
-        (expression, scope, scope, CANDIDATE_POOL),
+        (expression, prefix, prefix, prefix, CANDIDATE_POOL),
     ).fetchall()
     name_hits = database.execute(
         """
         SELECT documents.id, documents.name FROM name_fts
         JOIN documents ON documents.id = name_fts.rowid
-        WHERE name_fts MATCH ? AND (? IS NULL OR documents.path LIKE ? || '/%')
+        WHERE name_fts MATCH ? AND (? IS NULL OR substr(documents.path, 1, length(?)) = ?)
         ORDER BY rank LIMIT ?
         """,
-        (expression, scope, scope, NAME_POOL),
+        (expression, prefix, prefix, prefix, NAME_POOL),
     ).fetchall()
     written = forms_of(terms_of(query))
     naming = [one for one, name in name_hits[:NAMING_POOL] if _names_the_query(written, name)]
@@ -309,33 +310,38 @@ def _vector_arm(
     database: sqlite3.Connection, query_vector: np.ndarray, scope: str | None
 ) -> tuple[list[int], dict[int, float]]:
     """Ranked documents and the best score each one reached, which is what the floors read."""
-    rows = database.execute(
+    restriction = ""
+    parameters = [query_vector.astype(np.float32).tobytes(), CANDIDATE_POOL]
+    if scope is not None:
+        prefix = scope.rstrip("/") + "/"
+        restriction = """
+            AND chunk_id IN (
+                SELECT chunks.id FROM chunks
+                JOIN documents ON documents.id = chunks.document_id
+                WHERE substr(documents.path, 1, length(?)) = ?
+            )
         """
-        SELECT chunks.document_id, nearest.distance, documents.path
+        parameters.extend((prefix, prefix))
+    rows = database.execute(
+        f"""
+        SELECT chunks.document_id, nearest.distance
         FROM (
-            SELECT chunk_id, distance FROM chunk_vectors WHERE embedding MATCH ? AND k = ?
+            SELECT chunk_id, distance FROM chunk_vectors
+            WHERE embedding MATCH ? AND k = ? {restriction}
         ) AS nearest
         JOIN chunks ON chunks.id = nearest.chunk_id
-        JOIN documents ON documents.id = chunks.document_id
         ORDER BY nearest.distance
         """,
-        (query_vector.astype(np.float32).tobytes(), _pool_for(scope)),
+        parameters,
     ).fetchall()
 
     ranked: list[int] = []
     scores: dict[int, float] = {}
-    for document_id, distance, path in rows:
-        if scope is not None and not path.startswith(scope + "/"):
-            continue
+    for document_id, distance in rows:
         if document_id not in scores:
             ranked.append(document_id)
             scores[document_id] = 1.0 - distance
     return ranked, scores
-
-
-def _pool_for(scope: str | None) -> int:
-    """A scoped query filters after the scan, so it asks for more than it will keep."""
-    return CANDIDATE_POOL if scope is None else CANDIDATE_POOL * 10
 
 
 def _first_seen(rows: list[tuple[int, ...]]) -> list[int]:
