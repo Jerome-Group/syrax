@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import { buildRuntimeConfig } from "../src/adapter/build.ts";
 import { readDeployment } from "../src/adapter/deployment.ts";
@@ -61,12 +63,26 @@ describe("the generated runtime configuration", () => {
 
   it("states the heartbeat, so a poke nobody sent stops growing the session it lands in", () => {
     const heartbeat = config.agents.defaults.heartbeat;
+    assert.equal(heartbeat.target, "none");
+    assert.match(heartbeat.prompt, /Do not call tools/);
+    assert.match(heartbeat.prompt, /final reply/);
     assert.equal(heartbeat.isolatedSession, true);
     assert.deepEqual(heartbeat.activeHours, { start: "07:00", end: "23:00" });
     // The interval has to be stated for the window above to be validated at all: the runtime's
     // schema stops checking `activeHours` when `every` is absent, and an unreadable window fails
     // open rather than closed.
     assert.equal(heartbeat.every, "30m");
+  });
+
+  it("keeps silence markers out of message-tool sends in every chat", () => {
+    const machine = temporaryMachine();
+    writePrivateSecretsStore(machine.deployment.secretsStore);
+    const written = readDeployment(machine.deployment);
+    generateConfig(written, carriers);
+    for (const chat of everyChat) {
+      const instruction = readFileSync(join(written.workspace, chat.id, "AGENTS.md"), "utf8");
+      assert.match(instruction, /Never send .*NO_REPLY.* through .*message/);
+    }
   });
 
   it("states the log's fixed basename, its size bound and its redaction", () => {

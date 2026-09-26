@@ -197,10 +197,16 @@ a provider's ceiling.
 
 So the heartbeat joins the settings Syrax states rather than inherits, in
 `src/adapter/agent-defaults.ts`, and the poke itself is kept — it is a capability, and retaining
-it was the defect. Three values:
+it was the defect. Its delivery is internal: Syrax's own scheduled services already own the
+brief and operational reports. The heartbeat prompt requests a silent final reply and no tool
+calls, because sending `NO_REPLY` through Telegram is rejected and produces a tool-failure notice.
+Standing instructions make that distinction for ordinary turns too. These instruction changes
+require a fresh chat session (`/new`) before their behavior can be judged. Five values:
 
 | Stated | Value | Why |
 |--------|-------|-----|
+| Delivery | `none` | Keep runtime alerts and first-alert setup notices out of the Owner's chats. |
+| Prompt | Internal check; no tools; final `NO_REPLY` | Silence belongs to the final reply, never a message-tool send. |
 | The interval | Every 30 minutes | The cadence it already ran at, restated rather than changed. It has to be stated even so: the runtime's schema stops validating the window below whenever this is absent, so a mistyped window would pass validation and then fail open — an unreadable window is read at run time as no window at all. |
 | The session each run gets | Its own, with no conversation history | The fix. A poke no longer appends to the chat the Owner is holding, which is the only reason a chat grew without anybody typing into it. |
 | When it may run | 07:00 to 23:00 | Not while the Owner is asleep. The start is the hour the morning brief already treats as the beginning of their day; the end is exclusive, so the last poke lands before eleven. |
