@@ -16,6 +16,7 @@ window, which costs the 2.27 s load on the first search after a gap and gives ba
 from __future__ import annotations
 
 import os
+import threading
 import time
 from typing import Protocol
 
@@ -62,10 +63,12 @@ class PinnedEmbedder:
         self._tokenizer: object | None = None
         self._windowing: object | None = None
         self._last_used = 0.0
+        self._use = threading.Lock()
 
     def tokenizer(self) -> object:
-        self._load()
-        return _Windows(self._windowing)
+        with self._use:
+            self._load()
+            return _Windows(self._windowing)
 
     def embed_documents(self, texts: list[str]) -> np.ndarray:
         return self._encode([DOCUMENT_PROMPT.format(text) for text in texts])
@@ -75,25 +78,32 @@ class PinnedEmbedder:
 
     def release_if_idle(self) -> bool:
         """Drop the session if nothing has used it lately. Called by the server's idle sweep."""
-        if self._session is None:
+        # The sweep runs on the event loop; an active worker must never make it wait for inference.
+        if not self._use.acquire(blocking=False):
             return False
-        if time.monotonic() - self._last_used < self._idle_evict_seconds:
-            return False
-        self._session = None
-        self._tokenizer = None
-        self._windowing = None
-        return True
+        try:
+            if self._session is None:
+                return False
+            if time.monotonic() - self._last_used < self._idle_evict_seconds:
+                return False
+            self._session = None
+            self._tokenizer = None
+            self._windowing = None
+            return True
+        finally:
+            self._use.release()
 
     def _encode(self, prompted: list[str]) -> np.ndarray:
-        self._load()
-        encoded = self._tokenizer.encode_batch(prompted)
-        ids = np.array([one.ids for one in encoded], dtype=np.int64)
-        mask = np.array([one.attention_mask for one in encoded], dtype=np.int64)
-        embedded = self._session.run(
-            ["sentence_embedding"], {"input_ids": ids, "attention_mask": mask}
-        )[0]
-        self._last_used = time.monotonic()
-        return normalise(embedded.astype(np.float32))
+        with self._use:
+            self._load()
+            encoded = self._tokenizer.encode_batch(prompted)
+            ids = np.array([one.ids for one in encoded], dtype=np.int64)
+            mask = np.array([one.attention_mask for one in encoded], dtype=np.int64)
+            embedded = self._session.run(
+                ["sentence_embedding"], {"input_ids": ids, "attention_mask": mask}
+            )[0]
+            self._last_used = time.monotonic()
+            return normalise(embedded.astype(np.float32))
 
     def _load(self) -> None:
         if self._session is not None:
@@ -113,9 +123,7 @@ class PinnedEmbedder:
 
         options = onnxruntime.SessionOptions()
         options.intra_op_num_threads = THREADS
-        self._session = onnxruntime.InferenceSession(
-            model, options, providers=["CPUExecutionProvider"]
-        )
+        session = onnxruntime.InferenceSession(model, options, providers=["CPUExecutionProvider"])
         # Two of them, and the second is not a micro-optimisation. Padding and truncation are state
         # on the tokenizer object rather than arguments to a call, so a chunker sharing the
         # encoder's would window every document from its first 1024 tokens — a 500-page textbook
@@ -123,8 +131,10 @@ class PinnedEmbedder:
         encoder = Tokenizer.from_file(tokenizer)
         encoder.enable_padding(pad_id=0, pad_token="<pad>")
         encoder.enable_truncation(max_length=MAXIMUM_INPUT_TOKENS)
+        windowing = Tokenizer.from_file(tokenizer)
+        self._session = session
         self._tokenizer = encoder
-        self._windowing = Tokenizer.from_file(tokenizer)
+        self._windowing = windowing
         self._last_used = time.monotonic()
 
 
