@@ -61,13 +61,34 @@ describe("General answering with the corpus", { skip: !runtimeIsInstalled() }, (
   ): Promise<OutboundCall> {
     const predicate = awaited.predicate ?? (() => true);
     const already = syrax.telegram.matching(awaited.method, predicate).length;
+    const asked = syrax.provider.requests.length;
     syrax.provider.script({ kind: "toolCall", name: "message", arguments: args });
     syrax.telegram.inject({
       fromUserId: ownerTelegramUserId,
       text,
       messageThreadId: syrax.carriers.general,
     });
-    return await syrax.telegram.waitFor(awaited.method, predicate, 60_000, already);
+    const delivered = await syrax.telegram.waitFor(awaited.method, predicate, 60_000, already);
+    // Delivery precedes the tool-result completion. Its synchronous script consumption must
+    // finish before the next turn queues a reply, or that reply answers this turn's followup.
+    const deadline = Date.now() + 60_000;
+    while (
+      !syrax.provider.requests.slice(asked).some((request) => {
+        const messages = request.body.messages;
+        if (!request.path.endsWith("/chat/completions") || !Array.isArray(messages)) return false;
+        const question = JSON.stringify(text).slice(1, -1);
+        const questionAt = messages.findLastIndex(
+          (entry) => entry.role === "user" && JSON.stringify(entry.content).includes(question),
+        );
+        return (
+          questionAt >= 0 && messages.slice(questionAt + 1).some((entry) => entry.role === "tool")
+        );
+      })
+    ) {
+      if (Date.now() > deadline) throw new Error(`No tool-result completion for ${text}.`);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    return delivered;
   }
 
   /** The tap reaches the model as an ordinary message, so the prompt carrying it is the evidence. */

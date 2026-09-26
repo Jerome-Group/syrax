@@ -32,6 +32,11 @@ JSON or SQLite plugin catalogs are also checked for managed markers.
 Tool progress messages can precede a shortlist, and an unowned file warning now names its file.
 The delivery checks select the actual shortlist and retain its visible numbering, while confirming
 that a filename-specific warning sends no unowned document.
+Tool delivery also precedes its followup completion: queuing the next scripted turn at delivery
+could give that turn's keyboard response to the previous turn's followup, making the tap setup
+time out. The fixture helper waits for the actual tool-result completion following its current
+question before it queues another response; callback acknowledgement and routing checks remain
+unchanged.
 
 The Telegram fixture releases disconnected long polls immediately. Leaving a disconnected poll
 registered for its timeout sent an injected update to a closed response during a reload and made a
