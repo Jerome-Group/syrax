@@ -15,7 +15,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { closeSync, openSync, readSync, statSync } from "node:fs";
+import { closeSync, fstatSync, openSync, readSync } from "node:fs";
 
 /** One decision, in the fields a reader can act on. The provider's words are passed through. */
 export type Decision = {
@@ -67,9 +67,9 @@ export type Reading = {
 export function readDecisions(logPath: string, previous: Cursor | null, now: Date): Reading {
   const to = now.toISOString();
   const from = previous?.readAt ?? null;
-  let stat;
+  let handle;
   try {
-    stat = statSync(logPath);
+    handle = openSync(logPath, "r");
   } catch {
     return {
       decisions: [],
@@ -78,20 +78,29 @@ export function readDecisions(logPath: string, previous: Cursor | null, now: Dat
     };
   }
 
-  const start = startOf(previous, stat.ino, stat.size, printAt(logPath, previous?.offset ?? 0));
-  const lines = linesBetween(logPath, start.offset, stat.size);
-  const offset = start.offset + lines.bytes;
-  return {
-    decisions: lines.text.split("\n").flatMap(asDecision),
-    cursor: {
-      inode: stat.ino,
-      size: stat.size,
-      offset,
-      print: printAt(logPath, offset),
-      readAt: to,
-    },
-    window: { from, to, unknown: start.unknown },
-  };
+  try {
+    const stat = fstatSync(handle);
+    const start = startOf(previous, stat.ino, stat.size, printAt(handle, previous?.offset ?? 0));
+    const decisions: Decision[] = [];
+    let offset = start.offset;
+    for (const line of linesBetween(handle, start.offset, stat.size)) {
+      decisions.push(...asDecision(line.text));
+      offset = line.end;
+    }
+    return {
+      decisions,
+      cursor: {
+        inode: stat.ino,
+        size: stat.size,
+        offset,
+        print: printAt(handle, offset),
+        readAt: to,
+      },
+      window: { from, to, unknown: start.unknown },
+    };
+  } finally {
+    closeSync(handle);
+  }
 }
 
 function startOf(
@@ -131,32 +140,48 @@ function startOf(
  * The bytes immediately before an offset, hashed. A short window is enough to tell one log from
  * another at the same offset, and hashing keeps a chat line out of this unit's own state file.
  */
-function printAt(path: string, offset: number): string {
+function printAt(handle: number, offset: number): string {
   if (offset <= 0) return "";
   const wanted = Math.min(256, offset);
-  const handle = openSync(path, "r");
   try {
     const buffer = Buffer.alloc(wanted);
     const read = readSync(handle, buffer, 0, wanted, offset - wanted);
     return createHash("sha256").update(buffer.subarray(0, read)).digest("hex").slice(0, 16);
   } catch {
     return "";
-  } finally {
-    closeSync(handle);
   }
 }
 
 /** Whole lines only: a read that lands mid-line leaves the rest of it for the next one. */
-function linesBetween(path: string, from: number, to: number): { text: string; bytes: number } {
-  if (to <= from) return { text: "", bytes: 0 };
-  const handle = openSync(path, "r");
-  try {
-    const buffer = Buffer.alloc(to - from);
-    const read = readSync(handle, buffer, 0, buffer.length, from);
-    const complete = buffer.subarray(0, read).lastIndexOf(0x0a) + 1;
-    return { text: buffer.subarray(0, complete).toString("utf8"), bytes: complete };
-  } finally {
-    closeSync(handle);
+function* linesBetween(
+  handle: number,
+  from: number,
+  to: number,
+): Generator<{ text: string; end: number }> {
+  const chunkBytes = 64 * 1024;
+  const parts: Buffer[] = [];
+  let position = from;
+  while (position < to) {
+    const buffer = Buffer.alloc(Math.min(chunkBytes, to - position));
+    const read = readSync(handle, buffer, 0, buffer.length, position);
+    if (read === 0) break;
+    let start = 0;
+    for (
+      let end = buffer.indexOf(0x0a);
+      end >= 0 && end < read;
+      end = buffer.indexOf(0x0a, start)
+    ) {
+      const part = buffer.subarray(start, end);
+      const text =
+        parts.length === 0
+          ? part.toString("utf8")
+          : Buffer.concat([...parts, part]).toString("utf8");
+      parts.length = 0;
+      yield { text, end: position + end + 1 };
+      start = end + 1;
+    }
+    if (start < read) parts.push(buffer.subarray(start, read));
+    position += read;
   }
 }
 
@@ -168,7 +193,9 @@ function asDecision(line: string): Decision[] {
   if (!line.includes("model_fallback_decision")) return [];
   let held: Record<string, unknown>;
   try {
-    held = JSON.parse(line) as Record<string, unknown>;
+    const parsed: unknown = JSON.parse(line);
+    if (typeof parsed !== "object" || parsed === null) return [];
+    held = parsed as Record<string, unknown>;
   } catch {
     return [];
   }
