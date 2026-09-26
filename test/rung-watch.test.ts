@@ -76,6 +76,44 @@ function refusalLine(
 }
 
 describe("the fallback-decision reader", () => {
+  it("bounds allocations while reading a backlog and preserves a record across chunk boundaries", (context) => {
+    const { root } = temporaryMachine();
+    const log = join(root, "openclaw.log");
+    const line = decisionLine("2026-08-24T09:00:00Z", "candidate_succeeded", "syrax-mistral/模型");
+    const backlog = "unrelated log line\n".repeat(100_000);
+    const beforeUnicode = Buffer.byteLength(line.slice(0, line.indexOf("模型")));
+    const chunkBytes = 64 * 1024;
+    const filler =
+      (chunkBytes - 2 - ((Buffer.byteLength(backlog) + beforeUnicode) % chunkBytes) + chunkBytes) %
+      chunkBytes;
+    const padding = `${backlog}${"x".repeat(filler)}\n`;
+    const partial = decisionLine(
+      "2026-08-24T09:01:00Z",
+      "candidate_failed",
+      "syrax-mistral/later",
+    ).slice(0, 40);
+    const text = `${padding}${line}\n${partial}`;
+    writeFileSync(log, text);
+    const allocate = Buffer.alloc;
+    const allocations: number[] = [];
+    context.mock.method(Buffer, "alloc", (size: number) => {
+      allocations.push(size);
+      return allocate(size);
+    });
+
+    const read = readDecisions(log, null, new Date());
+
+    assert.deepEqual(
+      read.decisions.map((one) => one.candidate),
+      ["syrax-mistral/模型"],
+    );
+    assert.equal(read.cursor.offset, Buffer.byteLength(`${padding}${line}\n`));
+    assert.ok(Math.max(...allocations) <= 64 * 1024, "a backlog-sized read buffer was allocated");
+    const again = readDecisions(log, read.cursor, new Date());
+    assert.deepEqual(again.decisions, []);
+    assert.equal(again.cursor.offset, read.cursor.offset);
+  });
+
   it("reads what it has not read before, and nothing twice", () => {
     const { root } = temporaryMachine();
     const log = join(root, "openclaw.log");
