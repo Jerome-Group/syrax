@@ -1,10 +1,19 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import {
+  chmodSync,
+  closeSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+} from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { InvalidDeployment, readDeployment } from "../src/adapter/deployment.ts";
 import { InsecureSecretsStore } from "../src/adapter/secrets-store.ts";
 import { generateConfig } from "../src/adapter/generator.ts";
+import { writePrivateFile } from "../src/adapter/private-state.ts";
 import { temporaryMachine, writePrivateSecretsStore } from "./machine.ts";
 
 function machine(overrides: Record<string, unknown> = {}) {
@@ -17,6 +26,36 @@ function machine(overrides: Record<string, unknown> = {}) {
 }
 
 describe("generating the runtime configuration", () => {
+  it("leaves an already-open reader on the previous complete configuration", () => {
+    const { deployment } = machine();
+    const resolved = readDeployment(deployment);
+    generateConfig(resolved, { general: 1 });
+    const previous = readFileSync(resolved.configPath, "utf8");
+    const reader = openSync(resolved.configPath, "r");
+    try {
+      generateConfig(resolved, { general: 2 });
+      assert.equal(readFileSync(reader, "utf8"), previous);
+      assert.notEqual(readFileSync(resolved.configPath, "utf8"), previous);
+    } finally {
+      closeSync(reader);
+    }
+  });
+
+  it("removes temporary files after publication succeeds or fails", () => {
+    const { root, deployment } = machine();
+    const resolved = readDeployment(deployment);
+    generateConfig(resolved, {});
+    const shared = join(root, "shared");
+    assert.deepEqual(readdirSync(shared), ["openclaw.json"]);
+
+    const directory = join(shared, "cannot-replace");
+    mkdirSync(directory);
+    writePrivateFile(join(directory, "previous.json"), "{}\n");
+    assert.throws(() => writePrivateFile(directory, "replacement\n"));
+    assert.equal(readFileSync(join(directory, "previous.json"), "utf8"), "{}\n");
+    assert.deepEqual(readdirSync(shared).sort(), ["cannot-replace", "openclaw.json"]);
+  });
+
   it("writes it private, whatever mode the directory it lands in already had", () => {
     const { root, deployment } = machine();
     // The ordinary case: a runtime root an earlier install created under the default umask.
