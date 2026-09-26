@@ -48,7 +48,7 @@ const throttleIntervalSeconds = 10;
  * `StartCalendarInterval` rather than `StartInterval`, following ntulearn's ADR-0013: a calendar
  * job catches up when the Mac wakes past its time, where an interval one silently skips.
  */
-type Calendar = { Day?: number[]; Hour?: number; Minute: number };
+type Calendar = { Day?: number; Hour?: number; Minute: number };
 
 const hourly: Calendar = { Minute: 17 };
 
@@ -87,7 +87,11 @@ const hourlyBehindTheWatch: Calendar = { Minute: 57 };
  */
 const morning: Calendar = { Hour: 7, Minute: 0 };
 
-const everyThirdDay: Calendar = { Day: [1, 4, 7, 10, 13, 16, 19, 22, 25, 28], Hour: 4, Minute: 30 };
+const everyThirdDay: readonly Calendar[] = [1, 4, 7, 10, 13, 16, 19, 22, 25, 28].map((Day) => ({
+  Day,
+  Hour: 4,
+  Minute: 30,
+}));
 
 export function launchAgentPath(home: string, label: string): string {
   return join(home, "Library", "LaunchAgents", `${label}.plist`);
@@ -191,12 +195,16 @@ function indexSchedulePlist(
   label: string,
   deployment: Deployment,
   pass: string,
-  calendar: Calendar,
+  calendar: Calendar | readonly Calendar[],
 ): string {
   return pokePlist(label, `http://127.0.0.1:${deployment.searchPort}/index/${pass}`, calendar);
 }
 
-function pokePlist(label: string, endpoint: string, calendar: Calendar): string {
+function pokePlist(
+  label: string,
+  endpoint: string,
+  calendar: Calendar | readonly Calendar[],
+): string {
   return plist(label, [
     programArguments([
       "/usr/bin/curl",
@@ -208,17 +216,22 @@ function pokePlist(label: string, endpoint: string, calendar: Calendar): string 
       endpoint,
     ]),
     `	<key>StartCalendarInterval</key>
-${calendarDict(calendar)}`,
+${calendarIntervals(calendar)}`,
   ]);
 }
 
+function calendarIntervals(calendar: Calendar | readonly Calendar[]): string {
+  if (Array.isArray(calendar)) {
+    return `\t<array>\n${calendar.map(calendarDict).join("\n")}\n\t</array>`;
+  }
+  return calendarDict(calendar as Calendar);
+}
+
 function calendarDict(calendar: Calendar): string {
-  const entries = Object.entries(calendar).map(([key, value]) =>
-    Array.isArray(value)
-      ? `		<key>${key}</key>\n		<array>\n${value.map((one) => `			<integer>${one}</integer>`).join("\n")}\n		</array>`
-      : `		<key>${key}</key>\n		<integer>${value}</integer>`,
+  const entries = Object.entries(calendar).map(
+    ([key, value]) => `\t\t<key>${key}</key>\n\t\t<integer>${value}</integer>`,
   );
-  return `	<dict>\n${entries.join("\n")}\n	</dict>`;
+  return `\t<dict>\n${entries.join("\n")}\n\t</dict>`;
 }
 
 function programArguments(argv: string[]): string {

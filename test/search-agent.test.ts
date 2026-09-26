@@ -107,12 +107,34 @@ describe("the index schedules", () => {
     const full = plists[`${fullIndexLabel}.plist`];
     const incremental = plists[`${incrementalIndexLabel}.plist`];
 
-    const days = [...full.matchAll(/<integer>(\d+)<\/integer>/g)].map((one) => Number(one[1]));
-    const calendar = days.slice(0, 10);
-    assert.deepEqual(calendar, [1, 4, 7, 10, 13, 16, 19, 22, 25, 28]);
+    assert.match(full, /<key>StartCalendarInterval<\/key>\s*<array>/);
+    assert.doesNotMatch(full, /<key>Day<\/key>\s*<array>/);
+    const days = [...full.matchAll(/<key>Day<\/key>\s*<integer>(\d+)<\/integer>/g)].map((one) =>
+      Number(one[1]),
+    );
+    assert.deepEqual(days, [1, 4, 7, 10, 13, 16, 19, 22, 25, 28]);
+    assert.equal([...full.matchAll(/<key>Hour<\/key>\s*<integer>4<\/integer>/g)].length, 10);
+    assert.equal([...full.matchAll(/<key>Minute<\/key>\s*<integer>30<\/integer>/g)].length, 10);
+    assert.match(incremental, /<key>StartCalendarInterval<\/key>\s*<dict>/);
     assert.equal(incremental.includes("<key>Day</key>"), false, "hourly names no day.");
     assert.match(incremental, /<key>Minute<\/key>\s*<integer>17<\/integer>/);
   });
+
+  it(
+    "decodes the full calendar into integer-valued dictionaries",
+    { skip: process.platform !== "darwin" },
+    async () => {
+      const { agent } = installed();
+      const path = agent.plistPaths.find((path) => path.endsWith(`${fullIndexLabel}.plist`));
+      assert.ok(path);
+      const { stdout } = await run("/usr/bin/plutil", ["-convert", "json", "-o", "-", path]);
+      const plist = JSON.parse(stdout);
+      assert.deepEqual(
+        plist.StartCalendarInterval,
+        [1, 4, 7, 10, 13, 16, 19, 22, 25, 28].map((Day) => ({ Day, Hour: 4, Minute: 30 })),
+      );
+    },
+  );
 
   it("adds no unit for the benchmark or for a re-embed asked for on demand", () => {
     const { agent, home } = installed();
