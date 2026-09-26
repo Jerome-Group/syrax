@@ -26,7 +26,7 @@ const deployment = readDeployment(machine.deployment);
 const config = buildRuntimeConfig(deployment, { general: 2, academic: 3, media: 4, system: 5 }, []);
 
 function agent(id: string) {
-  return config.agents.list.find((one) => one.id === id)!;
+  return config.agents.entries[id]!;
 }
 
 describe("reading a deployment", () => {

@@ -15,6 +15,7 @@ import { after, before, describe, it } from "node:test";
 import { writePrivateFile } from "../src/adapter/private-state.ts";
 import {
   answer,
+  answeringAgent,
   runtimeEntrypoint,
   runtimeIsInstalled,
   standSyrax,
@@ -61,20 +62,20 @@ describe("an agent change written to the configuration", { skip: !runtimeIsInsta
     await syrax?.stop();
   });
 
-  it("is applied and not landed: no turn uses it until a channel reload rebuilds", async () => {
+  it("lands through automatic reload, and channel changes preserve the selected model", async () => {
     await settle(syrax);
     standDownToMistral(syrax);
 
-    const unlanded = await turnsUntil(
+    const automatic = await turnsUntil(
       syrax,
       "Which model is this?",
       syrax.carriers.general,
       (each) => each.model === mistral,
     );
     assert.equal(
-      unlanded.landed,
-      false,
-      `an agents write reached a turn on its own after ${unlanded.turns.length} of them.`,
+      automatic.landed,
+      true,
+      `an agents write did not reach a turn: ${JSON.stringify(automatic.turns)}`,
     );
 
     // Nothing here touches the model. Routing a carrier the gateway has not seen is a channel
@@ -109,13 +110,14 @@ describe("a provider change written to the configuration", { skip: !runtimeIsIns
       catalogue: [gemini, mistral],
       standingReply: { kind: "reply", text: answer },
     });
+    syrax.providers.push(moved);
   });
   after(async () => {
     await syrax?.stop();
     await moved?.close();
   });
 
-  it("goes the same way as an agent change: applied, and landed by the channel reload", async () => {
+  it("lands automatically, and remains selected after a channel reload", async () => {
     await settle(syrax);
     // The front rung's provider is pointed at a second stub. Which one is asked is the answer, and
     // it is a `models` write rather than an `agents` one.
@@ -123,9 +125,12 @@ describe("a provider change written to the configuration", { skip: !runtimeIsIns
       config.models.providers["syrax-gemini"].baseUrl = moved.baseUrl;
     });
 
-    const asked = moved.requests.length;
+    const completionCount = () =>
+      moved.requests.filter((request) => request.path.endsWith("/chat/completions")).length;
+    const asked = completionCount();
     await turnsUntil(syrax, "Which provider is this?", syrax.carriers.general, () => false, 3);
-    assert.equal(moved.requests.length, asked, "a models write reached a turn on its own.");
+    assert.ok(completionCount() > asked, "a models write did not reach a turn automatically.");
+    const beforeChannel = completionCount();
 
     const carrier = syrax.telegram.createTopic();
     rewrite(syrax, (config) => {
@@ -133,9 +138,23 @@ describe("a provider change written to the configuration", { skip: !runtimeIsIns
         agentId: "media",
       };
     });
-    await turnsUntil(syrax, "Who answers here?", carrier, (each) => each.agent === "media");
+    const landed = await turnsUntil(
+      syrax,
+      "Who answers here?",
+      carrier,
+      () =>
+        answeringAgent(
+          JSON.stringify(
+            moved.requests.findLast((request) => request.path.endsWith("/chat/completions"))?.body,
+          ),
+        ) === "media",
+    );
+    assert.ok(landed.landed, "the selected provider never received a completion from Media");
 
-    assert.ok(moved.requests.length > asked, "the channel reload did not land the models write.");
+    assert.ok(
+      completionCount() > beforeChannel,
+      "the channel reload did not preserve the selected provider.",
+    );
   });
 });
 
@@ -149,24 +168,28 @@ describe("the runtime's own safe restart", { skip: !runtimeIsInstalled() }, () =
     await syrax?.stop();
   });
 
-  it("lands an agent change that no number of turns would have landed", async () => {
+  it("keeps the automatically selected model after restarting", async () => {
     await settle(syrax);
     standDownToMistral(syrax);
-    const unlanded = await turnsUntil(
+    const automatic = await turnsUntil(
       syrax,
       "Which model is this?",
       syrax.carriers.general,
       (each) => each.model === mistral,
       3,
     );
-    assert.equal(unlanded.landed, false, "the write landed with no reload and no restart.");
+    assert.ok(automatic.landed, "the write did not land through automatic reload.");
 
+    const connected = syrax.telegram.matching("getMe").length;
     const restart = spawnSync(
       process.execPath,
       [runtimeEntrypoint(), "gateway", "restart", "--safe"],
       { env: syrax.gateway.environment, encoding: "utf8" },
     );
     assert.equal(restart.status, 0, restart.stderr);
+    // The command acknowledges scheduling before the channel restarts. Injecting into its old
+    // poll can consume a message during teardown; wait for the restarted provider first.
+    await syrax.telegram.waitFor("getMe", () => true, 30_000, connected);
 
     const landed = await turnsUntil(
       syrax,

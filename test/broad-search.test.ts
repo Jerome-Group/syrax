@@ -105,8 +105,12 @@ describe("General answering with the corpus", { skip: !runtimeIsInstalled() }, (
       "one `message` call put the file on the wire more than once.",
     );
     assert.equal(
-      syrax.telegram.matching("sendMessage", (call) => call.body.text === "⚠️ Media failed.")
-        .length,
+      syrax.telegram.matching(
+        "sendMessage",
+        (call) =>
+          call.body.text ===
+          "⚠️ <code>wedderburn.md</code>: Delivery failed. Try sending this file again.",
+      ).length,
       0,
       "the tool route warns about media of its own accord, which the Owner would see every time.",
     );
@@ -154,7 +158,9 @@ describe("General answering with the corpus", { skip: !runtimeIsInstalled() }, (
     await syrax.telegram.quiet();
     const outside = join(mkdtempSync(join(tmpdir(), "syrax-unowned-")), "wedderburn.md");
     writeFileSync(outside, "artin wedderburn theorem semisimple rings");
-    const failed = (call: OutboundCall) => call.body.text === "⚠️ Media failed.";
+    const failed = (call: OutboundCall) =>
+      call.body.text ===
+      "⚠️ <code>wedderburn.md</code>: Delivery failed. Try sending this file again.";
     const already = syrax.telegram.matching("sendMessage", failed).length;
     const documents = syrax.telegram.matching("sendDocument", () => true).length;
 
@@ -169,7 +175,7 @@ describe("General answering with the corpus", { skip: !runtimeIsInstalled() }, (
 
     // `waitFor` matched on that text, so restating it proves nothing. What is worth asserting is
     // that the warning arrived *instead of* the file and carries nothing but itself: the Owner sees
-    // a bare line with no document and no clue which path the runtime would not take.
+    // a filename-specific warning without the unowned document itself.
     assert.equal(
       syrax.telegram.matching("sendDocument", () => true).length,
       documents,
@@ -200,7 +206,10 @@ describe("General answering with the corpus", { skip: !runtimeIsInstalled() }, (
         action: "send",
         message: `Which of these did you mean?\n\n${numbered}`,
       },
-      { method: "sendMessage" },
+      {
+        method: "sendMessage",
+        predicate: (call) => String(call.body.text).includes("Which of these did you mean?"),
+      },
     );
 
     // Read as the Owner reads it: the surface formats what looks like a filename, so `wedderburn.md`
@@ -209,7 +218,7 @@ describe("General answering with the corpus", { skip: !runtimeIsInstalled() }, (
     for (const [at, name] of shortlist.candidates.entries()) {
       assert.ok(
         read.includes(`${at + 1}. ${name}`),
-        `${name} is not on a line the Owner can name.`,
+        `${name} is not on a line the Owner can name: ${read}`,
       );
     }
     assert.equal(

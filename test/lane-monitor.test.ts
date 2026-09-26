@@ -567,8 +567,8 @@ describe("the rationed lane's composition", () => {
 
     assert.equal(servers[monitorServerName]!.url, `http://127.0.0.1:18791${mcpPath}`);
     assert.equal(servers[monitorServerName]!.transport, "streamable-http");
-    for (const agent of config.agents.list) {
-      assert.ok(agent.tools.alsoAllow.includes(hatchTool), `${agent.id} cannot reach the hatch.`);
+    for (const [id, agent] of Object.entries(config.agents.entries)) {
+      assert.ok(agent.tools.alsoAllow.includes(hatchTool), `${id} cannot reach the hatch.`);
     }
   });
 });

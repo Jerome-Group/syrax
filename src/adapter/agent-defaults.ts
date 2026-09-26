@@ -21,6 +21,8 @@ import { workerLane } from "./worker-lane.ts";
 export function agentDefaults(deployment: Deployment, standingDown: readonly string[]) {
   return {
     model: laneChain(frontLane, standingDown),
+    systemAgent: { agentId: defaultChat.id },
+    authInheritance: { agentId: defaultChat.id },
     subagents: subagentDefaults(standingDown),
     timeoutSeconds: turnCeilingSeconds,
     // Both catalogues off: the third-party allowlist ADR-0003 emptied, and the runtime's own
@@ -102,11 +104,14 @@ export function agentWorkspace(deployment: Deployment, chat: Chat): string {
 }
 
 /** One agent per chat, each carrying the tools its chat reaches and no others. */
-export function agentList(deployment: Deployment) {
-  return everyChat.map((chat) => ({
-    id: chat.id,
-    workspace: agentWorkspace(deployment, chat),
-    ...(chat.id === defaultChat.id ? { default: true } : {}),
-    tools: { alsoAllow: agentTools(chat) },
-  }));
+export function agentEntries(deployment: Deployment) {
+  return Object.fromEntries(
+    everyChat.map((chat) => [
+      chat.id,
+      {
+        workspace: agentWorkspace(deployment, chat),
+        tools: { alsoAllow: agentTools(chat) },
+      },
+    ]),
+  );
 }

@@ -5,8 +5,9 @@
  */
 
 import { academicServer } from "./academic-tools.ts";
-import { agentDefaults, agentList } from "./agent-defaults.ts";
+import { agentDefaults, agentEntries } from "./agent-defaults.ts";
 import { delegationTools } from "./agent-tools.ts";
+import { defaultChat } from "./chats.ts";
 import type { CarrierMap } from "./carriers.ts";
 import type { Deployment } from "./deployment.ts";
 import { monitorServer } from "./monitor-tools.ts";
@@ -33,14 +34,15 @@ export function buildRuntimeConfig(
     },
     agents: {
       defaults: agentDefaults(deployment, standingDown),
-      list: agentList(deployment),
+      ownership: "explicit",
+      entries: agentEntries(deployment),
     },
     // ADR-0011's fourth standing line. The prompt the front lane pays for is a property of this.
     // What each agent may call on top of it is composed per agent in `agent-tools.ts`, because the
     // list there replaces this one rather than adding to it.
     tools: { profile: "minimal", alsoAllow: delegationTools },
     // Every server here is reachable by every agent; which tools an agent may *call* is the
-    // per-agent allowlist in `agents.list`, and that is where the capability boundary is drawn.
+    // per-agent allowlist in `agents.entries`, and that is where the capability boundary is drawn.
     mcp: {
       servers: {
         ...searchServers(deployment),
@@ -48,6 +50,7 @@ export function buildRuntimeConfig(
         ...academicServer(deployment),
       },
     },
+    bindings: [{ agentId: defaultChat.id, match: { channel: "telegram", accountId: "*" } }],
     channels: { telegram: telegramChannel(deployment, carriers) },
     commands: ownerCommandAllowlist(deployment),
     gateway: {

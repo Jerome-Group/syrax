@@ -39,7 +39,7 @@ const servers = config.mcp.servers as Record<
 >;
 
 function agent(id: string) {
-  return config.agents.list.find((one) => one.id === id)!;
+  return config.agents.entries[id]!;
 }
 
 describe("the connections to the search unit", () => {

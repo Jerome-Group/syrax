@@ -7,7 +7,13 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { chats, everyChat } from "../src/adapter/chats.ts";
-import { runtimeIsInstalled, standSyrax, type SyraxFixture } from "./gateway.ts";
+import {
+  answeringAgent,
+  turnCompletion,
+  runtimeIsInstalled,
+  standSyrax,
+  type SyraxFixture,
+} from "./gateway.ts";
 import { ownerTelegramUserId } from "./machine.ts";
 import type { OutboundCall } from "./stubs/telegram-bot-api.ts";
 
@@ -31,13 +37,13 @@ describe("the four chats", { skip: !runtimeIsInstalled() }, () => {
   ): Promise<{ sent: OutboundCall; prompt: string }> {
     const isAnswer = (call: OutboundCall) => call.body.text === answer;
     const answered = syrax.telegram.matching("sendMessage", isAnswer).length;
+    const asked = syrax.provider.requests.length;
     syrax.telegram.inject({ fromUserId: ownerTelegramUserId, text, messageThreadId: carrier });
     const sent = await syrax.telegram.waitFor("sendMessage", isAnswer, 60_000, answered);
-    return { sent, prompt: JSON.stringify(syrax.provider.requests.at(-1)?.body) };
-  }
-
-  function answeringAgent(prompt: string): string {
-    return /agent=(\w+)/.exec(prompt)?.[1] ?? "none";
+    return {
+      sent,
+      prompt: JSON.stringify(turnCompletion(syrax.provider, asked, text)),
+    };
   }
 
   it("answers a thread-less root message as General, and never drops it", async () => {
@@ -78,11 +84,21 @@ describe("the four chats", { skip: !runtimeIsInstalled() }, () => {
   });
 
   it("gives each chat its own session, so one chat's context is never another's", async () => {
-    const sessions = new Set<string>();
+    const markers = new Map(
+      everyChat.map((chat) => [chat.id, `syrax-session-${chat.id}-269-proof`]),
+    );
     for (const subject of everyChat) {
-      const { prompt } = await ask("What is the state of things?", syrax.carriers[subject.id]);
-      sessions.add(/session=(\S+)/.exec(prompt)?.[1] ?? subject.id);
+      await ask(markers.get(subject.id)!, syrax.carriers[subject.id]);
     }
-    assert.equal(sessions.size, everyChat.length);
+    for (const subject of everyChat) {
+      const { prompt } = await ask("Which marker belongs here?", syrax.carriers[subject.id]);
+      assert.ok(prompt.includes(markers.get(subject.id)!), "the chat forgot its previous turn");
+      for (const other of everyChat.filter((chat) => chat.id !== subject.id)) {
+        assert.ok(
+          !prompt.includes(markers.get(other.id)!),
+          "another chat's turn leaked into this session",
+        );
+      }
+    }
   });
 });

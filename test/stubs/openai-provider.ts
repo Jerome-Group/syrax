@@ -26,7 +26,11 @@ export type ScriptedResponse =
   | { kind: "vanished"; message: string }
   | { kind: "wall"; requestedTokens: number; limitTokens: number };
 
-export type ProviderRequest = { path: string; body: Record<string, unknown> };
+export type ProviderRequest = {
+  path: string;
+  body: Record<string, unknown>;
+  authorization?: string;
+};
 
 /** A scripted response, how long the rung takes to produce it, and what it says about itself. */
 export type ScriptedTurn = ScriptedResponse & {
@@ -106,7 +110,7 @@ export class ProviderStub {
   async #handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const path = (request.url ?? "").split("?")[0] ?? "";
     const body = await readJsonBody(request);
-    this.requests.push({ path, body });
+    this.requests.push({ path, body, authorization: request.headers.authorization });
 
     if (path.endsWith("/models")) {
       return json(response, 200, {
