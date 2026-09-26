@@ -69,6 +69,7 @@ export class DailyCounters {
    */
   refund(rung: RationedRung, now: Date = new Date()): void {
     this.#rollTheDay(now);
+    if (providerDay(now) !== this.#ledger.day) return;
     const id = rungId(rung);
     this.#ledger.spent[id] = Math.max(0, (this.#ledger.spent[id] ?? 0) - 1);
     this.#write();
@@ -98,7 +99,7 @@ export class DailyCounters {
 
   #rollTheDay(now: Date): void {
     const today = providerDay(now);
-    if (this.#ledger.day === today) return;
+    if (this.#ledger.day >= today) return;
     this.#ledger = { day: today, spent: {}, refused: this.#ledger.refused };
   }
 

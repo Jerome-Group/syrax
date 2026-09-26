@@ -263,8 +263,8 @@ describe("the rationed lane's counters", () => {
 
   it("starts the allowance again when the provider's own day rolls", () => {
     const { deployment } = temporaryMachine();
-    const counters = new DailyCounters(readDeployment(deployment).monitorState);
     const today = new Date("2026-08-24T20:00:00Z");
+    const counters = new DailyCounters(readDeployment(deployment).monitorState, today);
     const tomorrow = new Date("2026-08-25T20:00:00Z");
 
     counters.spend(hatchLane.rungs[0], today);
@@ -275,8 +275,8 @@ describe("the rationed lane's counters", () => {
 
   it("empties the counts on the day roll and keeps what refused a rung", () => {
     const { deployment } = temporaryMachine();
-    const counters = new DailyCounters(readDeployment(deployment).monitorState);
     const today = new Date("2026-08-24T20:00:00Z");
+    const counters = new DailyCounters(readDeployment(deployment).monitorState, today);
     const tomorrow = new Date("2026-08-25T20:00:00Z");
     const rung = hatchLane.rungs[0];
 
@@ -285,6 +285,34 @@ describe("the rationed lane's counters", () => {
 
     assert.equal(counters.state(tomorrow)[0]!.spent, 0);
     assert.equal(counters.state(tomorrow)[0]!.refused?.said, "overloaded");
+  });
+
+  it("keeps the new day's counts when an old request answers after rollover", () => {
+    const { deployment } = temporaryMachine();
+    const monitorState = readDeployment(deployment).monitorState;
+    const yesterday = new Date("2026-08-25T06:59:00Z");
+    const today = new Date("2026-08-25T07:01:00Z");
+    const rung = hatchLane.rungs[0];
+    const counters = new DailyCounters(monitorState, yesterday);
+
+    counters.spend(rung, yesterday);
+    counters.spend(rung, today);
+    counters.spend(rung, today);
+    counters.refund(rung, yesterday);
+    counters.refuse(
+      rung,
+      { at: yesterday.toISOString(), status: 503, said: "overloaded" },
+      yesterday,
+    );
+
+    assert.equal(counters.state(yesterday)[0]!.spent, 2);
+    assert.equal(counters.remaining(rung, today), 18);
+    const persisted = new DailyCounters(monitorState, today).state(today)[0]!;
+    assert.equal(persisted.spent, 2);
+    assert.equal(persisted.refused?.said, "overloaded");
+
+    counters.refund(rung, today);
+    assert.equal(new DailyCounters(monitorState, today).state(today)[0]!.spent, 1);
   });
 
   it("rolls the day where the provider resets it rather than where the machine is", () => {
