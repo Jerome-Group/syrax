@@ -25,8 +25,9 @@ import json
 import os
 import sqlite3
 import time
+from collections import deque
 from collections.abc import Iterator
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import Future, ProcessPoolExecutor
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -162,28 +163,29 @@ def _read(
     kind: Pass,
     database: sqlite3.Connection,
     readers: ProcessPoolExecutor,
-) -> list[tuple[Crawled, Extraction | None]]:
-    """One batch's text, decided here and read in the pool.
+) -> Iterator[tuple[Crawled, Extraction]]:
+    """Consume one worker-count window in crawl order, including cached/no-read decisions."""
+    candidates = iter(batch)
+    pending: deque[tuple[Crawled, Extraction | Future[Extraction]]] = deque()
 
-    Every decision that needs the index — is this unchanged, was it OCR'd before — is made in this
-    process, so what crosses to a worker is a path and whether it may run OCR, and nothing else.
-    """
-    decided: list[tuple[Crawled, Extraction | None]] = []
-    positions: list[int] = []
-    to_read: list[tuple[str, bool]] = []
-    for position, crawled in enumerate(batch):
-        already = stored.get(crawled.path)
-        unchanged = _unchanged(already, crawled)
-        decided.append((crawled, _without_reading(crawled, already, unchanged, kind, database)))
-        if decided[position][1] is None:
-            positions.append(position)
-            to_read.append((crawled.path, kind == FULL))
+    def prefetch() -> None:
+        for crawled in itertools.islice(candidates, EXTRACT_WORKERS - len(pending)):
+            already = stored.get(crawled.path)
+            unchanged = _unchanged(already, crawled)
+            extraction = _without_reading(crawled, already, unchanged, kind, database)
+            result = (
+                extraction
+                if extraction is not None
+                else readers.submit(_read_one, (crawled.path, kind == FULL))
+            )
+            pending.append((crawled, result))
 
-    for position, extraction in zip(
-        positions, readers.map(_read_one, to_read, chunksize=1), strict=True
-    ):
-        decided[position] = (batch[position], extraction)
-    return decided
+    prefetch()
+    while pending:
+        crawled, result = pending.popleft()
+        yield crawled, result.result() if isinstance(result, Future) else result
+        del result
+        prefetch()
 
 
 def _read_one(work: tuple[str, bool]) -> Extraction:
