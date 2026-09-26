@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from syrax_search.building import INCREMENTAL, run_pass
 from syrax_search.index import open_index
 from syrax_search.retrieval import CONFIDENT_FLOOR, SHORTLIST, arms_agree, fuse, search
@@ -193,3 +195,78 @@ def test_a_close_call_offers_more_than_the_three_it_used_to(machine, embedder):
         "the fixture corpus is too small to reach ten, so the number ADR-0028 argues for is "
         "asserted here rather than left to a corpus that cannot tell four from ten"
     )
+
+
+def add_synthetic_document(database, path, text, vector):
+    import os
+
+    import numpy as np
+
+    from syrax_search.index import put_document
+
+    document_id = put_document(
+        database,
+        path=path,
+        name=os.path.basename(path),
+        size=len(text),
+        mtime=0,
+        extracted=True,
+        status="ok",
+        text=text,
+        text_sha=None,
+    )
+    cursor = database.execute(
+        "INSERT INTO chunks(document_id, ordinal, text) VALUES(?, 0, ?)", (document_id, text)
+    )
+    chunk_id = cursor.lastrowid
+    database.execute("INSERT INTO chunk_fts(rowid, text) VALUES(?, ?)", (chunk_id, text))
+    database.execute(
+        "INSERT INTO chunk_vectors(chunk_id, embedding) VALUES(?, ?)",
+        (chunk_id, np.asarray(vector, dtype=np.float32).tobytes()),
+    )
+    return document_id
+
+
+def test_scoped_vector_search_cannot_be_crowded_out_by_other_directories(tmp_path):
+    import numpy as np
+
+    from syrax_search.retrieval import _vector_arm
+
+    database = open_index(str(tmp_path / "index.sqlite"))
+    query = np.zeros(768, dtype=np.float32)
+    query[0] = 1
+    for ordinal in range(401):
+        add_synthetic_document(database, f"/outside/{ordinal}.md", "unrelated body", query)
+    nearby = query.copy()
+    nearby[1] = 0.1
+    wanted = add_synthetic_document(database, "/scope/answer.md", "answer body", nearby)
+    database.commit()
+    ranked, scores = _vector_arm(database, query, "/scope")
+    assert ranked == [wanted]
+    assert scores[wanted] > 0.89
+    database.close()
+
+
+@pytest.mark.parametrize("scope", ["/scope_100%", "/Scope", "/"])
+def test_every_arm_treats_scope_as_a_literal_directory_prefix(tmp_path, scope):
+    import numpy as np
+
+    from syrax_search.retrieval import _keyword_arm, _vector_arm
+
+    database = open_index(str(tmp_path / "index.sqlite"))
+    vector = np.zeros(768, dtype=np.float32)
+    wanted = add_synthetic_document(
+        database,
+        scope.rstrip("/") + "/target.md",
+        "target document body",
+        vector,
+    )
+    if scope != "/":
+        sibling = scope.lower().replace("_", "X").replace("%", "suffix")
+        add_synthetic_document(database, sibling + "/target.md", "target document body", vector)
+        add_synthetic_document(database, scope + "sibling/target.md", "target body", vector)
+    database.commit()
+    text, names, naming = _keyword_arm(database, "target", scope)
+    ranked, _ = _vector_arm(database, vector, scope)
+    assert text == names == naming == ranked == [wanted]
+    database.close()
