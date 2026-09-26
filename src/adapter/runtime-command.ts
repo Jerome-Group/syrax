@@ -27,6 +27,7 @@
 
 import { spawn } from "node:child_process";
 import { join } from "node:path";
+import { performance } from "node:perf_hooks";
 import type { Deployment } from "./deployment.ts";
 import { channelName } from "./telegram-channel.ts";
 
@@ -127,8 +128,9 @@ async function untilQuiet(deployment: Deployment): Promise<"quiet" | "busy" | "u
 /** The channel's own account, which is the only thing that knows whether anything is listening. */
 async function untilConnected(deployment: Deployment): Promise<boolean> {
   const params = JSON.stringify({ channel: channelName });
+  const began = performance.now();
   let started = false;
-  for (const waited of every(connectedWithinMs)) {
+  for (const _ of every(connectedWithinMs)) {
     const status = await gatewayCall(deployment, "channels.status", params);
     const account = (
       status.body as {
@@ -137,7 +139,8 @@ async function untilConnected(deployment: Deployment): Promise<boolean> {
     )?.channelAccounts?.[channelName]?.[0];
     if (account?.running === true && account.connected === true) return true;
     // One more start, once: the first can land while the account is still on its way down.
-    if (!started && waited >= connectedWithinMs / 2) {
+    const waited = performance.now() - began;
+    if (!started && waited >= connectedWithinMs / 2 && waited < connectedWithinMs) {
       started = true;
       await gatewayCall(deployment, "channels.start", params);
     }
@@ -147,7 +150,8 @@ async function untilConnected(deployment: Deployment): Promise<boolean> {
 }
 
 function* every(withinMs: number): Generator<number> {
-  for (let waited = 0; waited < withinMs; waited += pollEveryMs) yield waited;
+  const started = performance.now();
+  for (let waited = 0; waited < withinMs; waited = performance.now() - started) yield waited;
 }
 
 function waitOne(): Promise<void> {
