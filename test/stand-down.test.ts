@@ -409,10 +409,10 @@ describe("a stand down", () => {
     }).landing;
 
     assert.equal(landed.landed, true, landed.said);
-    assert.match(landed.said, /restarted safely/);
+    assert.match(landed.said, /channel reconnected afterward/);
     assert.match(landed.said, /did not come back up/);
     assert.ok(
-      ranAgainstTheRuntime().at(-1)!.startsWith("gateway restart --safe"),
+      ranAgainstTheRuntime().some((command) => command.startsWith("gateway restart --safe")),
       "it left the channel down.",
     );
   });

@@ -34,29 +34,29 @@ describe("configuration landing deadlines", () => {
     const landed = await landConfigWrite(deployment);
     const ran = commands();
     assert.equal(ran.filter((command) => command.includes("gateway.restart.preflight")).length, 2);
-    assert.ok(ran.at(-1)?.includes("gateway restart --safe"));
-    assert.equal(landed.landed, true);
-    assert.match(landed.said, /still working when the wait ran out/);
+    assert.ok(ran.some((command) => command.includes("gateway restart --safe")));
+    assert.equal(landed.landed, false);
+    assert.match(landed.said, /new connected telegram channel was not confirmed/);
   });
 
   it("counts slow status calls toward the connection deadline", async (t) => {
     const { deployment, commands } = slowMachine(t, { wedged: true });
     const landed = await landConfigWrite(deployment);
     const ran = commands();
-    assert.equal(ran.filter((command) => command.includes("channels.status")).length, 1);
+    assert.equal(ran.filter((command) => command.includes("channels.status")).length, 2);
     assert.equal(ran.filter((command) => command.includes("channels.start")).length, 2);
-    assert.ok(ran.at(-1)?.includes("gateway restart --safe"));
-    assert.equal(landed.landed, true);
-    assert.match(landed.said, /did not come back up/);
+    assert.ok(ran.some((command) => command.includes("gateway restart --safe")));
+    assert.equal(landed.landed, false);
+    assert.match(landed.said, /new connected telegram channel was not confirmed/);
   });
 
   it("retries a start once the status call itself crosses the halfway threshold", async (t) => {
     const { deployment, commands } = slowMachine(t, { wedged: true, callMs: 16_000 });
     const landed = await landConfigWrite(deployment);
     const ran = commands();
-    assert.equal(ran.filter((command) => command.includes("channels.status")).length, 1);
+    assert.equal(ran.filter((command) => command.includes("channels.status")).length, 2);
     assert.equal(ran.filter((command) => command.includes("channels.start")).length, 3);
-    assert.ok(ran.at(-1)?.includes("gateway restart --safe"));
+    assert.ok(ran.some((command) => command.includes("gateway restart --safe")));
     assert.equal(landed.landed, true);
   });
 });

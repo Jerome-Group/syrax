@@ -2,21 +2,15 @@
  * The pinned runtime run as a command rather than as the gateway, and the one job Syrax needs of it:
  * making a write to the generated configuration reach the next turn.
  *
- * A chain lives under `agents`, which is applied when written and landed only when the turn path is
- * rebuilt (ADR-0021), so a write is an actuator only when it is paired with a lander. Which lander,
- * and when, is measured in `docs/research/landing-an-agents-write.md` rather than chosen:
+ * ADR-0021's OpenClaw 2026.6.34 measurement found that an agents write and `config.apply`
+ * did not rebuild the turn path. Reloading the channel landed it, but a reload during an active
+ * turn could strand the channel during teardown. That historical result is why this lander waits
+ * for quiet, reloads, and verifies the channel connection; it does not assume every runtime version
+ * has the same automatic reload behavior.
  *
- * - **`config.apply` is not one.** It writes the file, returns `ok`, and no turn changes.
- * - **Reloading the channel is**, and it keeps the sessions a restart spends. But it must not be
- *   issued while a turn is in flight: the stop times out mid-teardown, the start that follows does
- *   nothing, and the channel is left down with the gateway alive and nothing listening.
- * - **`gateway restart --safe` always ends with a live channel**, deferring until the work drains,
- *   and it costs the sessions.
- *
- * So the sequence here waits for the gateway to say it is quiet, reloads the channel, and **checks
- * that the channel came back** rather than believing the start that says it did. Every branch that
- * cannot get there ends at the restart: a stand down that leaves the Owner's chat deaf is worse
- * than one that costs them a session.
+ * When a channel reload cannot be verified, a safe restart lets the runtime defer until work
+ * drains. Its command may acknowledge the request before the channel reconnects, so success needs
+ * a new connected channel lifecycle rather than just a zero command exit.
  *
  * **It opens with an admin call, and the order is not cosmetic.** The CLI mints this machine's
  * pairing from the scopes of the *first* method it is ever asked for, and an upgrade afterwards
@@ -84,10 +78,37 @@ export async function landConfigWrite(deployment: Deployment): Promise<Landed> {
  * that loses the write that already happened.
  */
 export async function landBySafeRestart(deployment: Deployment): Promise<Landed> {
+  const requestedAt = Date.now();
   const ran = await runtimeCommand(deployment, ["gateway", "restart", "--safe"]);
-  return ran.code === 0
-    ? { landed: true, said: "the gateway restarted safely, so the sessions are gone" }
-    : { landed: false, said: `the safe restart exited ${ran.code}: ${ran.said}` };
+  if (ran.code !== 0) {
+    return { landed: false, said: `the safe restart exited ${ran.code}: ${ran.said}` };
+  }
+  const began = performance.now();
+  const params = JSON.stringify({ channel: channelName });
+  for (const _ of every(connectedWithinMs)) {
+    const status = await gatewayCall(deployment, "channels.status", params);
+    const account = channelAccount(status.body);
+    if (performance.now() - began >= connectedWithinMs) break;
+    if (
+      status.ok &&
+      account?.running === true &&
+      account.connected === true &&
+      typeof account.lastStartAt === "number" &&
+      Number.isSafeInteger(account.lastStartAt) &&
+      account.lastStartAt > requestedAt &&
+      account.lastStartAt <= Date.now()
+    ) {
+      return {
+        landed: true,
+        said: `the safe restart was requested, and the ${channelName} channel reconnected afterward`,
+      };
+    }
+    await waitOne();
+  }
+  return {
+    landed: false,
+    said: `the safe restart was requested, but a new connected ${channelName} channel was not confirmed`,
+  };
 }
 
 /**
@@ -132,11 +153,7 @@ async function untilConnected(deployment: Deployment): Promise<boolean> {
   let started = false;
   for (const _ of every(connectedWithinMs)) {
     const status = await gatewayCall(deployment, "channels.status", params);
-    const account = (
-      status.body as {
-        channelAccounts?: Record<string, { running?: boolean; connected?: boolean }[]>;
-      } | null
-    )?.channelAccounts?.[channelName]?.[0];
+    const account = channelAccount(status.body);
     if (account?.running === true && account.connected === true) return true;
     // One more start, once: the first can land while the account is still on its way down.
     const waited = performance.now() - began;
@@ -147,6 +164,14 @@ async function untilConnected(deployment: Deployment): Promise<boolean> {
     await waitOne();
   }
   return false;
+}
+
+function channelAccount(
+  body: unknown,
+): { running?: unknown; connected?: unknown; lastStartAt?: unknown } | undefined {
+  const accounts = (body as { channelAccounts?: Record<string, unknown> } | null)
+    ?.channelAccounts?.[channelName];
+  return Array.isArray(accounts) ? accounts[0] : undefined;
 }
 
 function* every(withinMs: number): Generator<number> {
