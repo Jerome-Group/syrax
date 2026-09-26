@@ -73,7 +73,10 @@ describe("the generated runtime configuration", () => {
     assert.equal(config.logging.file, "/private/root/logs/openclaw.log");
     assert.doesNotMatch(config.logging.file, /\d{4}-\d{2}-\d{2}/, "a dated basename rolls.");
     assert.equal(config.logging.maxFileBytes, 26214400);
-    assert.equal(config.logging.redactSensitive, "tools");
+    assert.ok(
+      !("redactSensitive" in config.logging),
+      "the runtime always redacts and rejects the retired option",
+    );
   });
 
   it("names the port it listens on, so a second gateway collides rather than drifting", () => {
@@ -178,15 +181,18 @@ describe("the generated runtime configuration", () => {
 
 describe("the four chats", () => {
   it("gives each chat an agent of its own, with General the default", () => {
-    assert.deepEqual(
-      config.agents.list.map((agent) => agent.id),
-      ["general", "academic", "media", "system"],
-    );
-    const defaulted = config.agents.list.filter((agent) => "default" in agent);
-    assert.deepEqual(
-      defaulted.map((agent) => agent.id),
-      ["general"],
-    );
+    assert.deepEqual(Object.keys(config.agents.entries), [
+      "general",
+      "academic",
+      "media",
+      "system",
+    ]);
+    assert.equal(config.agents.ownership, "explicit");
+    assert.deepEqual(config.agents.defaults.systemAgent, { agentId: "general" });
+    assert.deepEqual(config.agents.defaults.authInheritance, { agentId: "general" });
+    assert.deepEqual(config.bindings, [
+      { agentId: "general", match: { channel: "telegram", accountId: "*" } },
+    ]);
   });
 
   it("binds each carrier to its own agent, by name from the provisioning map", () => {
@@ -205,7 +211,7 @@ describe("the four chats", () => {
   });
 
   it("separates the agents' workspaces, so each carries its own boundary", () => {
-    const workspaces = config.agents.list.map((agent) => agent.workspace);
+    const workspaces = Object.values(config.agents.entries).map((agent) => agent.workspace);
     assert.deepEqual(new Set(workspaces).size, workspaces.length);
     for (const workspace of workspaces) {
       assert.ok(workspace.startsWith(`${deployment.workspace}/`), workspace);

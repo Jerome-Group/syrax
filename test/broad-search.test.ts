@@ -61,13 +61,34 @@ describe("General answering with the corpus", { skip: !runtimeIsInstalled() }, (
   ): Promise<OutboundCall> {
     const predicate = awaited.predicate ?? (() => true);
     const already = syrax.telegram.matching(awaited.method, predicate).length;
+    const asked = syrax.provider.requests.length;
     syrax.provider.script({ kind: "toolCall", name: "message", arguments: args });
     syrax.telegram.inject({
       fromUserId: ownerTelegramUserId,
       text,
       messageThreadId: syrax.carriers.general,
     });
-    return await syrax.telegram.waitFor(awaited.method, predicate, 60_000, already);
+    const delivered = await syrax.telegram.waitFor(awaited.method, predicate, 60_000, already);
+    // Delivery precedes the tool-result completion. Its synchronous script consumption must
+    // finish before the next turn queues a reply, or that reply answers this turn's followup.
+    const deadline = Date.now() + 60_000;
+    while (
+      !syrax.provider.requests.slice(asked).some((request) => {
+        const messages = request.body.messages;
+        if (!request.path.endsWith("/chat/completions") || !Array.isArray(messages)) return false;
+        const question = JSON.stringify(text).slice(1, -1);
+        const questionAt = messages.findLastIndex(
+          (entry) => entry.role === "user" && JSON.stringify(entry.content).includes(question),
+        );
+        return (
+          questionAt >= 0 && messages.slice(questionAt + 1).some((entry) => entry.role === "tool")
+        );
+      })
+    ) {
+      if (Date.now() > deadline) throw new Error(`No tool-result completion for ${text}.`);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    return delivered;
   }
 
   /** The tap reaches the model as an ordinary message, so the prompt carrying it is the evidence. */
@@ -105,8 +126,12 @@ describe("General answering with the corpus", { skip: !runtimeIsInstalled() }, (
       "one `message` call put the file on the wire more than once.",
     );
     assert.equal(
-      syrax.telegram.matching("sendMessage", (call) => call.body.text === "⚠️ Media failed.")
-        .length,
+      syrax.telegram.matching(
+        "sendMessage",
+        (call) =>
+          call.body.text ===
+          "⚠️ <code>wedderburn.md</code>: Delivery failed. Try sending this file again.",
+      ).length,
       0,
       "the tool route warns about media of its own accord, which the Owner would see every time.",
     );
@@ -154,7 +179,9 @@ describe("General answering with the corpus", { skip: !runtimeIsInstalled() }, (
     await syrax.telegram.quiet();
     const outside = join(mkdtempSync(join(tmpdir(), "syrax-unowned-")), "wedderburn.md");
     writeFileSync(outside, "artin wedderburn theorem semisimple rings");
-    const failed = (call: OutboundCall) => call.body.text === "⚠️ Media failed.";
+    const failed = (call: OutboundCall) =>
+      call.body.text ===
+      "⚠️ <code>wedderburn.md</code>: Delivery failed. Try sending this file again.";
     const already = syrax.telegram.matching("sendMessage", failed).length;
     const documents = syrax.telegram.matching("sendDocument", () => true).length;
 
@@ -169,7 +196,7 @@ describe("General answering with the corpus", { skip: !runtimeIsInstalled() }, (
 
     // `waitFor` matched on that text, so restating it proves nothing. What is worth asserting is
     // that the warning arrived *instead of* the file and carries nothing but itself: the Owner sees
-    // a bare line with no document and no clue which path the runtime would not take.
+    // a filename-specific warning without the unowned document itself.
     assert.equal(
       syrax.telegram.matching("sendDocument", () => true).length,
       documents,
@@ -200,7 +227,10 @@ describe("General answering with the corpus", { skip: !runtimeIsInstalled() }, (
         action: "send",
         message: `Which of these did you mean?\n\n${numbered}`,
       },
-      { method: "sendMessage" },
+      {
+        method: "sendMessage",
+        predicate: (call) => String(call.body.text).includes("Which of these did you mean?"),
+      },
     );
 
     // Read as the Owner reads it: the surface formats what looks like a filename, so `wedderburn.md`
@@ -209,7 +239,7 @@ describe("General answering with the corpus", { skip: !runtimeIsInstalled() }, (
     for (const [at, name] of shortlist.candidates.entries()) {
       assert.ok(
         read.includes(`${at + 1}. ${name}`),
-        `${name} is not on a line the Owner can name.`,
+        `${name} is not on a line the Owner can name: ${read}`,
       );
     }
     assert.equal(

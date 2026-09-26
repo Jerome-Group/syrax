@@ -17,11 +17,9 @@ export function runtimeLogPath(logsDir: string): string {
 }
 
 export function loggingBlock(logsDir: string) {
+  // Redaction is unconditional in the pinned runtime (ADR-0036); its old switch is rejected.
   return {
     file: runtimeLogPath(logsDir),
     maxFileBytes,
-    // The runtime's own default, stated because ADR-0010 moved credentials to file-backed refs and
-    // a log line is the one place a resolved key could still surface.
-    redactSensitive: "tools",
   };
 }

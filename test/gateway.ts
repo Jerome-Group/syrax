@@ -143,6 +143,7 @@ function appendTo(path: string, chunk: Buffer): void {
 export type SyraxFixture = {
   telegram: TelegramStub;
   provider: ProviderStub;
+  providers: ProviderStub[];
   gateway: GatewayFixture;
   /** Which topic carries each chat, as the wizard would have left it. */
   carriers: Record<string, number>;
@@ -172,6 +173,7 @@ export async function standSyrax(
   return {
     telegram,
     provider,
+    providers: [provider],
     gateway,
     carriers,
     stop: async () => {
@@ -196,13 +198,41 @@ export const answer = "Answered.";
 export async function turn(syrax: SyraxFixture, text: string, carrier?: number): Promise<Turn> {
   const isAnswer = (call: OutboundCall) => call.body.text === answer;
   const since = syrax.telegram.matching("sendMessage", isAnswer).length;
+  const asked = syrax.providers.map((provider) => ({ provider, since: provider.requests.length }));
   syrax.telegram.inject({ fromUserId: ownerTelegramUserId, text, messageThreadId: carrier });
   await syrax.telegram.waitFor("sendMessage", isAnswer, 60_000, since);
-  const body = syrax.provider.requests.at(-1)?.body as { model?: string };
+  const body = asked
+    .map(({ provider, since }) => turnCompletion(provider, since, text))
+    .find((body) => body !== undefined);
+  if (body === undefined) throw new Error("The reply had no chat completion for this turn");
   return {
     model: String(body.model),
-    agent: /agent=(\w+)/.exec(JSON.stringify(body))?.[1] ?? "none",
+    agent: answeringAgent(JSON.stringify(body)),
   };
+}
+
+/** Catalog probes and background summaries are not the completion that answered this turn. */
+export function turnCompletion(
+  provider: ProviderStub,
+  since: number,
+  text: string,
+): Record<string, unknown> | undefined {
+  const question = JSON.stringify(text).slice(1, -1);
+  const request = provider.requests.slice(since).findLast((request) => {
+    const prompt = JSON.stringify(request.body);
+    return (
+      request.path.endsWith("/chat/completions") &&
+      prompt.includes(question) &&
+      /You answer the \*\*([^*]+)\*\* chat/.test(prompt)
+    );
+  });
+  return request?.body;
+}
+
+/** Syrax's standing chat instruction is independent of runtime prompt metadata. */
+export function answeringAgent(prompt: string): string {
+  const carrier = /You answer the \*\*([^*]+)\*\* chat/.exec(prompt)?.[1];
+  return everyChat.find((chat) => chat.carrierName === carrier)?.id ?? "none";
 }
 
 /** Turns until `landed` holds, or every attempt is spent — the answer being how many it took. */

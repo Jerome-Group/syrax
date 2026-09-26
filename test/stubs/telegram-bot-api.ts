@@ -177,6 +177,10 @@ export class TelegramStub {
     return this.calls.filter((call) => call.method === method).length === since;
   }
 
+  get waitingPollCount(): number {
+    return this.#waitingPolls.size;
+  }
+
   async close(): Promise<void> {
     this.#releaseWaitingPolls();
     await new Promise<void>((resolve, reject) =>
@@ -207,7 +211,7 @@ export class TelegramStub {
     const body = await readBody(request);
 
     if (method === "getUpdates") {
-      const updates = await this.#collectUpdates();
+      const updates = await this.#collectUpdates(response);
       return respond(response, updates);
     }
 
@@ -247,17 +251,23 @@ export class TelegramStub {
     return respond(response, true);
   }
 
-  async #collectUpdates(): Promise<unknown[]> {
+  async #collectUpdates(response: import("node:http").ServerResponse): Promise<unknown[]> {
     if (this.#pending.length > 0) {
       const updates = this.#pending;
       this.#pending = [];
       return updates;
     }
     return new Promise<unknown[]>((resolve) => {
-      this.#waitingPolls.add(resolve);
-      setTimeout(() => {
-        if (this.#waitingPolls.delete(resolve)) resolve([]);
-      }, 1_000);
+      const finish = (updates: unknown[]) => {
+        this.#waitingPolls.delete(finish);
+        clearTimeout(timer);
+        response.off("close", closed);
+        resolve(updates);
+      };
+      const closed = () => finish([]);
+      const timer = setTimeout(closed, 1_000);
+      response.once("close", closed);
+      this.#waitingPolls.add(finish);
     });
   }
 }

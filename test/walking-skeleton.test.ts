@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { after, before, describe, it } from "node:test";
 import {
   everyProviderAt,
@@ -87,7 +88,7 @@ describe("the walking skeleton", { skip: !runtimeIsInstalled() }, () => {
     );
   });
 
-  it("stands the credential marker where a key would be, and exports no key at all", () => {
+  it("resolves file-backed credentials only at the provider wire, and persists no key", () => {
     const keys = Object.values(sentinelKeys);
     for (const value of Object.values(gateway.environment)) {
       for (const key of keys) {
@@ -95,10 +96,49 @@ describe("the walking skeleton", { skip: !runtimeIsInstalled() }, () => {
       }
     }
 
-    const generated = generatedModelsFiles(join(gateway.deployment.stateDir, "agents"));
-    assert.ok(generated.length > 0, "the gateway generated no models.json to check.");
-    for (const path of generated) {
-      const models = JSON.parse(readFileSync(path, "utf8")) as {
+    const generated = generatedModelCatalogs(join(gateway.deployment.stateDir, "agents"));
+    const config = JSON.parse(readFileSync(gateway.deployment.configPath, "utf8")) as {
+      models: { providers: Record<string, { apiKey: { source: string; id: string } }> };
+    };
+    assert.deepEqual(
+      Object.keys(config.models.providers).sort(),
+      Object.keys(everyProviderAt(provider.baseUrl)).sort(),
+    );
+    for (const [id, block] of Object.entries(config.models.providers)) {
+      assert.equal(block.apiKey.source, "file");
+      const name = id.replace(/^syrax-/, "");
+      assert.equal(block.apiKey.id, `/providers/${name}/apiKey`);
+    }
+    const completion = provider.requests.findLast((request) =>
+      request.path.endsWith("/chat/completions"),
+    );
+    assert.equal(completion?.authorization, `Bearer ${sentinelKeys.gemini}`);
+
+    // Explicitly configured providers need no plugin catalog. Check every artifact the gateway
+    // actually persisted, including SQLite/WAL and logs, rather than requiring a legacy filename.
+    const artifacts = [gateway.deployment.configPath];
+    for (const root of [
+      gateway.deployment.stateDir,
+      gateway.deployment.logsDir,
+      gateway.deployment.workspace,
+    ]) {
+      for (const entry of readdirSync(root, { withFileTypes: true, recursive: true })) {
+        if (entry.isFile()) artifacts.push(join(entry.parentPath, entry.name));
+      }
+    }
+    assert.ok(artifacts.length > 1, "the gateway persisted no runtime artifacts");
+    for (const path of artifacts) {
+      const bytes = readFileSync(path);
+      for (const key of keys)
+        assert.ok(
+          !bytes.includes(Buffer.from(key)),
+          "a provider key persisted outside its secret store",
+        );
+    }
+    for (const contents of generated) {
+      for (const key of keys)
+        assert.ok(!contents.includes(key), "a provider key reached a catalog");
+      const models = JSON.parse(contents) as {
         providers: Record<string, { apiKey: string }>;
       };
       for (const [provider, block] of Object.entries(models.providers)) {
@@ -118,9 +158,22 @@ describe("the walking skeleton", { skip: !runtimeIsInstalled() }, () => {
   });
 });
 
-function generatedModelsFiles(root: string, found: string[] = []): string[] {
+/** The pinned runtime splits provider-owned catalogs into the agent's SQLite cache. */
+function generatedModelCatalogs(root: string): string[] {
+  const found: string[] = [];
   for (const entry of readdirSync(root, { withFileTypes: true, recursive: true })) {
-    if (entry.name === "models.json") found.push(join(entry.parentPath, entry.name));
+    const path = join(entry.parentPath, entry.name);
+    if (entry.name === "models.json") found.push(readFileSync(path, "utf8"));
+    if (entry.name !== "openclaw-agent.sqlite") continue;
+    const database = new DatabaseSync(path, { readOnly: true });
+    try {
+      const rows = database
+        .prepare("SELECT value_json FROM cache_entries WHERE scope = 'plugin-model-catalog-v1'")
+        .all();
+      for (const row of rows) found.push(String(row.value_json));
+    } finally {
+      database.close();
+    }
   }
   return found;
 }

@@ -366,7 +366,7 @@ An adapter is ready for a setup guide only when it can state:
 
 | Question | This adapter's answer |
 |----------|-----------------------|
-| the exact runtime and version | `openclaw@2026.6.34`, pinned in `runtime/package-lock.json` |
+| the exact runtime and version | `openclaw@2026.8.1`, pinned in `runtime/package-lock.json` |
 | the install, start, test, and stop commands | steps 2 and 7, and the section above; `launchctl bootstrap` and `bootout`, or a signal to the foreground process |
 | where secrets are read from | one JSON store, by file-backed ref, refused at an insecure mode |
 | which tools are enabled by default | `tools.profile: "minimal"`, and both skills catalogues off |
