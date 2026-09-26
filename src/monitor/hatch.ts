@@ -171,8 +171,16 @@ type CompletionBody = {
  */
 async function readBody(response: Response): Promise<CompletionBody> {
   try {
-    const held = (await response.json()) as CompletionBody | CompletionBody[];
-    return Array.isArray(held) ? (held[0] ?? {}) : held;
+    const held: unknown = await response.json();
+    const body = Array.isArray(held) ? held[0] : held;
+    if (typeof body !== "object" || body === null) return {};
+    const completion = body as CompletionBody;
+    const content = completion.choices?.[0]?.message?.content;
+    const message = completion.error?.message;
+    return {
+      ...(typeof content === "string" ? { choices: [{ message: { content } }] } : {}),
+      ...(typeof message === "string" ? { error: { message } } : {}),
+    };
   } catch {
     return {};
   }

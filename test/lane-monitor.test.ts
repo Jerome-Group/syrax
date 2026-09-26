@@ -166,6 +166,37 @@ describe("the escape hatch", () => {
     );
   });
 
+  it("handles unexpected JSON response shapes without losing refusal accounting", async () => {
+    const stub = await ProviderStub.start();
+    after(() => stub.close());
+    const monitor = new LaneMonitor(await monitorOn(stub));
+    for (const body of [null, [null], true, 7, "unavailable", { error: { message: 7 } }]) {
+      stub.script({ kind: "json", status: 503, body });
+      const answered = await monitor.hatch.reach({ question: "a hard one", askedFor });
+      assert.equal(answered.reached, false);
+      assert.match(answered.refused, /503: no message/);
+      assert.equal(answered.remaining[0]!.spent, 0);
+      assert.equal(answered.remaining[0]!.refused?.status, 503);
+    }
+    stub.script({ kind: "json", status: 429, body: null });
+    const refused = await monitor.hatch.reach({ question: "a hard one", askedFor });
+    assert.equal(refused.reached, false);
+    assert.equal(refused.remaining[0]!.spent, 1);
+  });
+
+  it("keeps successful response answers textual when the JSON shape is unexpected", async () => {
+    const stub = await ProviderStub.start();
+    after(() => stub.close());
+    const monitor = new LaneMonitor(await monitorOn(stub));
+    for (const body of [null, [null], { choices: [{ message: { content: 7 } }] }]) {
+      stub.script({ kind: "json", status: 200, body });
+      const answered = await monitor.hatch.reach({ question: "a hard one", askedFor });
+      assert.equal(answered.reached, true);
+      assert.equal(answered.answer, "");
+    }
+    assert.equal(monitor.counters.state()[0]!.spent, 3);
+  });
+
   it("puts back a call that never reached a provider at all", async () => {
     const { deployment } = temporaryMachine({
       // Nothing listens here, which is what a transport failure and a timeout both look like.
