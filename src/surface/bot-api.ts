@@ -82,6 +82,7 @@ export class BotApi {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
     });
     const payload = (await response.json()) as {
       ok: boolean;

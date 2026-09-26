@@ -14,6 +14,7 @@ import type { Deployment } from "../adapter/deployment.ts";
 import { generateConfig } from "../adapter/generator.ts";
 import { readSecret, secretPaths } from "../adapter/secrets-store.ts";
 import { BotApi, type Button, isMissingCarrier } from "./bot-api.ts";
+import { withCarrierLock } from "./carrier-lock.ts";
 
 /** One chat and the topic now carrying it, as this run either created it or found it missing. */
 export type Carrier = { chat: Chat; id: number };
@@ -46,7 +47,10 @@ export class ChatSurface {
   async provision(): Promise<Carrier[]> {
     const missing = everyChat.filter((chat) => this.#carriers[chat.id] === undefined);
     const provisioned: Carrier[] = [];
-    for (const chat of missing) provisioned.push(await this.#recreate(chat));
+    for (const chat of missing) {
+      const recreated = await this.#recreate(chat, undefined);
+      if (recreated.created) provisioned.push(recreated.carrier);
+    }
     return provisioned;
   }
 
@@ -78,9 +82,14 @@ export class ChatSurface {
       }
     }
 
-    const recreated = await this.#recreate(chat);
-    await this.#api.sendMessage(this.#deployment.ownerTelegramUserId, text, recreated.id, buttons);
-    return [recreated];
+    const recreated = await this.#recreate(chat, carrier);
+    await this.#api.sendMessage(
+      this.#deployment.ownerTelegramUserId,
+      text,
+      recreated.carrier.id,
+      buttons,
+    );
+    return recreated.created ? [recreated.carrier] : [];
   }
 
   /**
@@ -90,15 +99,26 @@ export class ChatSurface {
    * recreated chat can still meet the old routing and be answered as General, which is ADR-0013's
    * standing rule for an unrecognised thread id, and the one after it lands on the right agent.
    */
-  async #recreate(chat: Chat): Promise<Carrier> {
-    const id = await this.#api.createForumTopic(
-      this.#deployment.ownerTelegramUserId,
-      chat.carrierName,
-    );
-    this.#carriers = { ...this.#carriers, [chat.id]: id };
-    writeCarrierMap(this.#deployment.carrierMap, this.#carriers);
-    generateConfig(this.#deployment, this.#carriers);
-    return { chat, id };
+  async #recreate(
+    chat: Chat,
+    previous: number | undefined,
+  ): Promise<{ carrier: Carrier; created: boolean }> {
+    return withCarrierLock(this.#deployment.carrierMap, async () => {
+      this.#carriers = { ...this.#carriers, ...readCarrierMap(this.#deployment.carrierMap) };
+      const current = this.#carriers[chat.id];
+      if (current !== undefined && current !== previous) {
+        generateConfig(this.#deployment, this.#carriers);
+        return { carrier: { chat, id: current }, created: false };
+      }
+      const id = await this.#api.createForumTopic(
+        this.#deployment.ownerTelegramUserId,
+        chat.carrierName,
+      );
+      this.#carriers = { ...this.#carriers, [chat.id]: id };
+      writeCarrierMap(this.#deployment.carrierMap, this.#carriers);
+      generateConfig(this.#deployment, this.#carriers);
+      return { carrier: { chat, id }, created: true };
+    });
   }
 }
 
