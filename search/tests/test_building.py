@@ -188,3 +188,58 @@ def test_failed_embedding_rolls_back_the_whole_replacement(machine, embedder):
         == 1
     )
     database.close()
+
+
+def test_extraction_prefetch_is_bounded_and_consumed_in_crawl_order(machine):
+    from concurrent.futures import Future
+
+    import syrax_search.building as building
+    from syrax_search.walk import Crawled
+
+    class CompletedReaders:
+        def __init__(self):
+            self.submitted = []
+
+        def submit(self, operation, work):
+            self.submitted.append(work)
+            result = Future()
+            result.set_result(building.Extraction(work[0], "ok"))
+            return result
+
+    candidates = [Crawled(f"/document-{i}", str(i), 1, 1.0, True) for i in range(64)]
+    readers = CompletedReaders()
+    database = open_index(machine.database_path)
+    try:
+        results = building._read(candidates, {}, FULL, database, readers)
+        assert readers.submitted == [], "constructing the iterator extracts nothing"
+        for position, (crawled, extraction) in enumerate(results):
+            assert crawled == candidates[position]
+            assert extraction.text == crawled.path
+            assert len(readers.submitted) == min(position + building.EXTRACT_WORKERS, 64)
+        assert len(readers.submitted) == 64
+    finally:
+        database.close()
+
+
+def test_cached_ocr_and_filename_only_documents_need_no_worker(machine, monkeypatch):
+    import syrax_search.building as building
+    from syrax_search.index import StoredDocument
+    from syrax_search.walk import Crawled
+
+    class NoReaders:
+        def submit(self, operation, work):
+            pytest.fail("cached OCR and filename-only entries must not be extracted")
+
+    scan = Crawled("/scan.pdf", "scan.pdf", 1, 1.0, True)
+    named = Crawled("/filename.pdf", "filename.pdf", 1, 1.0, False)
+    stored = {scan.path: StoredDocument(1, scan.path, scan.name, 1, 1.0, "ok-ocr", "hash")}
+    monkeypatch.setattr(building, "document_text", lambda database, path: "recognised text")
+    database = open_index(machine.database_path)
+    try:
+        results = list(building._read([scan, named], stored, FULL, database, NoReaders()))
+        assert results == [
+            (scan, building.Extraction("recognised text", "ok-ocr")),
+            (named, building.Extraction(None, "filename-only")),
+        ]
+    finally:
+        database.close()
