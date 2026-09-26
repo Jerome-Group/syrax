@@ -9,7 +9,7 @@
  */
 
 import type { Dirent } from "node:fs";
-import { lstat, readFile, readdir } from "node:fs/promises";
+import { lstat, open, readFile, readdir } from "node:fs/promises";
 import { basename, join, relative, sep } from "node:path";
 import { Products, writeTimeoutMs } from "./products.ts";
 
@@ -235,7 +235,14 @@ function titleOf(file: string): string {
 
 async function head(path: string): Promise<string> {
   try {
-    return (await readFile(path, "utf8")).slice(0, headerBytes);
+    const file = await open(path, "r");
+    try {
+      const buffer = Buffer.alloc(headerBytes);
+      const { bytesRead } = await file.read(buffer, 0, buffer.length, 0);
+      return buffer.subarray(0, bytesRead).toString("utf8");
+    } finally {
+      await file.close();
+    }
   } catch {
     return "";
   }
