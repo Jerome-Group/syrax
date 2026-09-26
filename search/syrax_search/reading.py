@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from .config import SearchConfig
 from .extraction import extract
 from .index import document_text
+from .lists import is_within
 
 # A forty-page PDF is not a reply. What a model needs is enough of the document to answer from,
 # and the rest is a second `read` away.
@@ -46,6 +47,13 @@ def refused(config: SearchConfig, absolute: str) -> dict | None:
             "path": absolute,
             "reason": "symlink: what it points at is read by its own path or not at all",
         }
+    resolved = os.path.realpath(absolute)
+    blocked = config.lists.blocks(resolved)
+    if blocked is not None:
+        return {"path": absolute, "reason": blocked}
+    for root in config.lists.blocked_roots:
+        if is_within(resolved, os.path.realpath(root)):
+            return {"path": absolute, "reason": f"blocklist: under {root}"}
     if not os.path.isfile(absolute):
         return {"path": absolute, "reason": "not a file"}
     return None
