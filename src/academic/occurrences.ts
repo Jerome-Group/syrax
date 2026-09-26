@@ -117,8 +117,10 @@ function overriddenStarts(items: readonly MirroredItem[]): Set<string> {
 }
 
 type Repeat = {
+  frequency: "DAILY" | "WEEKLY";
   everyDays: number;
   onWeekdays: number[] | null;
+  weekStartsOn: number;
   count: number | null;
   until: Date | null;
 };
@@ -131,18 +133,20 @@ const weekdays = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
  * date guessed from a rule is exactly the fabrication the front lane is told never to commit.
  */
 function weeklyOrDaily(recurrence: readonly string[]): Repeat | null {
-  const rule = recurrence.find((line) => line.startsWith("RRULE:"));
-  if (rule === undefined) return null;
-  const parts = new Map(
-    rule
-      .slice("RRULE:".length)
-      .split(";")
-      .map((pair) => pair.split("=") as [string, string]),
-  );
+  if (recurrence.length !== 1 || !recurrence[0]!.startsWith("RRULE:")) return null;
+  const pairs = recurrence[0]!
+    .slice("RRULE:".length)
+    .split(";")
+    .map((pair) => pair.split("="));
+  if (pairs.some((pair) => pair.length !== 2 || !pair[0] || !pair[1])) return null;
+  const parts = new Map(pairs as [string, string][]);
+  if (parts.size !== pairs.length) return null;
   const frequency = parts.get("FREQ");
   if (frequency !== "WEEKLY" && frequency !== "DAILY") return null;
   if ([...parts.keys()].some((key) => !readableParts.has(key))) return null;
-  const interval = Number(parts.get("INTERVAL") ?? "1");
+  const intervalText = parts.get("INTERVAL") ?? "1";
+  if (!/^\d+$/.test(intervalText)) return null;
+  const interval = Number(intervalText);
   if (!Number.isSafeInteger(interval) || interval < 1) return null;
   const byDay = parts.get("BYDAY");
   const onWeekdays =
@@ -150,11 +154,22 @@ function weeklyOrDaily(recurrence: readonly string[]): Repeat | null {
       ? null
       : byDay.split(",").map((day) => weekdays.indexOf(day.trim().toUpperCase()));
   if (onWeekdays?.some((day) => day < 0)) return null;
+  const weekStartsOn = weekdays.indexOf(parts.get("WKST") ?? "MO");
+  if (weekStartsOn < 0) return null;
+  const countText = parts.get("COUNT");
+  if (countText !== undefined && !/^\d+$/.test(countText)) return null;
+  const count = countText === undefined ? null : Number(countText);
+  if (count !== null && (!Number.isSafeInteger(count) || count < 1)) return null;
+  const until = parts.has("UNTIL") ? untilDate(parts.get("UNTIL")!) : null;
+  if (parts.has("UNTIL") && until === null) return null;
+  if (count !== null && until !== null) return null;
   return {
+    frequency,
     everyDays: frequency === "DAILY" ? interval : interval * 7,
     onWeekdays,
-    count: parts.has("COUNT") ? Number(parts.get("COUNT")) : null,
-    until: parts.has("UNTIL") ? untilDate(parts.get("UNTIL")!) : null,
+    weekStartsOn,
+    count,
+    until,
   };
 }
 
@@ -167,7 +182,27 @@ function untilDate(value: string): Date | null {
   );
   if (stamp === null) return null;
   const [, year, month, day, hour = "00", minute = "00", second = "00"] = stamp;
-  return new Date(Date.UTC(+year!, +month! - 1, +day!, +hour, +minute, +second));
+  const utc = value.trim().toUpperCase().endsWith("Z");
+  const fields = [+year!, +month! - 1, +day!, +hour, +minute, +second] as const;
+  const date = utc ? new Date(Date.UTC(...fields)) : new Date(...fields);
+  const actual = utc
+    ? [
+        date.getUTCFullYear(),
+        date.getUTCMonth(),
+        date.getUTCDate(),
+        date.getUTCHours(),
+        date.getUTCMinutes(),
+        date.getUTCSeconds(),
+      ]
+    : [
+        date.getFullYear(),
+        date.getMonth(),
+        date.getDate(),
+        date.getHours(),
+        date.getMinutes(),
+        date.getSeconds(),
+      ];
+  return actual.every((part, index) => part === fields[index]) ? date : null;
 }
 
 /**
@@ -184,16 +219,16 @@ function expand(
 ): Occurrence[] {
   const first = at(event, event.start, role);
   if (first === null) return [];
-  const weeklyStep = rule.onWeekdays === null ? rule.everyDays : 1;
+  const stepDays = rule.frequency === "DAILY" || rule.onWeekdays === null ? rule.everyDays : 1;
   const occurrences: Occurrence[] = [];
   let counted = 0;
 
   for (let step = 0; step < mostSteps; step++) {
-    const startsAt = plusDays(first.startsAt, step * weeklyStep);
+    const startsAt = plusDays(first.startsAt, step * stepDays);
     if (startsAt > window.to) break;
     if (rule.until !== null && startsAt > rule.until) break;
     if (rule.onWeekdays !== null && !rule.onWeekdays.includes(startsAt.getDay())) continue;
-    if (rule.onWeekdays !== null && !inCycle(first.startsAt, startsAt, rule.everyDays)) continue;
+    if (rule.frequency === "WEEKLY" && !inCycle(first.startsAt, startsAt, rule)) continue;
     counted += 1;
     if (rule.count !== null && counted > rule.count) break;
     if (!inside(startsAt, { ...window, from: opensFor(first, window) })) continue;
@@ -204,17 +239,19 @@ function expand(
 }
 
 /** An interval greater than one skips whole weeks, and the master's own week is the one kept. */
-function inCycle(first: Date, startsAt: Date, everyDays: number): boolean {
-  if (everyDays <= 7) return true;
-  const weeksApart = Math.floor((startOfWeek(startsAt) - startOfWeek(first)) / weekMs);
-  return weeksApart % (everyDays / 7) === 0;
+function inCycle(first: Date, startsAt: Date, rule: Repeat): boolean {
+  const weeksApart = Math.round(
+    (startOfWeek(startsAt, rule.weekStartsOn) - startOfWeek(first, rule.weekStartsOn)) / weekMs,
+  );
+  return weeksApart % (rule.everyDays / 7) === 0;
 }
 
 const dayMs = 86_400_000;
 const weekMs = 7 * dayMs;
 
-function startOfWeek(when: Date): number {
-  const day = new Date(when.getFullYear(), when.getMonth(), when.getDate() - when.getDay());
+function startOfWeek(when: Date, weekStartsOn: number): number {
+  const daysIntoWeek = (when.getDay() - weekStartsOn + 7) % 7;
+  const day = new Date(when.getFullYear(), when.getMonth(), when.getDate() - daysIntoWeek);
   return +day;
 }
 
