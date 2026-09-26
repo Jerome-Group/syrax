@@ -91,7 +91,28 @@ class SearchUnit:
 
     async def read(self, path: str) -> dict:
         async with self._querying:
-            return self.reader.read(path)
+
+            async def read_document() -> dict | Exception:
+                try:
+                    return await anyio.to_thread.run_sync(self.reader.read, path)
+                except Exception as error:
+                    return error
+
+            reading = asyncio.create_task(read_document())
+            cancelled = False
+            # Direct asyncio cancellation can escape AnyIO's worker shield. Keep SQLite/cache
+            # serialization until the worker finishes even when the requester has gone away.
+            while not reading.done():
+                try:
+                    await asyncio.shield(reading)
+                except asyncio.CancelledError:
+                    cancelled = True
+            if cancelled:
+                raise asyncio.CancelledError
+            result = reading.result()
+            if isinstance(result, Exception):
+                raise result
+            return result
 
     async def attach(self, path: str) -> dict:
         return await anyio.to_thread.run_sync(self.staging.attach, path)
@@ -132,8 +153,9 @@ class SearchUnit:
             raise UnknownScope(f"This connection names a scope, {name}, that is not configured.")
         return self.config.scopes[name]
 
-    def sweep(self) -> None:
-        self.reader.sweep()
+    async def sweep(self) -> None:
+        async with self._querying:
+            self.reader.sweep()
         self.answers.sweep()
         self.shortlists.sweep()
         self.staging.sweep()
@@ -251,7 +273,7 @@ def serve(config: SearchConfig, embedder: Embedder | None = None) -> None:
     async def sweep() -> None:
         while True:
             await asyncio.sleep(SWEEP_SECONDS)
-            unit.sweep()
+            await unit.sweep()
 
     async def main() -> None:
         server = uvicorn.Server(

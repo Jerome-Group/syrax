@@ -136,3 +136,97 @@ async def test_a_finished_pass_releases_its_reservation(unit, monkeypatch, outco
     await asyncio.sleep(0)
     assert len(tasks) == 2
     assert not unit.indexing
+
+
+@pytest.mark.anyio
+async def test_document_read_leaves_the_event_loop_free_and_defers_sweep(unit, monkeypatch):
+    import threading
+
+    entered = threading.Event()
+    release = threading.Event()
+    swept = []
+    event_loop_thread = threading.get_ident()
+
+    def blocking_read(path):
+        assert threading.get_ident() != event_loop_thread
+        entered.set()
+        assert release.wait(5), "the event loop must release a blocked read"
+        return {"read": "ok", "path": path}
+
+    monkeypatch.setattr(unit.reader, "read", blocking_read)
+    monkeypatch.setattr(unit.reader, "sweep", lambda: swept.append(True))
+    reading = asyncio.create_task(unit.read("/synthetic.md"))
+    sweeping = None
+    try:
+        async with asyncio.timeout(2):
+            while not entered.is_set():
+                await asyncio.sleep(0.001)
+            sweeping = asyncio.create_task(unit.sweep())
+            await asyncio.sleep(0)
+            assert swept == [], "cache sweep must wait for the in-flight reader"
+            assert not reading.done()
+    finally:
+        release.set()
+        result = await reading
+        if sweeping is not None:
+            await sweeping
+    assert result == {"read": "ok", "path": "/synthetic.md"}
+    assert swept == [True]
+
+
+@pytest.mark.anyio
+async def test_document_read_failure_releases_sqlite_serialization(unit, monkeypatch):
+    def failed_read(path):
+        raise RuntimeError("synthetic extraction failure")
+
+    monkeypatch.setattr(unit.reader, "read", failed_read)
+    with pytest.raises(RuntimeError, match="synthetic extraction failure"):
+        await unit.read("/synthetic.md")
+    monkeypatch.setattr(unit.reader, "read", lambda path: {"read": "ok"})
+    async with asyncio.timeout(2):
+        assert await unit.read("/synthetic.md") == {"read": "ok"}
+        await unit.sweep()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("fails", [False, True])
+async def test_cancelled_read_holds_serialization_until_its_worker_finishes(
+    unit, monkeypatch, fails
+):
+    import threading
+
+    entered = threading.Event()
+    release = threading.Event()
+    swept = []
+
+    def blocking_read(path):
+        entered.set()
+        assert release.wait(5)
+        if fails:
+            raise RuntimeError("synthetic extraction failure after cancellation")
+        return {"read": "ok"}
+
+    monkeypatch.setattr(unit.reader, "read", blocking_read)
+    monkeypatch.setattr(unit.reader, "sweep", lambda: swept.append(True))
+    reading = asyncio.create_task(unit.read("/synthetic.md"))
+    sweeping = None
+    try:
+        async with asyncio.timeout(2):
+            while not entered.is_set():
+                await asyncio.sleep(0.001)
+            reading.cancel()
+            await asyncio.sleep(0)
+            sweeping = asyncio.create_task(unit.sweep())
+            await asyncio.sleep(0)
+            assert not reading.done()
+            assert swept == []
+            reading.cancel()
+            await asyncio.sleep(0)
+            assert not reading.done(), "repeated cancellation cannot release a running worker"
+    finally:
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await reading
+        if sweeping is not None:
+            await sweeping
+    assert swept == [True]
