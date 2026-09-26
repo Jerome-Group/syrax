@@ -9,6 +9,7 @@ import type { AddressInfo } from "node:net";
 
 export type ScriptedResponse =
   | { kind: "reply"; text: string }
+  | { kind: "json"; status: number; body: unknown }
   /** The model asking for a tool, which is how a delegating turn starts. */
   | { kind: "toolCall"; name: string; arguments: Record<string, unknown> }
   /** A rung that has gone silent: the connection is held open and nothing is ever sent. */
@@ -125,6 +126,7 @@ export class ProviderStub {
     for (const [name, value] of Object.entries(scripted.headers ?? {})) {
       response.setHeader(name, value);
     }
+    if (scripted.kind === "json") return json(response, scripted.status, scripted.body);
     if (scripted.kind === "rateLimited") {
       response.setHeader("retry-after", String(scripted.retryAfterSeconds));
       return json(response, 429, {
