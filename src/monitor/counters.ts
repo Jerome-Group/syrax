@@ -69,6 +69,7 @@ export class DailyCounters {
    */
   refund(rung: RationedRung, now: Date = new Date()): void {
     this.#rollTheDay(now);
+    if (providerDay(now) !== this.#ledger.day) return;
     const id = rungId(rung);
     this.#ledger.spent[id] = Math.max(0, (this.#ledger.spent[id] ?? 0) - 1);
     this.#write();
@@ -98,7 +99,7 @@ export class DailyCounters {
 
   #rollTheDay(now: Date): void {
     const today = providerDay(now);
-    if (this.#ledger.day === today) return;
+    if (this.#ledger.day >= today) return;
     this.#ledger = { day: today, spent: {}, refused: this.#ledger.refused };
   }
 
@@ -116,7 +117,7 @@ export class DailyCounters {
     if (!existsSync(this.#path)) return fresh;
     try {
       const held = JSON.parse(readFileSync(this.#path, "utf8")) as Partial<Ledger>;
-      if (typeof held.day !== "string" || typeof held.spent !== "object" || held.spent === null) {
+      if (!isCalendarDay(held.day) || typeof held.spent !== "object" || held.spent === null) {
         return fresh;
       }
       const spent = Object.fromEntries(
@@ -127,6 +128,12 @@ export class DailyCounters {
       return fresh;
     }
   }
+}
+
+function isCalendarDay(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
 /** A refusal is read back only where every field survived: half a record is worse than none. */
