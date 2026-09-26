@@ -4,8 +4,9 @@
  * these may already exist at whatever the umask left it — so every one is chmod'd after the fact.
  */
 
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { randomUUID } from "node:crypto";
+import { chmodSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 
 const directoryMode = 0o700;
 const fileMode = 0o600;
@@ -17,6 +18,13 @@ export function ensurePrivateDirectory(path: string): void {
 
 export function writePrivateFile(path: string, contents: string): void {
   ensurePrivateDirectory(dirname(path));
-  writeFileSync(path, contents, { mode: fileMode });
-  chmodSync(path, fileMode);
+  // Config watchers and ledger readers must see a complete document, even during replacement.
+  const temporary = join(dirname(path), `.${basename(path)}.${randomUUID()}.tmp`);
+  try {
+    writeFileSync(temporary, contents, { mode: fileMode, flag: "wx" });
+    chmodSync(temporary, fileMode);
+    renameSync(temporary, path);
+  } finally {
+    rmSync(temporary, { force: true });
+  }
 }
