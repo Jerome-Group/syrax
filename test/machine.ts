@@ -72,9 +72,12 @@ export function standInRuntime(runtimeRoot: string, options: { wedged?: boolean 
   mkdirSync(dirname(entrypoint), { recursive: true });
   writeFileSync(
     entrypoint,
-    `import { appendFileSync } from "node:fs";
+    `import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 const ran = process.argv.slice(2);
 appendFileSync(${JSON.stringify(log)}, \`\${ran.join(" ")} \${process.env.OPENCLAW_CONFIG_PATH}\n\`);
+const restart = ${JSON.stringify(join(runtimeRoot, "restarted"))};
+if (ran[1] === "restart") writeFileSync(restart, String(Date.now()));
+const restarted = existsSync(restart);
 const method = ran[0] === "gateway" && ran[1] === "call" ? ran[2] : "";
 const answers = {
   "gateway.restart.preflight": { safe: true, counts: { totalActive: 0 }, blockers: [] },
@@ -82,7 +85,7 @@ const answers = {
   "channels.start": { started: true },
   "channels.status": {
     channelAccounts: {
-      telegram: [{ accountId: "default", running: ${options.wedged ? "false" : "true"}, connected: ${options.wedged ? "false" : "true"} }],
+      telegram: [{ accountId: "default", running: restarted || ${options.wedged ? "false" : "true"}, connected: restarted || ${options.wedged ? "false" : "true"}, lastStartAt: restarted ? Number(readFileSync(restart, "utf8")) : 0 }],
     },
   },
 };
