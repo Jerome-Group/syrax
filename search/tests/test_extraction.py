@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from syrax_search.extraction import has_text_layer
 
 # What `pdftotext` returns for a scanned paper stamped by the library, once per page.
@@ -42,3 +44,64 @@ def test_the_rule_needs_a_few_pages_to_see_the_repetition():
     """
     assert has_text_layer("\n\x0c".join([STAMP] * 2)) is True
     assert has_text_layer("\n\x0c".join([STAMP] * 8)) is False
+
+
+@pytest.mark.parametrize("name", ["broken.pdf", "broken.docx"])
+def test_failed_converters_do_not_index_their_partial_output(monkeypatch, name):
+    import subprocess
+
+    from syrax_search.extraction import extract
+
+    def partial(command, **kwargs):
+        return subprocess.CompletedProcess(command, 1, b"otherwise usable partial document " * 5)
+
+    monkeypatch.setattr(subprocess, "run", partial)
+    extraction = extract(name)
+    assert extraction.text is None
+    tool = "pdftotext" if name.endswith(".pdf") else "pandoc"
+    assert extraction.status == f"error:exit-{tool}-1"
+    assert extraction.failed
+
+
+def test_a_failed_ocr_tool_is_reported_without_returning_partial_text(monkeypatch):
+    import subprocess
+    from pathlib import Path
+
+    from syrax_search.extraction import extract
+
+    def partial(command, **kwargs):
+        tool = command[0]
+        if tool == "pdftoppm":
+            Path(command[-1] + "-1.png").touch()
+        return subprocess.CompletedProcess(
+            command,
+            2 if tool == "tesseract" else 0,
+            b"partial text that must not enter the index" if tool == "tesseract" else b"",
+        )
+
+    monkeypatch.setattr(subprocess, "run", partial)
+    extraction = extract("scan.pdf", ocr=True)
+    assert extraction.text is None
+    assert extraction.status == "error:exit-tesseract-2"
+    assert extraction.failed
+
+
+def test_successful_ocr_is_not_counted_as_a_pass_failure(machine, embedder):
+    import syrax_search.building as building
+    from syrax_search.extraction import Extraction
+    from syrax_search.index import open_index
+    from syrax_search.walk import Crawled
+
+    database = open_index(machine.database_path)
+    report = building.PassReport(kind=building.FULL)
+    document = Crawled("/synthetic/scan.pdf", "scan.pdf", 100, 0, True)
+    recognised = Extraction("recognised synthetic scanned document contents " * 3, "ok-ocr")
+    assert not recognised.failed
+    building._absorb(database, embedder, document, None, recognised, report)
+    assert report.extracted == 1
+    assert report.embedded > 0
+    assert report.failures == []
+    building._write_ledger(machine.failure_ledger_path, database, building.FULL)
+    with open(machine.failure_ledger_path) as ledger:
+        assert ledger.read() == ""
+    database.close()

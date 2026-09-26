@@ -54,7 +54,7 @@ class Extraction:
 
     @property
     def failed(self) -> bool:
-        return self.status not in ("ok", "filename-only")
+        return self.status not in ("ok", "ok-ocr", "filename-only")
 
 
 def extract(path: str, *, ocr: bool = False) -> Extraction:
@@ -142,7 +142,10 @@ def _ocr_pdf(path: str) -> Extraction:
 def _run(command: list[str], timeout: int) -> subprocess.CompletedProcess | str:
     """The completed process, or the ledger status that says why there is not one."""
     try:
-        return subprocess.run(command, capture_output=True, timeout=timeout, check=False)
+        completed = subprocess.run(command, capture_output=True, timeout=timeout, check=False)
+        if completed.returncode != 0:
+            return f"error:exit-{command[0]}-{completed.returncode}"
+        return completed
     except FileNotFoundError:
         return f"error:missing-{command[0]}"
     except subprocess.TimeoutExpired:
