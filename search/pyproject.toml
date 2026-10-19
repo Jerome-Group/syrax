@@ -12,7 +12,7 @@ version = "0.1.0"
 description = "Syrax's file-search index and the two tools it serves over MCP"
 requires-python = ">=3.14"
 dependencies = [
-    "mcp==2.0.0",
+    "mcp==2.2.0",
     "numpy==2.5.3",
     "sqlite-vec==0.1.9",
     "uvicorn==0.52.4",
